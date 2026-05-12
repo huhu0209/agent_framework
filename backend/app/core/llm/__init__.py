@@ -1,0 +1,72 @@
+"""LLM Adapter 模块。
+
+提供统一的 LLM 调用接口，归一化各 provider 的差异。
+"""
+
+from .base import (
+    ILLMAdapter,
+    InvalidRequestError,
+    LLMAdapterError,
+    RateLimitError,
+    ServiceUnavailableError,
+)
+from .types import (
+    AssistantMessage,
+    CompletionConfig,
+    CompletionResult,
+    ContentBlock,
+    ImageBlock,
+    ImageSource,
+    Message,
+    ProviderInfo,
+    StopReason,
+    StreamEvent,
+    StreamEventType,
+    SystemMessage,
+    TextBlock,
+    ThinkingBlock,
+    ThinkingConfig,
+    ToolDefinition,
+    ToolMessage,
+    ToolParameterSchema,
+    ToolResultBlock,
+    ToolUseBlock,
+    UsageStats,
+    UserMessage,
+)
+
+__all__ = [
+    # Adapter interface
+    "ILLMAdapter",
+    "LLMAdapterError",
+    "RateLimitError",
+    "ServiceUnavailableError",
+    "InvalidRequestError",
+    # Content blocks
+    "ContentBlock",
+    "TextBlock",
+    "ImageBlock",
+    "ImageSource",
+    "ToolUseBlock",
+    "ToolResultBlock",
+    "ThinkingBlock",
+    # Messages
+    "Message",
+    "SystemMessage",
+    "UserMessage",
+    "AssistantMessage",
+    "ToolMessage",
+    # Tool definition
+    "ToolDefinition",
+    "ToolParameterSchema",
+    # Config & Result
+    "CompletionConfig",
+    "CompletionResult",
+    "ThinkingConfig",
+    "StopReason",
+    "UsageStats",
+    "ProviderInfo",
+    # Streaming
+    "StreamEvent",
+    "StreamEventType",
+]
