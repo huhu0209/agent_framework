@@ -1,18 +1,61 @@
 """ResilientLLMAdapter 测试。"""
 
 import pytest
+from unittest.mock import AsyncMock, MagicMock
 
 from app.core.llm.base import (
     CircuitOpenError,
     ILLMAdapter,
+    InvalidRequestError,
     LLMAdapterError,
+    ServiceUnavailableError,
 )
 from app.core.llm.retry import (
     CircuitBreaker,
     CircuitBreakerConfig,
     RetryConfig,
 )
-from app.core.llm.types import CompletionConfig, CompletionResult
+from app.core.llm.types import (
+    CompletionConfig,
+    CompletionResult,
+    ProviderInfo,
+    UsageStats,
+)
+
+
+def _make_mock_provider() -> AsyncMock:
+    """创建一个 mock provider，实现 ILLMAdapter 接口。"""
+    provider = AsyncMock(spec=ILLMAdapter)
+    provider.get_provider_info.return_value = ProviderInfo(
+        name="mock",
+        base_url="https://mock.test",
+        default_model="mock-model",
+    )
+    return provider
+
+
+@pytest.fixture
+def mock_config() -> CompletionConfig:
+    """创建一个最小的 CompletionConfig。"""
+    return CompletionConfig(
+        model="mock-model",
+        messages=[],
+    )
+
+
+@pytest.fixture
+def mock_result() -> CompletionResult:
+    """创建一个 mock CompletionResult。"""
+    return CompletionResult(
+        id="test-id",
+        content=[],
+        model="mock-model",
+        stop_reason="end_turn",
+        usage=UsageStats(input_tokens=0, output_tokens=0),
+    )
+
+
+# ---- Task 1 测试 ----
 
 
 def test_circuit_open_error_is_llm_adapter_error():
@@ -21,3 +64,100 @@ def test_circuit_open_error_is_llm_adapter_error():
     assert isinstance(err, LLMAdapterError)
     assert err.retryable is False
     assert err.provider == "deepseek"
+
+
+# ---- Task 2 测试 ----
+
+
+@pytest.mark.asyncio
+async def test_complete_success(mock_config, mock_result):
+    """正常调用直接透传到 provider。"""
+    provider = _make_mock_provider()
+    provider.complete.return_value = mock_result
+
+    from app.core.llm.resilient import ResilientLLMAdapter
+
+    adapter = ResilientLLMAdapter(provider=provider)
+    result = await adapter.complete(mock_config)
+
+    assert result == mock_result
+    provider.complete.assert_called_once_with(mock_config)
+
+
+@pytest.mark.asyncio
+async def test_complete_retries_on_retryable_error(mock_config, mock_result):
+    """可重试错误触发重试，最终成功。"""
+    from app.core.llm.resilient import ResilientLLMAdapter
+
+    provider = _make_mock_provider()
+    provider.complete.side_effect = [
+        ServiceUnavailableError(provider="mock"),
+        mock_result,  # 第二次成功
+    ]
+
+    adapter = ResilientLLMAdapter(
+        provider=provider,
+        retry_config=RetryConfig(max_retries=3, base_delay=0.01),
+    )
+    result = await adapter.complete(mock_config)
+
+    assert result == mock_result
+    assert provider.complete.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_complete_no_retry_on_invalid_request(mock_config):
+    """不可重试错误直接抛出，不重试。"""
+    from app.core.llm.resilient import ResilientLLMAdapter
+
+    provider = _make_mock_provider()
+    provider.complete.side_effect = InvalidRequestError(provider="mock")
+
+    adapter = ResilientLLMAdapter(
+        provider=provider,
+        retry_config=RetryConfig(max_retries=3, base_delay=0.01),
+    )
+
+    with pytest.raises(InvalidRequestError):
+        await adapter.complete(mock_config)
+
+    assert provider.complete.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_complete_exhausts_retries(mock_config):
+    """重试耗尽后抛出最后一次错误。"""
+    from app.core.llm.resilient import ResilientLLMAdapter
+
+    provider = _make_mock_provider()
+    provider.complete.side_effect = ServiceUnavailableError(provider="mock")
+
+    adapter = ResilientLLMAdapter(
+        provider=provider,
+        retry_config=RetryConfig(max_retries=2, base_delay=0.01),
+    )
+
+    with pytest.raises(ServiceUnavailableError):
+        await adapter.complete(mock_config)
+
+    assert provider.complete.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_complete_blocked_by_open_breaker(mock_config):
+    """断路器打开时抛出 CircuitOpenError。"""
+    from app.core.llm.resilient import ResilientLLMAdapter
+
+    provider = _make_mock_provider()
+    breaker = CircuitBreaker(
+        name="test",
+        config=CircuitBreakerConfig(failure_threshold=1),
+    )
+    breaker.record_failure()
+
+    adapter = ResilientLLMAdapter(provider=provider, breaker=breaker)
+
+    with pytest.raises(CircuitOpenError):
+        await adapter.complete(mock_config)
+
+    provider.complete.assert_not_called()
