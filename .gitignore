@@ -23,6 +23,12 @@ frontend/.vite/
 .DS_Store
 Thumbs.db
 
+# AI 工作流（本地保留，不上传）
+.claude/
+CLAUDE.md
+DESIGN.md
+docs/plans/
+
 # Testing
 htmlcov/
 .coverage
