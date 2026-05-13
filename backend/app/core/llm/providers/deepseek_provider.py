@@ -30,24 +30,21 @@ from ..base import (
     RateLimitError,
     ServiceUnavailableError,
 )
+from ..streaming import OpenAIStreamParser, parse_sse_lines
+from ..transform import (
+    build_openai_sampling_params,
+    messages_to_deepseek,
+    parse_deepseek_response,
+    tools_to_openai,
+)
 from ..types import (
     CompletionConfig,
     CompletionResult,
-    ContentBlock,
     ImageBlock,
     Message,
     ProviderInfo,
-    StopReason,
     StreamEvent,
     StreamEventType,
-    SystemMessage,
-    TextBlock,
-    ThinkingBlock,
-    ToolDefinition,
-    ToolMessage,
-    ToolParameterSchema,
-    ToolResultBlock,
-    ToolUseBlock,
     UsageStats,
 )
 
@@ -70,138 +67,20 @@ def _validate_no_image_blocks(messages: list[Message]) -> None:
                 )
 
 
-def _convert_messages(messages: list[Message]) -> list[dict]:
-    """将内部统一消息格式转换为 DeepSeek/OpenAI 格式。
-
-    关键转换：
-    - ToolMessage(role="tool") → OpenAI tool role message
-    - ContentBlock 数组 → OpenAI content parts
-    - ToolUseBlock → OpenAI tool_calls
-    - ToolResultBlock → OpenAI tool result
-    - ThinkingBlock → 附加 reasoning_content 字段（回传时使用）
-    """
-    result: list[dict] = []
-
-    for msg in messages:
-        if isinstance(msg, SystemMessage):
-            result.append({"role": "system", "content": msg.content})
-
-        elif isinstance(msg, ToolMessage):
-            result.append({
-                "role": "tool",
-                "tool_call_id": msg.tool_call_id,
-                "content": msg.content,
-            })
-
-        elif isinstance(msg, type) and msg == SystemMessage:
-            continue
-
-        else:
-            # UserMessage or AssistantMessage — content is list[ContentBlock]
-            content = msg.content if isinstance(msg.content, list) else []
-
-            # 提取 text 和 reasoning_content
-            text_parts: list[str] = []
-            reasoning_parts: list[str] = []
-            tool_calls: list[dict] = []
-            tool_results: list[dict] = []
-
-            for block in content:
-                if isinstance(block, TextBlock):
-                    text_parts.append(block.text)
-                elif isinstance(block, ThinkingBlock):
-                    reasoning_parts.append(block.thinking)
-                elif isinstance(block, ToolUseBlock):
-                    tool_calls.append({
-                        "id": block.id,
-                        "type": "function",
-                        "function": {
-                            "name": block.name,
-                            "arguments": json.dumps(block.input, ensure_ascii=False),
-                        },
-                    })
-                elif isinstance(block, ToolResultBlock):
-                    tool_results.append({
-                        "tool_use_id": block.tool_use_id,
-                        "content": block.content,
-                        "is_error": block.is_error,
-                    })
-
-            # 处理 tool_result blocks：转换为独立的 tool role 消息
-            for tr in tool_results:
-                result.append({
-                    "role": "tool",
-                    "tool_call_id": tr["tool_use_id"],
-                    "content": tr["content"],
-                })
-
-            if tool_calls:
-                # assistant message with tool calls
-                entry: dict = {
-                    "role": "assistant",
-                    "content": " ".join(text_parts) if text_parts else None,
-                    "tool_calls": tool_calls,
-                }
-                # DeepSeek V4: tool call 场景必须回传 reasoning_content
-                if reasoning_parts:
-                    entry["reasoning_content"] = "\n".join(reasoning_parts)
-                result.append(entry)
-            elif tool_results:
-                # tool results already handled above
-                continue
-            else:
-                # 普通消息
-                text = "\n".join(text_parts) if text_parts else ""
-                if isinstance(msg, type):  # shouldn't happen
-                    continue
-
-                role = msg.role
-                entry = {"role": role, "content": text}
-
-                # 非工具调用的 assistant 消息也保留 reasoning_content（回传需要）
-                if reasoning_parts and role == "assistant":
-                    entry["reasoning_content"] = "\n".join(reasoning_parts)
-
-                result.append(entry)
-
-    return result
-
-
-def _convert_tools(tools: list[ToolDefinition]) -> list[dict]:
-    """将统一工具定义转换为 OpenAI function calling 格式。"""
-    return [
-        {
-            "type": "function",
-            "function": {
-                "name": t.name,
-                "description": t.description,
-                "parameters": t.parameters.model_dump(exclude_none=True),
-            },
-        }
-        for t in tools
-    ]
-
-
 def _build_request_body(config: CompletionConfig) -> dict:
     """构建 DeepSeek/OpenAI 兼容的请求体。"""
     body: dict = {
         "model": config.model,
-        "messages": _convert_messages(config.messages),
+        "messages": messages_to_deepseek(config.messages),
         "stream": config.stream,
     }
 
     if config.tools:
-        body["tools"] = _convert_tools(config.tools)
+        body["tools"] = tools_to_openai(config.tools)
 
-    # 基础采样参数（thinking 模式下会自动剥离）
-    if config.temperature is not None:
-        body["temperature"] = config.temperature
-    if config.max_tokens is not None:
-        body["max_tokens"] = config.max_tokens
-    if config.top_p is not None:
-        body["top_p"] = config.top_p
-    if config.stop:
-        body["stop"] = config.stop
+    # 基础采样参数
+    sampling = build_openai_sampling_params(config)
+    body.update(sampling)
 
     # Thinking 模式配置
     if config.thinking and config.thinking.type == "enabled":
@@ -239,63 +118,12 @@ def _build_request_body(config: CompletionConfig) -> dict:
 
 def _parse_response(data: dict) -> CompletionResult:
     """解析 DeepSeek/OpenAI 响应为统一 CompletionResult。"""
-    choice = data.get("choices", [{}])[0]
-    message = choice.get("message", {})
-    usage_data = data.get("usage", {})
-
-    # 解析 content blocks
-    content_blocks: list[ContentBlock] = []
-
-    # 文本内容
-    text = message.get("content")
-    if text:
-        content_blocks.append(TextBlock(text=text))
-
-    # reasoning_content → ThinkingBlock
-    reasoning = message.get("reasoning_content")
-    if reasoning:
-        content_blocks.append(ThinkingBlock(thinking=reasoning))
-
-    # tool_calls → ToolUseBlock
-    for tc in message.get("tool_calls", []):
-        func = tc.get("function", {})
-        args_str = func.get("arguments", "{}")
-        try:
-            args = json.loads(args_str)
-        except json.JSONDecodeError:
-            args = {"_raw_arguments": args_str}
-
-        content_blocks.append(
-            ToolUseBlock(
-                id=tc.get("id", ""),
-                name=func.get("name", ""),
-                input=args,
-            )
-        )
-
-    # 停止原因映射
-    finish_reason = choice.get("finish_reason", "")
-    stop_map = {
-        "stop": StopReason.END_TURN,
-        "length": StopReason.MAX_TOKENS,
-        "tool_calls": StopReason.TOOL_USE,
-        "content_filter": StopReason.END_TURN,
-    }
-    stop_reason = stop_map.get(finish_reason, StopReason.END_TURN)
-
-    # usage 统计
-    usage = UsageStats(
-        input_tokens=usage_data.get("prompt_tokens", 0),
-        output_tokens=usage_data.get("completion_tokens", 0),
-        cache_read_tokens=usage_data.get("prompt_tokens_details", {}).get(
-            "cached_tokens", 0
-        ),
-    )
+    blocks, stop_reason, usage = parse_deepseek_response(data)
 
     return CompletionResult(
         id=data.get("id", ""),
         model=data.get("model", ""),
-        content=content_blocks,
+        content=blocks,
         stop_reason=stop_reason,
         usage=usage,
         raw_response=data,
@@ -390,7 +218,7 @@ class DeepSeekProvider(ILLMAdapter):
         return _parse_response(data)
 
     async def stream(self, config: CompletionConfig) -> AsyncIterator[StreamEvent]:
-        """流式输出"""
+        """流式输出。"""
         _validate_no_image_blocks(config.messages)
 
         body = _build_request_body(config)
@@ -401,7 +229,6 @@ class DeepSeekProvider(ILLMAdapter):
                 "POST", "/chat/completions", json=body
             ) as response:
                 if response.status_code != 200:
-                    # 读取完整错误响应
                     error_body = await response.aread()
                     error_resp = httpx.Response(
                         status_code=response.status_code,
@@ -410,118 +237,10 @@ class DeepSeekProvider(ILLMAdapter):
                     )
                     _handle_error(error_resp)
 
-                text_buffer = ""
-                tool_calls_buffer: dict[int, dict] = {}
-
-                async for line in response.aiter_lines():
-                    if not line.startswith("data: "):
-                        continue
-
-                    payload = line[6:].strip()
-                    if payload == "[DONE]":
-                        yield StreamEvent(type=StreamEventType.DONE)
-                        break
-
-                    try:
-                        chunk = json.loads(payload)
-                    except json.JSONDecodeError:
-                        continue
-
-                    # 保留原始事件
-                    raw_event = chunk
-
-                    # 解析 delta
-                    choices = chunk.get("choices", [])
-                    if not choices:
-                        # usage chunk
-                        usage = chunk.get("usage")
-                        if usage:
-                            yield StreamEvent(
-                                type=StreamEventType.USAGE,
-                                data={"usage": usage},
-                                provider_event=raw_event,
-                            )
-                        continue
-
-                    delta = choices[0].get("delta", {})
-                    finish_reason = choices[0].get("finish_reason")
-
-                    # 文本 delta
-                    content = delta.get("content")
-                    if content:
-                        text_buffer += content
-                        yield StreamEvent(
-                            type=StreamEventType.TEXT_DELTA,
-                            data={"text": content},
-                            provider_event=raw_event,
-                        )
-
-                    # reasoning_content delta
-                    reasoning = delta.get("reasoning_content")
-                    if reasoning:
-                        yield StreamEvent(
-                            type=StreamEventType.THINKING_DELTA,
-                            data={"thinking": reasoning},
-                            provider_event=raw_event,
-                        )
-
-                    # tool_calls delta
-                    for tc in delta.get("tool_calls", []):
-                        idx = tc.get("index", 0)
-                        if idx not in tool_calls_buffer:
-                            tool_calls_buffer[idx] = {
-                                "id": tc.get("id", ""),
-                                "function": {"name": "", "arguments": ""},
-                            }
-                            yield StreamEvent(
-                                type=StreamEventType.TOOL_USE_START,
-                                data={"index": idx, "id": tc.get("id", "")},
-                                provider_event=raw_event,
-                            )
-
-                        func_delta = tc.get("function", {})
-                        if func_delta.get("name"):
-                            tool_calls_buffer[idx]["function"]["name"] += func_delta["name"]
-                        if func_delta.get("arguments"):
-                            tool_calls_buffer[idx]["function"]["arguments"] += func_delta["arguments"]
-
-                        yield StreamEvent(
-                            type=StreamEventType.TOOL_USE_DELTA,
-                            data={
-                                "index": idx,
-                                "arguments_delta": func_delta.get("arguments", ""),
-                            },
-                            provider_event=raw_event,
-                        )
-
-                    if finish_reason:
-                        # 结束：输出完整的 tool calls
-                        for idx, tc in tool_calls_buffer.items():
-                            try:
-                                args = json.loads(tc["function"]["arguments"])
-                            except json.JSONDecodeError:
-                                args = {"_raw": tc["function"]["arguments"]}
-                            yield StreamEvent(
-                                type=StreamEventType.TOOL_USE_END,
-                                data={
-                                    "index": idx,
-                                    "id": tc["id"],
-                                    "name": tc["function"]["name"],
-                                    "input": args,
-                                },
-                                provider_event=raw_event,
-                            )
-
-                        usage = chunk.get("usage")
-                        if usage:
-                            yield StreamEvent(
-                                type=StreamEventType.USAGE,
-                                data={"usage": usage},
-                                provider_event=raw_event,
-                            )
-
-                        yield StreamEvent(type=StreamEventType.DONE)
-                        break
+                parser = OpenAIStreamParser()
+                async for chunk in parse_sse_lines(response.aiter_lines()):
+                    for event in parser.parse_chunk(chunk):
+                        yield event
 
         except (httpx.TimeoutException, httpx.ConnectError) as exc:
             yield StreamEvent(

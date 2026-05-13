@@ -116,7 +116,7 @@ class ToolMessage(BaseModel):
     content: str
 
 
-Message = Union[SystemMessage, UserMessage, AssistantMessage, ToolMessage]
+Message = Union[SystemMessage, UserMessage, AssistantMessage, ToolMessage] 
 
 
 # ============================================================
