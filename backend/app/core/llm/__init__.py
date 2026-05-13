@@ -11,6 +11,7 @@ from .base import (
     RateLimitError,
     ServiceUnavailableError,
 )
+from .resilient import ResilientLLMAdapter, create_adapter
 from .types import (
     AssistantMessage,
     CompletionConfig,
@@ -44,6 +45,9 @@ __all__ = [
     "ServiceUnavailableError",
     "InvalidRequestError",
     "CircuitOpenError",
+    # Resilient adapter
+    "ResilientLLMAdapter",
+    "create_adapter",
     # Content blocks
     "ContentBlock",
     "TextBlock",
