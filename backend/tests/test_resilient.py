@@ -20,6 +20,8 @@ from app.core.llm.types import (
     CompletionConfig,
     CompletionResult,
     ProviderInfo,
+    StreamEvent,
+    StreamEventType,
     UsageStats,
 )
 
@@ -236,3 +238,83 @@ def test_create_adapter_unknown_provider():
             api_key="test-key",
             model="test",
         )
+
+
+# ---- Task 5 测试 ----
+
+
+@pytest.mark.asyncio
+async def test_stream_success(mock_config):
+    """流式调用透传到 provider。"""
+    from app.core.llm.resilient import ResilientLLMAdapter
+
+    async def fake_stream(config):
+        yield StreamEvent(type=StreamEventType.TEXT_DELTA, data={})
+
+    provider = _make_mock_provider()
+    provider.stream.return_value = fake_stream(mock_config)
+
+    adapter = ResilientLLMAdapter(provider=provider)
+    stream = await adapter.stream(mock_config)
+
+    events = [e async for e in stream]
+    assert len(events) == 1
+    assert events[0].type == StreamEventType.TEXT_DELTA
+
+
+@pytest.mark.asyncio
+async def test_stream_blocked_by_open_breaker(mock_config):
+    """断路器打开时流式调用也抛 CircuitOpenError。"""
+    from app.core.llm.resilient import ResilientLLMAdapter
+
+    provider = _make_mock_provider()
+    breaker = CircuitBreaker(
+        name="test",
+        config=CircuitBreakerConfig(failure_threshold=1),
+    )
+    breaker.record_failure()
+
+    adapter = ResilientLLMAdapter(provider=provider, breaker=breaker)
+
+    with pytest.raises(CircuitOpenError):
+        await adapter.stream(mock_config)
+
+    provider.stream.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_health_check_records_success():
+    """health_check 成功时 breaker 记录成功。"""
+    from app.core.llm.resilient import ResilientLLMAdapter
+
+    provider = _make_mock_provider()
+    provider.health_check.return_value = True
+    breaker = CircuitBreaker(
+        name="test",
+        config=CircuitBreakerConfig(failure_threshold=5),
+    )
+
+    adapter = ResilientLLMAdapter(provider=provider, breaker=breaker)
+    result = await adapter.health_check()
+
+    assert result is True
+    assert breaker.state.value == "closed"
+
+
+@pytest.mark.asyncio
+async def test_health_check_records_failure():
+    """health_check 失败时 breaker 记录失败。"""
+    from app.core.llm.resilient import ResilientLLMAdapter
+
+    provider = _make_mock_provider()
+    provider.health_check.return_value = False
+    breaker = CircuitBreaker(
+        name="test",
+        config=CircuitBreakerConfig(failure_threshold=2),
+    )
+
+    adapter = ResilientLLMAdapter(provider=provider, breaker=breaker)
+    await adapter.health_check()
+    await adapter.health_check()
+
+    assert breaker.state.value == "open"
