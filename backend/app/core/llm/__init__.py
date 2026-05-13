@@ -4,6 +4,7 @@
 """
 
 from .base import (
+    CircuitOpenError,
     ILLMAdapter,
     InvalidRequestError,
     LLMAdapterError,
@@ -42,6 +43,7 @@ __all__ = [
     "RateLimitError",
     "ServiceUnavailableError",
     "InvalidRequestError",
+    "CircuitOpenError",
     # Content blocks
     "ContentBlock",
     "TextBlock",

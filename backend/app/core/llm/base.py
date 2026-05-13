@@ -141,3 +141,20 @@ class InvalidRequestError(LLMAdapterError):
             status_code=400,
             retryable=False,
         )
+
+
+class CircuitOpenError(LLMAdapterError):
+    """断路器打开，拒绝请求。"""
+
+    def __init__(
+        self,
+        message: str = "Circuit breaker is open",
+        *,
+        provider: str = "",
+    ) -> None:
+        super().__init__(
+            message,
+            provider=provider,
+            status_code=503,
+            retryable=False,
+        )
