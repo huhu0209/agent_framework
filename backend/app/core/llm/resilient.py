@@ -80,3 +80,59 @@ class ResilientLLMAdapter(ILLMAdapter):
         except Exception:
             self._breaker.record_failure()
             raise
+
+
+# ============================================================
+# 工厂函数
+# ============================================================
+
+
+_PROVIDER_MAP: dict[str, str] = {
+    "deepseek": "app.core.llm.providers.deepseek_provider.DeepSeekProvider",
+    "openai": "app.core.llm.providers.openai_provider.OpenAIProvider",
+    "anthropic": "app.core.llm.providers.anthropic_provider.AnthropicProvider",
+}
+
+
+def _import_provider_class(class_path: str) -> type:
+    """动态导入 Provider 类。"""
+    module_path, class_name = class_path.rsplit(".", 1)
+    import importlib
+
+    module = importlib.import_module(module_path)
+    return getattr(module, class_name)
+
+
+def create_adapter(
+    *,
+    provider: str,
+    api_key: str,
+    model: str,
+    base_url: str | None = None,
+    retry_config: RetryConfig | None = None,
+    breaker_config: CircuitBreakerConfig | None = None,
+) -> ResilientLLMAdapter:
+    """工厂函数：按 provider 名称创建 ResilientLLMAdapter。"""
+    if provider not in _PROVIDER_MAP:
+        raise ValueError(
+            f"Unknown provider: '{provider}'. "
+            f"Supported: {', '.join(_PROVIDER_MAP.keys())}"
+        )
+
+    cls = _import_provider_class(_PROVIDER_MAP[provider])
+
+    kwargs: dict[str, Any] = {"api_key": api_key, "default_model": model}
+    if base_url is not None:
+        kwargs["base_url"] = base_url
+
+    provider_instance: ILLMAdapter = cls(**kwargs)
+
+    r_cfg = retry_config or RetryConfig()
+    b_cfg = breaker_config or CircuitBreakerConfig()
+    breaker = CircuitBreaker(name=provider, config=b_cfg)
+
+    return ResilientLLMAdapter(
+        provider=provider_instance,
+        retry_config=r_cfg,
+        breaker=breaker,
+    )

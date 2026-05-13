@@ -15,6 +15,7 @@ from app.core.llm.retry import (
     CircuitBreakerConfig,
     RetryConfig,
 )
+from app.core.llm.resilient import ResilientLLMAdapter
 from app.core.llm.types import (
     CompletionConfig,
     CompletionResult,
@@ -161,3 +162,77 @@ async def test_complete_blocked_by_open_breaker(mock_config):
         await adapter.complete(mock_config)
 
     provider.complete.assert_not_called()
+
+
+# ---- Task 3 测试 ----
+
+
+@pytest.mark.asyncio
+async def test_create_adapter_deepseek():
+    """工厂函数创建 DeepSeek provider 的 resilient adapter。"""
+    from app.core.llm.resilient import create_adapter
+
+    adapter = create_adapter(
+        provider="deepseek",
+        api_key="test-key",
+        model="deepseek-chat",
+    )
+    assert isinstance(adapter, ResilientLLMAdapter)
+    info = adapter.get_provider_info()
+    assert info.name == "deepseek"
+
+
+@pytest.mark.asyncio
+async def test_create_adapter_openai():
+    """工厂函数创建 OpenAI provider。"""
+    from app.core.llm.resilient import create_adapter
+
+    adapter = create_adapter(
+        provider="openai",
+        api_key="test-key",
+        model="gpt-4o",
+    )
+    assert isinstance(adapter, ResilientLLMAdapter)
+    info = adapter.get_provider_info()
+    assert info.name == "openai"
+
+
+@pytest.mark.asyncio
+async def test_create_adapter_anthropic():
+    """工厂函数创建 Anthropic provider。"""
+    from app.core.llm.resilient import create_adapter
+
+    adapter = create_adapter(
+        provider="anthropic",
+        api_key="test-key",
+        model="claude-sonnet-4-5-20250514",
+    )
+    assert isinstance(adapter, ResilientLLMAdapter)
+    info = adapter.get_provider_info()
+    assert info.name == "anthropic"
+
+
+@pytest.mark.asyncio
+async def test_create_adapter_custom_base_url():
+    """工厂函数支持自定义 base_url。"""
+    from app.core.llm.resilient import create_adapter
+
+    adapter = create_adapter(
+        provider="openai",
+        api_key="test-key",
+        model="qwen-plus",
+        base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+    )
+    assert isinstance(adapter, ResilientLLMAdapter)
+
+
+def test_create_adapter_unknown_provider():
+    """未知 provider 抛出 ValueError。"""
+    from app.core.llm.resilient import create_adapter
+
+    with pytest.raises(ValueError, match="Unknown provider"):
+        create_adapter(
+            provider="unknown",
+            api_key="test-key",
+            model="test",
+        )
