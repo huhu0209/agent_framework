@@ -2,9 +2,9 @@
 
 import asyncio
 import pytest
-from app.core.tools.executor import ToolExecutor
-from app.core.tools.types import ToolResult, ToolSpec, ToolUseContext
-from app.core.llm.types import ToolParameterSchema
+from agent_framework.tools.executor import ToolExecutor
+from agent_framework.tools.types import ToolResult, ToolSpec, ToolUseContext
+from agent_framework.llm.types import ToolParameterSchema
 
 
 def _make_spec(handler, timeout_ms=30_000) -> ToolSpec:

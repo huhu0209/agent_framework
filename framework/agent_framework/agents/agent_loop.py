@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, AsyncGenerator
 
-from app.core.llm import (
+from agent_framework.llm import (
     AssistantMessage,
     CompletionConfig,
     CompletionResult,
@@ -21,8 +21,8 @@ from app.core.llm import (
     ToolUseBlock,
     UserMessage,
 )
-from app.core.tools.router import ToolRouter
-from app.core.tools.types import ToolCall, ToolUseContext
+from agent_framework.tools.router import ToolRouter
+from agent_framework.tools.types import ToolCall, ToolUseContext
 
 
 @dataclass

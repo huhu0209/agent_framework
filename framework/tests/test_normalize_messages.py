@@ -1,8 +1,8 @@
 """消息规范化测试。"""
 
 import pytest
-from app.core.llm.transform import normalize_messages
-from app.core.llm.types import (
+from agent_framework.llm.transform import normalize_messages
+from agent_framework.llm.types import (
     AssistantMessage,
     SystemMessage,
     TextBlock,

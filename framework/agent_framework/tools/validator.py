@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.core.tools.types import ToolResult, ToolSpec
+from agent_framework.tools.types import ToolResult, ToolSpec
 
 
 _TYPE_CHECKERS = {

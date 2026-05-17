@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from app.core.tools.types import ToolResult, ToolUseContext
+from agent_framework.tools.types import ToolResult, ToolUseContext
 
 
 async def web_search(args: dict, ctx: ToolUseContext) -> ToolResult:

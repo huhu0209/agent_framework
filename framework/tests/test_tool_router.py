@@ -1,10 +1,10 @@
 """ToolRouter 测试 — 来源分叉。"""
 
 import pytest
-from app.core.tools.router import ToolRouter
-from app.core.tools.registry import ToolRegistry
-from app.core.tools.types import ToolCall, ToolResult, ToolSpec, ToolUseContext
-from app.core.llm.types import ToolParameterSchema
+from agent_framework.tools.router import ToolRouter
+from agent_framework.tools.registry import ToolRegistry
+from agent_framework.tools.types import ToolCall, ToolResult, ToolSpec, ToolUseContext
+from agent_framework.llm.types import ToolParameterSchema
 
 
 async def _echo_handler(args, ctx):

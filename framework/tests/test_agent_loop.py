@@ -3,18 +3,18 @@
 import pytest
 from unittest.mock import AsyncMock
 
-from app.core.agents.agent_loop import AgentLoop, LoopEvent
-from app.core.llm.base import ILLMAdapter
-from app.core.llm.types import (
+from agent_framework.agents.agent_loop import AgentLoop, LoopEvent
+from agent_framework.llm.base import ILLMAdapter
+from agent_framework.llm.types import (
     CompletionResult,
     StopReason,
     TextBlock,
     ToolUseBlock,
     UsageStats,
 )
-from app.core.tools.builtin import create_builtin_registry
-from app.core.tools.router import ToolRouter
-from app.core.tools.types import ToolUseContext
+from agent_framework.tools.builtin import create_builtin_registry
+from agent_framework.tools.router import ToolRouter
+from agent_framework.tools.types import ToolUseContext
 
 
 def _make_mock_adapter() -> AsyncMock:

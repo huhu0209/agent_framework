@@ -1,8 +1,8 @@
 """内建工具集成测试。"""
 
 import pytest
-from app.core.tools.builtin import create_builtin_registry
-from app.core.tools.types import ToolUseContext
+from agent_framework.tools.builtin import create_builtin_registry
+from agent_framework.tools.types import ToolUseContext
 
 
 @pytest.fixture

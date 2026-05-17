@@ -1,9 +1,9 @@
 """ToolRegistry 测试。"""
 
 import pytest
-from app.core.tools.registry import ToolRegistry
-from app.core.tools.types import ToolResult, ToolSpec
-from app.core.llm.types import ToolDefinition, ToolParameterSchema
+from agent_framework.tools.registry import ToolRegistry
+from agent_framework.tools.types import ToolResult, ToolSpec
+from agent_framework.llm.types import ToolDefinition, ToolParameterSchema
 
 
 async def _fake_handler(args, ctx):

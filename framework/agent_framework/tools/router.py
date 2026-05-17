@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from app.core.tools.executor import ToolExecutor
-from app.core.tools.registry import ToolRegistry
-from app.core.tools.types import ToolCall, ToolResult, ToolUseContext
+from agent_framework.tools.executor import ToolExecutor
+from agent_framework.tools.registry import ToolRegistry
+from agent_framework.tools.types import ToolCall, ToolResult, ToolUseContext
 
 
 class ToolRouter:

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from app.core.llm.types import ToolDefinition
-from app.core.tools.types import ToolSpec
+from agent_framework.llm.types import ToolDefinition
+from agent_framework.tools.types import ToolSpec
 
 
 class ToolRegistry:

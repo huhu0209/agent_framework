@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from app.core.llm.types import ToolParameterSchema
-from app.core.tools.registry import ToolRegistry
-from app.core.tools.types import ToolSpec
+from agent_framework.llm.types import ToolParameterSchema
+from agent_framework.tools.registry import ToolRegistry
+from agent_framework.tools.types import ToolSpec
 
 from .file_tools import read_file, write_file
 from .search_tools import web_search

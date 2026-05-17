@@ -3,20 +3,20 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from app.core.llm.base import (
+from agent_framework.llm.base import (
     CircuitOpenError,
     ILLMAdapter,
     InvalidRequestError,
     LLMAdapterError,
     ServiceUnavailableError,
 )
-from app.core.llm.retry import (
+from agent_framework.llm.retry import (
     CircuitBreaker,
     CircuitBreakerConfig,
     RetryConfig,
 )
-from app.core.llm.resilient import ResilientLLMAdapter
-from app.core.llm.types import (
+from agent_framework.llm.resilient import ResilientLLMAdapter
+from agent_framework.llm.types import (
     CompletionConfig,
     CompletionResult,
     ProviderInfo,
@@ -78,7 +78,7 @@ async def test_complete_success(mock_config, mock_result):
     provider = _make_mock_provider()
     provider.complete.return_value = mock_result
 
-    from app.core.llm.resilient import ResilientLLMAdapter
+    from agent_framework.llm.resilient import ResilientLLMAdapter
 
     adapter = ResilientLLMAdapter(provider=provider)
     result = await adapter.complete(mock_config)
@@ -90,7 +90,7 @@ async def test_complete_success(mock_config, mock_result):
 @pytest.mark.asyncio
 async def test_complete_retries_on_retryable_error(mock_config, mock_result):
     """可重试错误触发重试，最终成功。"""
-    from app.core.llm.resilient import ResilientLLMAdapter
+    from agent_framework.llm.resilient import ResilientLLMAdapter
 
     provider = _make_mock_provider()
     provider.complete.side_effect = [
@@ -111,7 +111,7 @@ async def test_complete_retries_on_retryable_error(mock_config, mock_result):
 @pytest.mark.asyncio
 async def test_complete_no_retry_on_invalid_request(mock_config):
     """不可重试错误直接抛出，不重试。"""
-    from app.core.llm.resilient import ResilientLLMAdapter
+    from agent_framework.llm.resilient import ResilientLLMAdapter
 
     provider = _make_mock_provider()
     provider.complete.side_effect = InvalidRequestError(provider="mock")
@@ -130,7 +130,7 @@ async def test_complete_no_retry_on_invalid_request(mock_config):
 @pytest.mark.asyncio
 async def test_complete_exhausts_retries(mock_config):
     """重试耗尽后抛出最后一次错误。"""
-    from app.core.llm.resilient import ResilientLLMAdapter
+    from agent_framework.llm.resilient import ResilientLLMAdapter
 
     provider = _make_mock_provider()
     provider.complete.side_effect = ServiceUnavailableError(provider="mock")
@@ -149,7 +149,7 @@ async def test_complete_exhausts_retries(mock_config):
 @pytest.mark.asyncio
 async def test_complete_blocked_by_open_breaker(mock_config):
     """断路器打开时抛出 CircuitOpenError。"""
-    from app.core.llm.resilient import ResilientLLMAdapter
+    from agent_framework.llm.resilient import ResilientLLMAdapter
 
     provider = _make_mock_provider()
     breaker = CircuitBreaker(
@@ -172,7 +172,7 @@ async def test_complete_blocked_by_open_breaker(mock_config):
 @pytest.mark.asyncio
 async def test_create_adapter_deepseek():
     """工厂函数创建 DeepSeek provider 的 resilient adapter。"""
-    from app.core.llm.resilient import create_adapter
+    from agent_framework.llm.resilient import create_adapter
 
     adapter = create_adapter(
         provider="deepseek",
@@ -187,7 +187,7 @@ async def test_create_adapter_deepseek():
 @pytest.mark.asyncio
 async def test_create_adapter_openai():
     """工厂函数创建 OpenAI provider。"""
-    from app.core.llm.resilient import create_adapter
+    from agent_framework.llm.resilient import create_adapter
 
     adapter = create_adapter(
         provider="openai",
@@ -202,7 +202,7 @@ async def test_create_adapter_openai():
 @pytest.mark.asyncio
 async def test_create_adapter_anthropic():
     """工厂函数创建 Anthropic provider。"""
-    from app.core.llm.resilient import create_adapter
+    from agent_framework.llm.resilient import create_adapter
 
     adapter = create_adapter(
         provider="anthropic",
@@ -217,7 +217,7 @@ async def test_create_adapter_anthropic():
 @pytest.mark.asyncio
 async def test_create_adapter_custom_base_url():
     """工厂函数支持自定义 base_url。"""
-    from app.core.llm.resilient import create_adapter
+    from agent_framework.llm.resilient import create_adapter
 
     adapter = create_adapter(
         provider="openai",
@@ -230,7 +230,7 @@ async def test_create_adapter_custom_base_url():
 
 def test_create_adapter_unknown_provider():
     """未知 provider 抛出 ValueError。"""
-    from app.core.llm.resilient import create_adapter
+    from agent_framework.llm.resilient import create_adapter
 
     with pytest.raises(ValueError, match="Unknown provider"):
         create_adapter(
@@ -246,7 +246,7 @@ def test_create_adapter_unknown_provider():
 @pytest.mark.asyncio
 async def test_stream_success(mock_config):
     """流式调用透传到 provider。"""
-    from app.core.llm.resilient import ResilientLLMAdapter
+    from agent_framework.llm.resilient import ResilientLLMAdapter
 
     async def fake_stream(config):
         yield StreamEvent(type=StreamEventType.TEXT_DELTA, data={})
@@ -265,7 +265,7 @@ async def test_stream_success(mock_config):
 @pytest.mark.asyncio
 async def test_stream_blocked_by_open_breaker(mock_config):
     """断路器打开时流式调用也抛 CircuitOpenError。"""
-    from app.core.llm.resilient import ResilientLLMAdapter
+    from agent_framework.llm.resilient import ResilientLLMAdapter
 
     provider = _make_mock_provider()
     breaker = CircuitBreaker(
@@ -285,7 +285,7 @@ async def test_stream_blocked_by_open_breaker(mock_config):
 @pytest.mark.asyncio
 async def test_health_check_records_success():
     """health_check 成功时 breaker 记录成功。"""
-    from app.core.llm.resilient import ResilientLLMAdapter
+    from agent_framework.llm.resilient import ResilientLLMAdapter
 
     provider = _make_mock_provider()
     provider.health_check.return_value = True
@@ -304,7 +304,7 @@ async def test_health_check_records_success():
 @pytest.mark.asyncio
 async def test_health_check_records_failure():
     """health_check 失败时 breaker 记录失败。"""
-    from app.core.llm.resilient import ResilientLLMAdapter
+    from agent_framework.llm.resilient import ResilientLLMAdapter
 
     provider = _make_mock_provider()
     provider.health_check.return_value = False

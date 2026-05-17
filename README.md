@@ -18,33 +18,39 @@ Orchestrator 模式的 Agent 系统，统一多 LLM Provider 调用接口。
 
 ```
 agent_framework/
-├── backend/
-│   ├── app/
-│   │   ├── core/
-│   │   │   └── llm/          # LLM Adapter 层（已实现）
-│   │   │       ├── base.py       # ILLMAdapter 抽象接口 + 异常体系
-│   │   │       ├── types.py      # 统一类型定义（消息、ContentBlock、配置、结果）
-│   │   │       ├── transform.py  # Provider 请求/响应转换
-│   │   │       ├── streaming.py  # SSE 解析 + OpenAI delta 流解析器
-│   │   │       ├── retry.py      # 指数退避重试 + Circuit Breaker
-│   │   │       ├── resilient.py  # ResilientLLMAdapter 包装器 + 工厂函数
-│   │   │       └── providers/
-│   │   │           ├── deepseek_provider.py
-│   │   │           ├── openai_provider.py
-│   │   │           └── anthropic_provider.py
-│   │   ├── api/              # API 路由（待实现）
-│   │   ├── config/           # 配置管理（待实现）
-│   │   ├── models/           # 数据模型（待实现）
-│   │   ├── services/         # 业务服务（待实现）
-│   │   └── utils/            # 工具函数（待实现）
+├── framework/                    ← 通用框架包（pip install -e）
+│   ├── agent_framework/
+│   │   ├── llm/                  # LLM Adapter 层（已实现）
+│   │   │   ├── base.py           # ILLMAdapter 抽象接口 + 异常体系
+│   │   │   ├── types.py          # 统一类型定义（消息、ContentBlock、配置、结果）
+│   │   │   ├── transform.py      # Provider 请求/响应转换
+│   │   │   ├── streaming.py      # SSE 解析 + OpenAI delta 流解析器
+│   │   │   ├── retry.py          # 指数退避重试 + Circuit Breaker
+│   │   │   ├── resilient.py      # ResilientLLMAdapter 包装器 + 工厂函数
+│   │   │   └── providers/
+│   │   │       ├── deepseek_provider.py
+│   │   │       ├── openai_provider.py
+│   │   │       └── anthropic_provider.py
+│   │   ├── tools/                # Tool System（已实现）
+│   │   ├── agents/               # ReAct Agent Loop（已实现）
+│   │   ├── memory/               # 记忆系统（脚手架）
+│   │   ├── orchestrator/         # 编排器（脚手架）
+│   │   └── prompts/              # Prompt 模板（脚手架）
 │   ├── tests/
-│   │   └── test_resilient.py
-│   ├── pyproject.toml
+│   └── pyproject.toml
+├── backend/                      ← 应用层（使用框架）
+│   ├── app/
+│   │   ├── api/                  # API 路由（待实现）
+│   │   ├── config/               # 配置管理（待实现）
+│   │   ├── models/               # 数据模型（待实现）
+│   │   ├── services/             # 业务服务（待实现）
+│   │   └── utils/                # 工具函数（待实现）
+│   ├── pyproject.toml            # 依赖本地 framework
 │   └── main.py
-├── frontend/                 # React 前端（脚手架阶段）
+├── frontend/                     # React 前端（脚手架阶段）
 ├── docs/
-│   └── plans/                # 设计与实现计划
-└── DESIGN.md                 # Claude/Anthropic 风格设计系统
+│   └── plans/                    # 设计与实现计划
+└── DESIGN.md                     # Claude/Anthropic 风格设计系统
 ```
 
 ## LLM Adapter 层
@@ -97,7 +103,7 @@ class ILLMAdapter(ABC):
 ### 使用示例
 
 ```python
-from app.core.llm import create_adapter
+from agent_framework.llm import create_adapter
 
 # 创建 adapter
 adapter = create_adapter(
@@ -107,7 +113,7 @@ adapter = create_adapter(
 )
 
 # 非流式调用
-from app.core.llm import UserMessage, TextBlock, CompletionConfig
+from agent_framework.llm import UserMessage, TextBlock, CompletionConfig
 
 config = CompletionConfig(
     model="deepseek-chat",
@@ -161,9 +167,13 @@ async for event in adapter.stream(config):
 ### 安装
 
 ```bash
-# 后端
+# 框架
+cd framework
+uv pip install -e ".[test]"
+
+# 应用（自动安装框架依赖）
 cd backend
-pip install -e ".[test]"
+uv pip install -e ".[test]"
 
 # 前端
 cd frontend
@@ -173,7 +183,7 @@ npm install
 ### 测试
 
 ```bash
-cd backend
+cd framework
 pytest tests/ -v
 ```
 

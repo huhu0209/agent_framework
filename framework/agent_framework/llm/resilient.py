@@ -88,9 +88,9 @@ class ResilientLLMAdapter(ILLMAdapter):
 
 
 _PROVIDER_MAP: dict[str, str] = {
-    "deepseek": "app.core.llm.providers.deepseek_provider.DeepSeekProvider",
-    "openai": "app.core.llm.providers.openai_provider.OpenAIProvider",
-    "anthropic": "app.core.llm.providers.anthropic_provider.AnthropicProvider",
+    "deepseek": "agent_framework.llm.providers.deepseek_provider.DeepSeekProvider",
+    "openai": "agent_framework.llm.providers.openai_provider.OpenAIProvider",
+    "anthropic": "agent_framework.llm.providers.anthropic_provider.AnthropicProvider",
 }
 
 

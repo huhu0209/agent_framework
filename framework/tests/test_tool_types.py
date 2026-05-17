@@ -1,8 +1,8 @@
 """Tool System 数据模型测试。"""
 
 import pytest
-from app.core.tools.types import ToolCall, ToolResult, ToolSpec, ToolUseContext
-from app.core.llm.types import ToolDefinition, ToolParameterSchema
+from agent_framework.tools.types import ToolCall, ToolResult, ToolSpec, ToolUseContext
+from agent_framework.llm.types import ToolDefinition, ToolParameterSchema
 
 
 class TestToolCall:

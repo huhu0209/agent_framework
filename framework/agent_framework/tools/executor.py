@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import asyncio
 
-from app.core.tools.types import ToolResult, ToolSpec, ToolUseContext
-from app.core.tools.validator import ToolValidator
+from agent_framework.tools.types import ToolResult, ToolSpec, ToolUseContext
+from agent_framework.tools.validator import ToolValidator
 
 
 class ToolExecutor:

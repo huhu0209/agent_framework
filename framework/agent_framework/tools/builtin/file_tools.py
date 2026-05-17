@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.core.tools.types import ToolResult, ToolUseContext
+from agent_framework.tools.types import ToolResult, ToolUseContext
 
 
 async def read_file(args: dict, ctx: ToolUseContext) -> ToolResult:

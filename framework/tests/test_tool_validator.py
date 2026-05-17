@@ -1,9 +1,9 @@
 """ToolValidator 参数校验测试。"""
 
 import pytest
-from app.core.tools.validator import ToolValidator
-from app.core.tools.types import ToolResult, ToolSpec
-from app.core.llm.types import ToolParameterSchema
+from agent_framework.tools.validator import ToolValidator
+from agent_framework.tools.types import ToolResult, ToolSpec
+from agent_framework.llm.types import ToolParameterSchema
 
 
 def _make_spec(name: str = "test", properties=None, required=None) -> ToolSpec:

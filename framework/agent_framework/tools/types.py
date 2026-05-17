@@ -6,7 +6,7 @@ from typing import Any, Awaitable, Callable
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.core.llm.types import ToolDefinition, ToolParameterSchema
+from agent_framework.llm.types import ToolDefinition, ToolParameterSchema
 
 
 class ToolCall(BaseModel):
