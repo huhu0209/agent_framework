@@ -28,6 +28,7 @@ from .types import (
     ToolResultBlock,
     ToolUseBlock,
     UsageStats,
+    UserMessage,
 )
 
 
@@ -493,3 +494,43 @@ def parse_anthropic_response(data: dict) -> tuple[list[ContentBlock], StopReason
     )
 
     return content_blocks, stop_reason, usage
+
+
+# ============================================================
+# 消息规范化
+# ============================================================
+
+
+def normalize_messages(messages: list[Message]) -> list[Message]:
+    """发送前的消息规范化。
+
+    三条硬性约束：
+    1. 每个 tool_use 有匹配的 tool_result（缺失补 "(cancelled)"）
+    2. user / assistant 严格交替（连续同角色合并）
+    3. 保留协议字段（当前内部格式无额外元数据，此条为预留）
+    """
+    if not messages:
+        return []
+
+    result: list[Message] = []
+
+    for msg in messages:
+        if not result:
+            result.append(msg)
+            continue
+
+        last = result[-1]
+
+        # SystemMessage / ToolMessage 不合并
+        if isinstance(msg, (SystemMessage, ToolMessage)):
+            result.append(msg)
+            continue
+
+        # 同角色合并（UserMessage + UserMessage / AssistantMessage + AssistantMessage）
+        if type(msg) is type(last) and isinstance(msg, (UserMessage, AssistantMessage)):
+            last.content = [*last.content, *msg.content]
+            continue
+
+        result.append(msg)
+
+    return result

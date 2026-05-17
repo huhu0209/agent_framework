@@ -1,16 +1,11 @@
-"""最小 ReAct Agent Loop，验证 LLM Adapter 的 tool calling 链路。
+"""最小 ReAct Agent Loop，驱动 LLM 多轮 tool calling。
 
-ReAct = Reason + Act，每一步模型可以：
-- 直接回答（stop_reason=end_turn）→ 结束
-- 调用工具（stop_reason=tool_use）→ 执行工具，把结果追加到对话，继续循环
+通过 ToolRouter 执行工具调用，支持内建/MCP/Agent 三类工具来源。
 """
 
 from __future__ import annotations
 
-import ast
-import operator
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import Any, AsyncGenerator
 
 from app.core.llm import (
@@ -22,12 +17,12 @@ from app.core.llm import (
     StopReason,
     SystemMessage,
     TextBlock,
-    ToolDefinition,
     ToolMessage,
-    ToolParameterSchema,
     ToolUseBlock,
     UserMessage,
 )
+from app.core.tools.router import ToolRouter
+from app.core.tools.types import ToolCall, ToolUseContext
 
 
 @dataclass
@@ -36,67 +31,6 @@ class LoopEvent:
     type: str  # "step" | "tool_result" | "done" | "max_steps" | "error"
     step: int
     data: dict[str, Any] = field(default_factory=dict)
-
-
-MOCK_TOOLS: list[ToolDefinition] = [
-    ToolDefinition(
-        name="get_time",
-        description="获取当前日期和时间",
-        parameters=ToolParameterSchema(),
-    ),
-    ToolDefinition(
-        name="calculate",
-        description="计算数学表达式",
-        parameters=ToolParameterSchema(
-            properties={
-                "expression": {
-                    "type": "string",
-                    "description": "要计算的数学表达式，例如 '2 + 3 * 4'",
-                }
-            },
-            required=["expression"],
-        ),
-    ),
-]
-
-
-_SAFE_BIN_OPS = {
-    ast.Add: operator.add, ast.Sub: operator.sub,
-    ast.Mult: operator.mul, ast.Div: operator.truediv,
-    ast.Pow: operator.pow,
-}
-_SAFE_UNARY_OPS = {ast.USub: operator.neg}
-
-
-def _safe_eval(expr: str) -> str:
-    """安全的数学表达式求值，只支持数字和基本运算符。"""
-    tree = ast.parse(expr, mode="eval")
-
-    def _eval(node: ast.expr) -> Any:
-        if isinstance(node, ast.Constant):
-            return node.value
-        if isinstance(node, ast.BinOp):
-            op = _SAFE_BIN_OPS.get(type(node.op))
-            if op is None:
-                raise ValueError(f"不支持的运算符: {type(node.op).__name__}")
-            return op(_eval(node.left), _eval(node.right))
-        if isinstance(node, ast.UnaryOp):
-            op = _SAFE_UNARY_OPS.get(type(node.op))
-            if op is None:
-                raise ValueError(f"不支持的运算符: {type(node.op).__name__}")
-            return op(_eval(node.operand))
-        raise ValueError(f"不支持的表达式: {ast.dump(node)}")
-
-    return str(_eval(tree.body))
-
-
-def execute_mock_tool(name: str, args: dict[str, Any]) -> str:
-    """执行 mock tool，返回结果字符串。"""
-    if name == "get_time":
-        return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    if name == "calculate":
-        return _safe_eval(args.get("expression", ""))
-    return f"未知工具: {name}"
 
 
 def _serialize_content(result: CompletionResult) -> list[dict[str, Any]]:
@@ -111,35 +45,39 @@ class AgentLoop:
         adapter: ILLMAdapter,
         *,
         model: str,
+        router: ToolRouter,
+        ctx: ToolUseContext,
         max_steps: int = 10,
         system_prompt: str = "你是一个有用的助手。可以使用工具来完成任务。",
-        tools: list[ToolDefinition] | None = None,
     ) -> None:
         self.adapter = adapter
         self.model = model
+        self.router = router
+        self.ctx = ctx
         self.max_steps = max_steps
         self.system_prompt = system_prompt
-        self.tools = tools if tools is not None else MOCK_TOOLS
 
     def _build_config(self, messages: list[Message]) -> CompletionConfig:
-        return CompletionConfig(model=self.model, messages=messages, tools=self.tools)
+        tools = self.router.registry.get_definitions()
+        return CompletionConfig(model=self.model, messages=messages, tools=tools)
 
     def _extract_tool_calls(self, result: CompletionResult) -> list[ToolUseBlock]:
         return [b for b in result.content if isinstance(b, ToolUseBlock)]
 
-    def _append_assistant_and_tool_results(
+    async def _append_assistant_and_tool_results(
         self, messages: list[Message], result: CompletionResult,
     ) -> list[str]:
         """追加 AssistantMessage + 各 ToolMessage，返回每个 tool 的执行结果。"""
         messages.append(AssistantMessage(content=result.content))
         tool_results: list[str] = []
         for tc in self._extract_tool_calls(result):
-            try:
-                output = execute_mock_tool(tc.name, tc.input)
-            except Exception as exc:
-                output = f"工具执行异常: {exc}"
-            messages.append(ToolMessage(tool_call_id=tc.id, content=output))
-            tool_results.append(output)
+            call = ToolCall(id=tc.id, name=tc.name, arguments=tc.input)
+            tool_result = await self.router.dispatch(call, self.ctx)
+            messages.append(ToolMessage(
+                tool_call_id=tc.id,
+                content=tool_result.content,
+            ))
+            tool_results.append(tool_result.content)
         return tool_results
 
     async def run(self, user_message: str) -> AsyncGenerator[LoopEvent, None]:
@@ -174,7 +112,7 @@ class AgentLoop:
                 if not tool_calls:
                     yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)})
                     return
-                tool_results = self._append_assistant_and_tool_results(messages, result)
+                tool_results = await self._append_assistant_and_tool_results(messages, result)
                 yield LoopEvent(
                     type="tool_result", step=step,
                     data={
@@ -184,7 +122,6 @@ class AgentLoop:
                 )
                 continue
 
-            # 未知 stop_reason，视为完成
             yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)})
             return
 

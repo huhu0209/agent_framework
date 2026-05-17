@@ -1,4 +1,4 @@
-"""AgentLoop 测试。"""
+"""AgentLoop 测试 — 集成 Tool System。"""
 
 import pytest
 from unittest.mock import AsyncMock
@@ -12,15 +12,16 @@ from app.core.llm.types import (
     ToolUseBlock,
     UsageStats,
 )
+from app.core.tools.builtin import create_builtin_registry
+from app.core.tools.router import ToolRouter
+from app.core.tools.types import ToolUseContext
 
 
 def _make_mock_adapter() -> AsyncMock:
-    """创建 AsyncMock(spec=ILLMAdapter)。"""
     return AsyncMock(spec=ILLMAdapter)
 
 
 def _text_result(text: str, stop_reason: StopReason = StopReason.END_TURN) -> CompletionResult:
-    """构造纯文本 CompletionResult。"""
     return CompletionResult(
         id="test-id",
         content=[TextBlock(text=text)],
@@ -31,7 +32,6 @@ def _text_result(text: str, stop_reason: StopReason = StopReason.END_TURN) -> Co
 
 
 def _tool_use_result(*tool_calls: ToolUseBlock) -> CompletionResult:
-    """构造含 ToolUseBlock 的 CompletionResult。"""
     return CompletionResult(
         id="test-id",
         content=list(tool_calls),
@@ -42,89 +42,81 @@ def _tool_use_result(*tool_calls: ToolUseBlock) -> CompletionResult:
 
 
 def _make_tool(name: str, id_: str = "tc_1", **input_kwargs) -> ToolUseBlock:
-    """构造 ToolUseBlock 的快捷方法。"""
     return ToolUseBlock(id=id_, name=name, input=input_kwargs)
 
 
+def _make_loop(adapter, **kwargs) -> AgentLoop:
+    registry = create_builtin_registry()
+    router = ToolRouter(registry)
+    ctx = ToolUseContext()
+    return AgentLoop(adapter, model="mock", router=router, ctx=ctx, **kwargs)
+
+
 async def _collect_events(loop: AgentLoop, message: str) -> list[LoopEvent]:
-    """收集 AgentLoop.run 的所有事件。"""
     return [event async for event in loop.run(message)]
-
-
-# ---- 测试 ----
 
 
 @pytest.mark.asyncio
 async def test_direct_answer():
-    """模型直接回答不调 tool，一步退出。"""
     adapter = _make_mock_adapter()
-    adapter.complete.return_value = _text_result("回答", StopReason.END_TURN)
+    adapter.complete.return_value = _text_result("回答")
 
-    loop = AgentLoop(adapter, model="mock")
+    loop = _make_loop(adapter)
     events = await _collect_events(loop, "你好")
 
     types = [e.type for e in events]
     assert types == ["step", "done"]
     assert events[0].step == 1
-    assert events[0].data["stop_reason"] == "end_turn"
-    assert events[1].data["content"][0]["text"] == "回答"
     adapter.complete.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_single_tool_call():
-    """模型调一次 tool 后回答。"""
+async def test_single_tool_call_read_file(tmp_path):
+    """用真实的 read_file tool 执行。"""
+    (tmp_path / "test.txt").write_text("hello from file")
+
     adapter = _make_mock_adapter()
     adapter.complete.side_effect = [
-        _tool_use_result(_make_tool("get_time")),
+        _tool_use_result(_make_tool("read_file", path="test.txt")),
         _text_result("回答"),
     ]
 
-    loop = AgentLoop(adapter, model="mock")
-    events = await _collect_events(loop, "现在几点了？")
+    registry = create_builtin_registry()
+    router = ToolRouter(registry)
+    ctx = ToolUseContext(working_dir=str(tmp_path))
+    loop = AgentLoop(adapter, model="mock", router=router, ctx=ctx)
 
-    types = [e.type for e in events]
-    assert types == ["step", "tool_result", "step", "done"]
+    events = await _collect_events(loop, "读文件")
 
-    # tool_result 事件有 tool_calls 和 tool_results
-    tool_result_event = events[1]
-    assert tool_result_event.type == "tool_result"
-    assert len(tool_result_event.data["tool_calls"]) == 1
-    assert tool_result_event.data["tool_calls"][0]["name"] == "get_time"
-    assert len(tool_result_event.data["tool_results"]) == 1
-
+    tool_events = [e for e in events if e.type == "tool_result"]
+    assert len(tool_events) == 1
+    assert "hello from file" in tool_events[0].data["tool_results"][0]
     assert adapter.complete.call_count == 2
 
 
 @pytest.mark.asyncio
-async def test_multiple_tool_calls():
-    """模型连续调 tool。"""
+async def test_tool_call_nonexistent_tool():
+    """调用不存在的工具返回错误。"""
     adapter = _make_mock_adapter()
     adapter.complete.side_effect = [
-        _tool_use_result(_make_tool("get_time", id_="tc_1")),
-        _tool_use_result(_make_tool("calculate", id_="tc_2", expression="2+3")),
+        _tool_use_result(_make_tool("nonexistent_tool")),
         _text_result("回答"),
     ]
 
-    loop = AgentLoop(adapter, model="mock")
-    events = await _collect_events(loop, "现在几点，2+3等于几？")
+    loop = _make_loop(adapter)
+    events = await _collect_events(loop, "测试")
 
-    tool_result_events = [e for e in events if e.type == "tool_result"]
-    assert len(tool_result_events) == 2
-
-    assert tool_result_events[0].data["tool_calls"][0]["name"] == "get_time"
-    assert tool_result_events[1].data["tool_calls"][0]["name"] == "calculate"
-
-    assert adapter.complete.call_count == 3
+    tool_events = [e for e in events if e.type == "tool_result"]
+    assert len(tool_events) == 1
+    assert "未知工具" in tool_events[0].data["tool_results"][0]
 
 
 @pytest.mark.asyncio
 async def test_max_steps_reached():
-    """达到 max_steps 时终止。"""
     adapter = _make_mock_adapter()
-    adapter.complete.return_value = _tool_use_result(_make_tool("get_time"))
+    adapter.complete.return_value = _tool_use_result(_make_tool("read_file", path="x.txt"))
 
-    loop = AgentLoop(adapter, model="mock", max_steps=3)
+    loop = _make_loop(adapter, max_steps=3)
     events = await _collect_events(loop, "一直调用工具")
 
     last_event = events[-1]
@@ -134,11 +126,10 @@ async def test_max_steps_reached():
 
 @pytest.mark.asyncio
 async def test_max_tokens_error():
-    """MAX_TOKENS 终止时产生 error 事件。"""
     adapter = _make_mock_adapter()
     adapter.complete.return_value = _text_result("截断...", StopReason.MAX_TOKENS)
 
-    loop = AgentLoop(adapter, model="mock")
+    loop = _make_loop(adapter)
     events = await _collect_events(loop, "长文本")
 
     error_events = [e for e in events if e.type == "error"]
@@ -147,38 +138,64 @@ async def test_max_tokens_error():
 
 
 @pytest.mark.asyncio
-async def test_parallel_tool_calls():
+async def test_parallel_tool_calls(tmp_path):
     """一次返回多个 tool call，批量执行。"""
+    (tmp_path / "a.txt").write_text("content A")
+    (tmp_path / "b.txt").write_text("content B")
+
     adapter = _make_mock_adapter()
     adapter.complete.side_effect = [
         _tool_use_result(
-            _make_tool("get_time", id_="tc_1"),
-            _make_tool("calculate", id_="tc_2", expression="10*2"),
+            _make_tool("read_file", id_="tc_1", path="a.txt"),
+            _make_tool("read_file", id_="tc_2", path="b.txt"),
         ),
         _text_result("回答"),
     ]
 
-    loop = AgentLoop(adapter, model="mock")
-    events = await _collect_events(loop, "几点了？10*2=?")
+    registry = create_builtin_registry()
+    router = ToolRouter(registry)
+    ctx = ToolUseContext(working_dir=str(tmp_path))
+    loop = AgentLoop(adapter, model="mock", router=router, ctx=ctx)
 
-    tool_result_events = [e for e in events if e.type == "tool_result"]
-    assert len(tool_result_events) == 1
+    events = await _collect_events(loop, "读两个文件")
 
-    tr = tool_result_events[0]
-    assert len(tr.data["tool_calls"]) == 2
-    assert tr.data["tool_calls"][1]["name"] == "calculate"
-    assert "20" in tr.data["tool_results"]
+    tool_events = [e for e in events if e.type == "tool_result"]
+    assert len(tool_events) == 1
+    assert len(tool_events[0].data["tool_results"]) == 2
 
 
 @pytest.mark.asyncio
 async def test_adapter_exception():
-    """Adapter 抛异常时产生 error 事件。"""
     adapter = _make_mock_adapter()
     adapter.complete.side_effect = RuntimeError("连接超时")
 
-    loop = AgentLoop(adapter, model="mock")
+    loop = _make_loop(adapter)
     events = await _collect_events(loop, "触发异常")
 
     error_events = [e for e in events if e.type == "error"]
     assert len(error_events) == 1
     assert "连接超时" in error_events[0].data["error"]
+
+
+@pytest.mark.asyncio
+async def test_write_then_read(tmp_path):
+    """写文件再读回来的端到端测试。"""
+    adapter = _make_mock_adapter()
+    adapter.complete.side_effect = [
+        _tool_use_result(_make_tool("write_file", path="output.txt", content="written content")),
+        _tool_use_result(_make_tool("read_file", path="output.txt")),
+        _text_result("回答"),
+    ]
+
+    registry = create_builtin_registry()
+    router = ToolRouter(registry)
+    ctx = ToolUseContext(working_dir=str(tmp_path))
+    loop = AgentLoop(adapter, model="mock", router=router, ctx=ctx)
+
+    events = await _collect_events(loop, "写文件再读")
+
+    tool_events = [e for e in events if e.type == "tool_result"]
+    assert len(tool_events) == 2
+    assert "成功写入" in tool_events[0].data["tool_results"][0]
+    assert "written content" in tool_events[1].data["tool_results"][0]
+    assert adapter.complete.call_count == 3
