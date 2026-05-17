@@ -60,6 +60,11 @@ class PlanningState:
             self.current_focus = item_id
 
     def check_drift(self, warn_threshold: int, abort_threshold: int) -> DriftLevel:
+        has_active = any(i.status == "in_progress" for i in self.items)
+        has_pending = any(i.status == "pending" for i in self.items)
+        if has_active or not has_pending:
+            return DriftLevel.NONE
+
         if self.drift_count >= abort_threshold:
             return DriftLevel.ABORT
         if self.drift_count >= warn_threshold:

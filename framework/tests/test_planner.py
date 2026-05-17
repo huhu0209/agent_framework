@@ -119,8 +119,8 @@ def test_check_drift_none():
 
 def test_check_drift_warn():
     state = PlanningState(
-        items=[PlanItem(id="1", action="步骤", status="in_progress")],
-        current_focus="1",
+        items=[PlanItem(id="1", action="步骤", status="pending")],
+        current_focus=None,
         drift_count=3,
     )
     assert state.check_drift(warn_threshold=3, abort_threshold=8) == DriftLevel.WARN
@@ -128,11 +128,37 @@ def test_check_drift_warn():
 
 def test_check_drift_abort():
     state = PlanningState(
-        items=[PlanItem(id="1", action="步骤", status="in_progress")],
-        current_focus="1",
+        items=[PlanItem(id="1", action="步骤", status="pending")],
+        current_focus=None,
         drift_count=8,
     )
     assert state.check_drift(warn_threshold=3, abort_threshold=8) == DriftLevel.ABORT
+
+
+def test_check_drift_all_blocked_no_pending():
+    """所有非 blocked item 都完成了，不应算偏离。"""
+    state = PlanningState(
+        items=[
+            PlanItem(id="1", action="步骤一", status="completed"),
+            PlanItem(id="2", action="步骤二", status="blocked"),
+        ],
+        current_focus=None,
+        drift_count=5,
+    )
+    assert state.check_drift(warn_threshold=3, abort_threshold=8) == DriftLevel.NONE
+
+
+def test_check_drift_has_active_item_no_drift():
+    """有 in_progress 的 item，不算偏离。"""
+    state = PlanningState(
+        items=[
+            PlanItem(id="1", action="步骤一", status="in_progress"),
+            PlanItem(id="2", action="步骤二", status="pending"),
+        ],
+        current_focus="1",
+        drift_count=5,
+    )
+    assert state.check_drift(warn_threshold=3, abort_threshold=8) == DriftLevel.NONE
 
 
 def test_check_drift_skips_blocked_items():
