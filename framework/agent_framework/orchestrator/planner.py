@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from enum import Enum
 from typing import Literal
@@ -103,3 +104,32 @@ class PlanningState:
             current_focus=self.current_focus,
             plan_source=self.plan_source,
         )
+
+
+def parse_plan_response(text: str) -> list[PlanItem] | None:
+    """从 LLM 回复文本中提取 <plan> 块。"""
+    match = re.search(r"<plan>(.*?)</plan>", text, re.DOTALL)
+    if not match:
+        return None
+
+    items: list[PlanItem] = []
+    for line in match.group(1).strip().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        m = re.match(r"^(\d+)\.\s*(.*)", line)
+        if m:
+            items.append(PlanItem(id=m.group(1), action=m.group(2), status="pending"))
+        elif items:
+            items[-1] = PlanItem(
+                id=items[-1].id,
+                action=items[-1].action + " " + line,
+                status=items[-1].status,
+            )
+
+    return items if items else None
+
+
+def strip_plan_tags(text: str) -> str:
+    """移除文本中的 <plan>...</plan> 块。"""
+    return re.sub(r"<plan>.*?</plan>", "", text, flags=re.DOTALL).strip()

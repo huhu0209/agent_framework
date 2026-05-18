@@ -7,6 +7,8 @@ from agent_framework.orchestrator.planner import (
     PlanItem,
     PlanSnapshot,
     PlanningState,
+    parse_plan_response,
+    strip_plan_tags,
 )
 
 
@@ -214,3 +216,56 @@ def test_format_for_injection():
     assert "[pending]" in text
     assert "搜索模块" in text
     assert "重构代码" in text
+
+
+# --- parse_plan_response ---
+
+
+def test_parse_plan_normal():
+    text = "我来制定计划\n<plan>\n1. 搜索模块\n2. 重构代码\n3. 更新测试\n</plan>\n开始执行"
+    items = parse_plan_response(text)
+    assert len(items) == 3
+    assert items[0].id == "1"
+    assert items[0].action == "搜索模块"
+    assert items[0].status == "pending"
+    assert items[2].action == "更新测试"
+
+
+def test_parse_plan_multiline_action():
+    text = "<plan>\n1. 搜索 auth 模块\n   包括 JWT 和 session\n2. 重构\n</plan>"
+    items = parse_plan_response(text)
+    assert len(items) == 2
+    assert "JWT" in items[0].action
+    assert items[1].action == "重构"
+
+
+def test_parse_plan_no_tag():
+    text = "直接回答，不需要计划"
+    assert parse_plan_response(text) is None
+
+
+def test_parse_plan_empty():
+    text = "<plan>\n</plan>"
+    assert parse_plan_response(text) is None
+
+
+def test_parse_plan_no_numbered_items():
+    text = "<plan>\n随便写点东西\n</plan>"
+    assert parse_plan_response(text) is None
+
+
+# --- strip_plan_tags ---
+
+
+def test_strip_plan_tags():
+    text = "计划如下\n<plan>\n1. 步骤一\n</plan>\n开始执行"
+    cleaned = strip_plan_tags(text)
+    assert "<plan>" not in cleaned
+    assert "步骤一" not in cleaned
+    assert "计划如下" in cleaned
+    assert "开始执行" in cleaned
+
+
+def test_strip_plan_tags_no_tag():
+    text = "普通文本"
+    assert strip_plan_tags(text) == text
