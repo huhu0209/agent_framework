@@ -141,12 +141,14 @@ class AgentLoop:
         plan: list[PlanItem] | None = None,
     ) -> AsyncGenerator[LoopEvent, None]:
         """核心异步生成器：执行 ReAct 循环，支持 Session Planning。"""
+        # 0. 初始化消息列表，
         messages: list[Message] = [
             SystemMessage(content=self.system_prompt),
             UserMessage(content=[TextBlock(text=user_message)]),
         ]
 
         planning_state: PlanningState | None = None
+        # 1. 如果提供了计划，初始化计划状态
         if plan is not None:
             planning_state = PlanningState(
                 items=[PlanItem(id=i.id, action=i.action, status=i.status) for i in plan],
