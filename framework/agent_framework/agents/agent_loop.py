@@ -29,7 +29,7 @@ from agent_framework.orchestrator.planner import (
     parse_plan_response,
     strip_plan_tags,
 )
-from agent_framework.prompts.templates import DRIFT_WARN_TEMPLATE, PLAN_GENERATION_INSTRUCTION
+from agent_framework.prompts.templates import DRIFT_WARN_TEMPLATE
 from agent_framework.tools.router import ToolRouter
 from agent_framework.tools.types import ToolCall, ToolUseContext
 
@@ -114,6 +114,17 @@ class AgentLoop:
                 cleaned.append(block)
         return cleaned
 
+    def _is_plan_context_message(self, msg: Message) -> bool:
+        """Check if a message is a plan context injection."""
+        if not isinstance(msg, UserMessage):
+            return False
+        if not msg.content:
+            return False
+        first = msg.content[0]
+        if not isinstance(first, TextBlock):
+            return False
+        return first.text.startswith("当前计划进度：") or first.text.startswith("[偏离提醒]")
+
     def _inject_plan_context(self, messages: list[Message], state: PlanningState) -> None:
         plan_text = state.format_for_injection()
         drift_text = ""
@@ -148,6 +159,9 @@ class AgentLoop:
 
         for step in range(1, self.max_steps + 1):
             if planning_state is not None:
+                # Remove previous plan context message (always at index 1 if it exists)
+                if len(messages) > 1 and self._is_plan_context_message(messages[1]):
+                    messages.pop(1)
                 self._inject_plan_context(messages, planning_state)
 
             try:

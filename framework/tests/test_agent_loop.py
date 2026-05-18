@@ -11,6 +11,7 @@ from agent_framework.llm.types import (
     TextBlock,
     ToolUseBlock,
     UsageStats,
+    UserMessage,
 )
 from agent_framework.orchestrator.planner import PlanItem
 from agent_framework.tools.builtin import create_builtin_registry
@@ -277,3 +278,39 @@ async def test_drift_abort():
     error_events = [e for e in events if e.type == "error"]
     assert len(error_events) == 1
     assert "偏离计划" in error_events[0].data["error"]
+
+
+@pytest.mark.asyncio
+async def test_plan_context_not_accumulating(tmp_path):
+    """计划上下文消息不会在多步循环中累积。"""
+    adapter = _make_mock_adapter()
+    adapter.complete.side_effect = [
+        _tool_use_result(_make_tool("read_file", path="a.txt")),
+        _text_result("回答"),
+    ]
+
+    (tmp_path / "a.txt").write_text("content")
+
+    registry = create_builtin_registry()
+    router = ToolRouter(registry)
+    ctx = ToolUseContext(working_dir=str(tmp_path))
+    loop = AgentLoop(adapter, model="mock", router=router, ctx=ctx)
+
+    events = await _collect_events(loop, "读文件", plan=_make_plan_items())
+
+    # Verify the loop completed
+    done_events = [e for e in events if e.type == "done"]
+    assert len(done_events) == 1
+
+    # Check adapter.complete was called twice (step 1 and step 2)
+    # On the second call, there should be exactly 1 plan context message
+    assert adapter.complete.call_count == 2
+    second_call_messages = adapter.complete.call_args_list[1][0][0].messages
+    plan_msgs = [
+        m for m in second_call_messages
+        if isinstance(m, UserMessage)
+        and m.content
+        and isinstance(m.content[0], TextBlock)
+        and ("当前计划进度" in m.content[0].text or "[偏离提醒]" in m.content[0].text)
+    ]
+    assert len(plan_msgs) == 1  # NOT accumulating
