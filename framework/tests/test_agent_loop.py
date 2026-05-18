@@ -12,6 +12,7 @@ from agent_framework.llm.types import (
     ToolUseBlock,
     UsageStats,
 )
+from agent_framework.orchestrator.planner import PlanItem
 from agent_framework.tools.builtin import create_builtin_registry
 from agent_framework.tools.router import ToolRouter
 from agent_framework.tools.types import ToolUseContext
@@ -52,8 +53,8 @@ def _make_loop(adapter, **kwargs) -> AgentLoop:
     return AgentLoop(adapter, model="mock", router=router, ctx=ctx, **kwargs)
 
 
-async def _collect_events(loop: AgentLoop, message: str) -> list[LoopEvent]:
-    return [event async for event in loop.run(message)]
+async def _collect_events(loop: AgentLoop, message: str, plan: list[PlanItem] | None = None) -> list[LoopEvent]:
+    return [event async for event in loop.run(message, plan=plan)]
 
 
 @pytest.mark.asyncio
@@ -199,3 +200,80 @@ async def test_write_then_read(tmp_path):
     assert "成功写入" in tool_events[0].data["tool_results"][0]
     assert "written content" in tool_events[1].data["tool_results"][0]
     assert adapter.complete.call_count == 3
+
+
+def _make_plan_items() -> list[PlanItem]:
+    return [
+        PlanItem(id="1", action="步骤一", status="pending"),
+        PlanItem(id="2", action="步骤二", status="pending"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_caller_injected_plan():
+    """调用方注入计划，LoopEvent 携带 plan snapshot。"""
+    adapter = _make_mock_adapter()
+    adapter.complete.return_value = _text_result("回答")
+
+    loop = _make_loop(adapter)
+    events = await _collect_events(loop, "你好", plan=_make_plan_items())
+
+    done_events = [e for e in events if e.type == "done"]
+    assert len(done_events) == 1
+    assert done_events[0].plan is not None
+    assert done_events[0].plan.total_count == 2
+    assert done_events[0].plan.plan_source == "caller_injected"
+
+
+@pytest.mark.asyncio
+async def test_llm_generated_plan():
+    """LLM 在回复中输出 <plan> 标记，自动解析。"""
+    adapter = _make_mock_adapter()
+    adapter.complete.return_value = CompletionResult(
+        id="test-id",
+        content=[TextBlock(text="<plan>\n1. 第一步\n2. 第二步\n</plan>\n好的，我来执行")],
+        model="mock",
+        stop_reason=StopReason.END_TURN,
+        usage=UsageStats(),
+    )
+
+    loop = _make_loop(adapter)
+    events = await _collect_events(loop, "复杂任务")
+
+    done_events = [e for e in events if e.type == "done"]
+    assert len(done_events) == 1
+    assert done_events[0].plan is not None
+    assert done_events[0].plan.total_count == 2
+    assert done_events[0].plan.plan_source == "llm_generated"
+
+
+@pytest.mark.asyncio
+async def test_no_plan_simple_task():
+    """简单任务不生成 plan，行为与之前一致。"""
+    adapter = _make_mock_adapter()
+    adapter.complete.return_value = _text_result("回答")
+
+    loop = _make_loop(adapter)
+    events = await _collect_events(loop, "你好")
+
+    done_events = [e for e in events if e.type == "done"]
+    assert len(done_events) == 1
+    assert done_events[0].plan is None
+
+
+@pytest.mark.asyncio
+async def test_drift_abort():
+    """连续 N 步 TOOL_USE 不推进计划，ABORT 终止循环。"""
+    adapter = _make_mock_adapter()
+    adapter.complete.side_effect = [
+        _tool_use_result(_make_tool("read_file", path="a.txt")),
+        _tool_use_result(_make_tool("read_file", path="b.txt")),
+        _tool_use_result(_make_tool("read_file", path="c.txt")),
+    ]
+
+    loop = _make_loop(adapter, drift_warn=2, drift_abort=3)
+    events = await _collect_events(loop, "复杂任务", plan=_make_plan_items())
+
+    error_events = [e for e in events if e.type == "error"]
+    assert len(error_events) == 1
+    assert "偏离计划" in error_events[0].data["error"]

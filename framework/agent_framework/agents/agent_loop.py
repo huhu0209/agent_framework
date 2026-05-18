@@ -21,6 +21,15 @@ from agent_framework.llm import (
     ToolUseBlock,
     UserMessage,
 )
+from agent_framework.orchestrator.planner import (
+    DriftLevel,
+    PlanItem,
+    PlanSnapshot,
+    PlanningState,
+    parse_plan_response,
+    strip_plan_tags,
+)
+from agent_framework.prompts.templates import DRIFT_WARN_TEMPLATE, PLAN_GENERATION_INSTRUCTION
 from agent_framework.tools.router import ToolRouter
 from agent_framework.tools.types import ToolCall, ToolUseContext
 
@@ -31,6 +40,7 @@ class LoopEvent:
     type: str  # "step" | "tool_result" | "done" | "max_steps" | "error"
     step: int
     data: dict[str, Any] = field(default_factory=dict)
+    plan: PlanSnapshot | None = None  # 新增
 
 
 def _serialize_content(result: CompletionResult) -> list[dict[str, Any]]:
@@ -49,6 +59,8 @@ class AgentLoop:
         ctx: ToolUseContext,
         max_steps: int = 10,
         system_prompt: str = "你是一个有用的助手。可以使用工具来完成任务。",
+        drift_warn: int = 3,
+        drift_abort: int = 8,
     ) -> None:
         self.adapter = adapter
         self.model = model
@@ -56,6 +68,8 @@ class AgentLoop:
         self.ctx = ctx
         self.max_steps = max_steps
         self.system_prompt = system_prompt
+        self.drift_warn = drift_warn
+        self.drift_abort = drift_abort
 
     def _build_config(self, messages: list[Message]) -> CompletionConfig:
         tools = self.router.registry.get_definitions()
@@ -64,65 +78,150 @@ class AgentLoop:
     def _extract_tool_calls(self, result: CompletionResult) -> list[ToolUseBlock]:
         return [b for b in result.content if isinstance(b, ToolUseBlock)]
 
-    async def _append_assistant_and_tool_results(
-        self, messages: list[Message], result: CompletionResult,
-    ) -> list[str]:
-        """追加 AssistantMessage + 各 ToolMessage，返回每个 tool 的执行结果。"""
-        messages.append(AssistantMessage(content=result.content))
-        tool_results: list[str] = []
-        for tc in self._extract_tool_calls(result):
-            call = ToolCall(id=tc.id, name=tc.name, arguments=tc.input)
-            tool_result = await self.router.dispatch(call, self.ctx)
-            messages.append(ToolMessage(
-                tool_call_id=tc.id,
-                content=tool_result.content,
-            ))
-            tool_results.append(tool_result.content)
-        return tool_results
+    def _make_plan_snapshot(self, state: PlanningState | None) -> PlanSnapshot | None:
+        if state is None:
+            return None
+        return state.snapshot()
 
-    async def run(self, user_message: str) -> AsyncGenerator[LoopEvent, None]:
-        """核心异步生成器：执行 ReAct 循环。"""
+    def _try_parse_plan(
+        self, result: CompletionResult, existing_state: PlanningState | None,
+    ) -> PlanningState | None:
+        if existing_state is not None:
+            return existing_state
+        text = self._extract_text(result)
+        if text is None:
+            return existing_state
+        items = parse_plan_response(text)
+        if items is None:
+            return existing_state
+        state = PlanningState(items=items, current_focus=None, plan_source="llm_generated")
+        self.ctx.extra["planning_state"] = state
+        return state
+
+    def _extract_text(self, result: CompletionResult) -> str | None:
+        for block in result.content:
+            if isinstance(block, TextBlock):
+                return block.text
+        return None
+
+    def _strip_plan_from_content(self, content: list) -> list:
+        cleaned = []
+        for block in content:
+            if isinstance(block, TextBlock):
+                stripped = strip_plan_tags(block.text)
+                cleaned.append(TextBlock(text=stripped))
+            else:
+                cleaned.append(block)
+        return cleaned
+
+    def _inject_plan_context(self, messages: list[Message], state: PlanningState) -> None:
+        plan_text = state.format_for_injection()
+        drift_text = ""
+        drift = state.check_drift(self.drift_warn, self.drift_abort)
+        if drift == DriftLevel.WARN:
+            drift_text = DRIFT_WARN_TEMPLATE.format(drift_count=state.drift_count, plan_text=plan_text) + "\n\n"
+        context = f"{drift_text}{plan_text}"
+        plan_msg = UserMessage(content=[TextBlock(text=context)])
+        messages.insert(1, plan_msg)
+
+    async def run(
+        self,
+        user_message: str,
+        plan: list[PlanItem] | None = None,
+    ) -> AsyncGenerator[LoopEvent, None]:
+        """核心异步生成器：执行 ReAct 循环，支持 Session Planning。"""
         messages: list[Message] = [
             SystemMessage(content=self.system_prompt),
             UserMessage(content=[TextBlock(text=user_message)]),
         ]
+
+        planning_state: PlanningState | None = None
+        if plan is not None:
+            planning_state = PlanningState(
+                items=[PlanItem(id=i.id, action=i.action, status=i.status) for i in plan],
+                current_focus=None,
+                plan_source="caller_injected",
+            )
+            self.ctx.extra["planning_state"] = planning_state
+
+        plan_checked = False
+
         for step in range(1, self.max_steps + 1):
+            if planning_state is not None:
+                self._inject_plan_context(messages, planning_state)
+
             try:
                 result = await self.adapter.complete(self._build_config(messages))
             except Exception as exc:
-                yield LoopEvent(type="error", step=step, data={"error": str(exc)})
+                yield LoopEvent(type="error", step=step, data={"error": str(exc)}, plan=self._make_plan_snapshot(planning_state))
                 return
+
+            plan_snapshot = self._make_plan_snapshot(planning_state)
 
             yield LoopEvent(
                 type="step", step=step,
                 data={"stop_reason": result.stop_reason.value, "content": _serialize_content(result)},
+                plan=plan_snapshot,
             )
 
             if result.stop_reason == StopReason.END_TURN:
-                yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)})
+                planning_state = self._try_parse_plan(result, planning_state)
+                plan_checked = True
+                yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)}, plan=self._make_plan_snapshot(planning_state))
                 return
+
             if result.stop_reason == StopReason.MAX_TOKENS:
-                yield LoopEvent(type="error", step=step, data={"error": "达到 max_tokens 上限"})
+                yield LoopEvent(type="error", step=step, data={"error": "达到 max_tokens 上限"}, plan=self._make_plan_snapshot(planning_state))
                 return
+
             if result.stop_reason == StopReason.STOP_SEQUENCE:
-                yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)})
+                planning_state = self._try_parse_plan(result, planning_state)
+                plan_checked = True
+                yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)}, plan=self._make_plan_snapshot(planning_state))
                 return
+
             if result.stop_reason == StopReason.TOOL_USE:
                 tool_calls = self._extract_tool_calls(result)
                 if not tool_calls:
-                    yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)})
+                    yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)}, plan=plan_snapshot)
                     return
-                tool_results = await self._append_assistant_and_tool_results(messages, result)
+
+                cleaned_content = self._strip_plan_from_content(result.content)
+                messages.append(AssistantMessage(content=cleaned_content))
+
+                tool_results: list[str] = []
+                for tc in tool_calls:
+                    call = ToolCall(id=tc.id, name=tc.name, arguments=tc.input)
+                    tool_result = await self.router.dispatch(call, self.ctx)
+                    messages.append(ToolMessage(tool_call_id=tc.id, content=tool_result.content))
+                    tool_results.append(tool_result.content)
+
+                if planning_state is not None and not plan_checked:
+                    planning_state = self._try_parse_plan(result, planning_state)
+                    plan_checked = True
+
+                if planning_state is not None:
+                    planning_state.drift_count += 1
+                    drift = planning_state.check_drift(self.drift_warn, self.drift_abort)
+                    if drift == DriftLevel.ABORT:
+                        yield LoopEvent(
+                            type="error", step=step,
+                            data={"error": f"偏离计划：连续 {planning_state.drift_count} 步未推进任何计划项"},
+                            plan=self._make_plan_snapshot(planning_state),
+                        )
+                        return
+
                 yield LoopEvent(
                     type="tool_result", step=step,
                     data={
                         "tool_calls": [{"id": tc.id, "name": tc.name, "input": tc.input} for tc in tool_calls],
                         "tool_results": tool_results,
                     },
+                    plan=self._make_plan_snapshot(planning_state),
                 )
                 continue
 
-            yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)})
+            yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)}, plan=plan_snapshot)
             return
 
-        yield LoopEvent(type="max_steps", step=self.max_steps, data={})
+        yield LoopEvent(type="max_steps", step=self.max_steps, data={}, plan=self._make_plan_snapshot(planning_state))
