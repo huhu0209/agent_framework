@@ -23,6 +23,12 @@ class ToolExecutor:
         if validation_error is not None:
             return validation_error
 
+        if spec.handler is None:
+            return ToolResult(
+                content=f"工具 '{spec.name}' 不可执行（无 handler）。",
+                is_error=True,
+            )
+
         try:
             result = await asyncio.wait_for(
                 spec.handler(args, ctx),

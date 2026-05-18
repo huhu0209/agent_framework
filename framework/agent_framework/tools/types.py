@@ -34,7 +34,8 @@ class ToolSpec(BaseModel):
     description: str
     parameters: ToolParameterSchema
     timeout_ms: int = 30_000
-    handler: Any = Field(exclude=True, repr=False)
+    handler: Any = Field(default=None, exclude=True, repr=False)
+    annotations: dict[str, Any] = {}
 
     def to_tool_definition(self) -> ToolDefinition:
         return ToolDefinition(

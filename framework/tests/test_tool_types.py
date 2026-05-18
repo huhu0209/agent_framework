@@ -82,6 +82,33 @@ class TestToolSpec:
         )
         assert spec.timeout_ms == 30_000
 
+    def test_handler_optional(self):
+        """MCP 工具不需要本地 handler。"""
+        spec = ToolSpec(
+            name="mcp__postgres__query",
+            description="execute SQL",
+            parameters=ToolParameterSchema(),
+        )
+        assert spec.handler is None
+        assert spec.timeout_ms == 30_000
+
+    def test_annotations_default_empty(self):
+        spec = ToolSpec(
+            name="test",
+            description="test",
+            parameters=ToolParameterSchema(),
+        )
+        assert spec.annotations == {}
+
+    def test_annotations_stored(self):
+        spec = ToolSpec(
+            name="test",
+            description="test",
+            parameters=ToolParameterSchema(),
+            annotations={"readOnly": True, "destructive": False},
+        )
+        assert spec.annotations["readOnly"] is True
+
 
 class TestToolUseContext:
     def test_defaults(self):
