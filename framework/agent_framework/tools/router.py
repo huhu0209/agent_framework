@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from agent_framework.tools.executor import ToolExecutor
+from agent_framework.tools.mcp.config import McpManager
 from agent_framework.tools.registry import ToolRegistry
 from agent_framework.tools.types import ToolCall, ToolResult, ToolUseContext
 
@@ -10,15 +11,20 @@ from agent_framework.tools.types import ToolCall, ToolResult, ToolUseContext
 class ToolRouter:
     """按工具来源路由：builtin / mcp / agent。"""
 
-    def __init__(self, registry: ToolRegistry) -> None:
+    def __init__(
+        self,
+        registry: ToolRegistry,
+        mcp_manager: McpManager | None = None,
+    ) -> None:
         self.registry = registry
         self._executor = ToolExecutor()
+        self._mcp_manager = mcp_manager
 
     async def dispatch(self, call: ToolCall, ctx: ToolUseContext) -> ToolResult:
         name = call.name
 
         if name.startswith("mcp__"):
-            return self._dispatch_mcp(name, call.arguments, ctx)
+            return await self._dispatch_mcp(name, call.arguments, ctx)
 
         if name.startswith("agent__"):
             return self._dispatch_agent(name, call.arguments, ctx)
@@ -34,11 +40,17 @@ class ToolRouter:
             )
         return await self._executor.execute(spec, call.arguments, ctx)
 
-    def _dispatch_mcp(self, name: str, args: dict, ctx: ToolUseContext) -> ToolResult:
-        return ToolResult(
-            content=f"MCP 工具 '{name}' 未连接。MCP 支持尚未实现。",
-            is_error=True,
-        )
+    async def _dispatch_mcp(self, name: str, args: dict, ctx: ToolUseContext) -> ToolResult:
+        if self._mcp_manager is None:
+            return ToolResult(content="MCP 未配置", is_error=True)
+
+        remainder = name[5:]  # 去掉 "mcp__"
+        parts = remainder.split("__", 1)
+        if len(parts) != 2:
+            return ToolResult(content=f"无效 MCP 工具名: {name}", is_error=True)
+
+        server_name, tool_name = parts
+        return await self._mcp_manager.call_tool(server_name, tool_name, args)
 
     def _dispatch_agent(self, name: str, args: dict, ctx: ToolUseContext) -> ToolResult:
         return ToolResult(
