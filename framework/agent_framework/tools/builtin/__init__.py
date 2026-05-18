@@ -7,6 +7,7 @@ from agent_framework.tools.registry import ToolRegistry
 from agent_framework.tools.types import ToolSpec
 
 from .file_tools import read_file, write_file
+from .plan_tools import handle_update_plan_status
 from .search_tools import web_search
 
 
@@ -65,6 +66,27 @@ def create_builtin_registry() -> ToolRegistry:
         ),
         handler=web_search,
         timeout_ms=15_000,
+    ))
+
+    registry.register(ToolSpec(
+        name="update_plan_status",
+        description=(
+            "更新计划项的执行状态。"
+            "在执行计划时，每完成或开始一个步骤时调用。"
+        ),
+        parameters=ToolParameterSchema(
+            properties={
+                "item_id": {"type": "string", "description": "计划项编号"},
+                "status": {
+                    "type": "string",
+                    "enum": ["in_progress", "completed", "blocked"],
+                    "description": "新状态：in_progress（开始）、completed（完成）、blocked（阻塞）",
+                },
+            },
+            required=["item_id", "status"],
+        ),
+        handler=handle_update_plan_status,
+        timeout_ms=5_000,
     ))
 
     return registry
