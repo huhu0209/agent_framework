@@ -4,12 +4,19 @@
 """
 
 from .executor import ToolExecutor
+from .mcp import McpClient, McpManager, McpServerConfig, McpToolError, McpTransport, StdioTransport
 from .registry import ToolRegistry
 from .router import ToolRouter
 from .types import ToolCall, ToolHandler, ToolResult, ToolSpec, ToolUseContext
 from .validator import ToolValidator
 
 __all__ = [
+    "McpClient",
+    "McpManager",
+    "McpServerConfig",
+    "McpToolError",
+    "McpTransport",
+    "StdioTransport",
     "ToolCall",
     "ToolHandler",
     "ToolResult",
