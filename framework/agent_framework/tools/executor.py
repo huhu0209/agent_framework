@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import asyncio
 
+from agent_framework.tools.context.result_truncator import truncate_if_needed
 from agent_framework.tools.types import ToolResult, ToolSpec, ToolUseContext
 from agent_framework.tools.validator import ToolValidator
 
 
 class ToolExecutor:
     """handler 外围的安全防护。"""
-
-    MAX_RESULT_CHARS = 20_000
 
     def __init__(self, validator: ToolValidator | None = None) -> None:
         self._validator = validator or ToolValidator()
@@ -51,18 +50,4 @@ class ToolExecutor:
                 is_error=True,
             )
 
-        return self._truncate_if_needed(result)
-
-    def _truncate_if_needed(self, result: ToolResult) -> ToolResult:
-        if len(result.content) <= self.MAX_RESULT_CHARS:
-            return result
-        truncated = result.content[: self.MAX_RESULT_CHARS]
-        original_length = len(result.content)
-        return ToolResult(
-            content=(
-                f"{truncated}\n\n"
-                f"... (结果过长已截断，完整内容共 {original_length} 字符) ..."
-            ),
-            is_error=result.is_error,
-            metadata={**result.metadata, "truncated": True, "original_length": original_length},
-        )
+        return truncate_if_needed(result, spec.name, ctx.working_dir)

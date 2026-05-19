@@ -1,0 +1,45 @@
+"""大结果磁盘转储截断 — 超阈值时写文件并返回摘要。"""
+
+from __future__ import annotations
+
+import os
+
+from agent_framework.tools.types import ToolResult
+
+RESULT_DUMP_DIR = ".agent_results"
+MAX_RESULT_CHARS = 20_000
+PREVIEW_CHARS = 500
+
+
+def truncate_if_needed(
+    result: ToolResult, tool_call_id: str, workdir: str
+) -> ToolResult:
+    """超过阈值时将完整结果写入磁盘，返回摘要 ToolResult。"""
+    if len(result.content) <= MAX_RESULT_CHARS:
+        return result
+
+    original_length = len(result.content)
+    preview = result.content[:PREVIEW_CHARS]
+    dump_dir = os.path.join(workdir, RESULT_DUMP_DIR)
+    dump_filename = f"{tool_call_id}.txt"
+    dump_path = os.path.join(dump_dir, dump_filename)
+    relative_path = f"{RESULT_DUMP_DIR}/{dump_filename}"
+
+    os.makedirs(dump_dir, exist_ok=True)
+    with open(dump_path, "w", encoding="utf-8") as f:
+        f.write(result.content)
+
+    return ToolResult(
+        content=(
+            f"[工具结果过大({original_length}字符)。"
+            f"摘要: {preview}... "
+            f"完整结果: {relative_path}]"
+        ),
+        is_error=result.is_error,
+        metadata={
+            **result.metadata,
+            "truncated": True,
+            "original_length": original_length,
+            "dump_path": dump_path,
+        },
+    )

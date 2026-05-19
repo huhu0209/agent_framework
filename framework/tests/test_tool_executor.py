@@ -65,7 +65,7 @@ async def test_large_result_truncated():
     result = await executor.execute(spec, {}, ctx)
     assert result.is_error is False
     assert len(result.content) < 50_000
-    assert "截断" in result.content
+    assert "工具结果过大" in result.content
     assert result.metadata.get("truncated") is True
 
 
