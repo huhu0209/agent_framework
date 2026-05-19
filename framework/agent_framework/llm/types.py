@@ -185,6 +185,7 @@ class CompletionConfig(BaseModel):
     thinking: ThinkingConfig | None = None
     stream: bool = False
     provider_extras: dict[str, Any] = Field(default_factory=dict)
+    max_context_tokens: int | None = None
 
 
 # ============================================================

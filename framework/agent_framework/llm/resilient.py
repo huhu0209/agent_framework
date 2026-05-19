@@ -26,6 +26,7 @@ class ResilientLLMAdapter(ILLMAdapter):
         provider: ILLMAdapter,
         retry_config: RetryConfig | None = None,
         breaker: CircuitBreaker | None = None,
+        max_context_tokens: int | None = None,
     ) -> None:
         self._provider = provider
         self._retry_config = retry_config or RetryConfig()
@@ -33,6 +34,7 @@ class ResilientLLMAdapter(ILLMAdapter):
             name=provider.get_provider_info().name,
             config=CircuitBreakerConfig(),
         )
+        self._max_context_tokens = max_context_tokens
 
     async def complete(self, config: CompletionConfig) -> CompletionResult:
         if not self._breaker.allow_request():
@@ -68,6 +70,10 @@ class ResilientLLMAdapter(ILLMAdapter):
 
     def get_provider_info(self) -> ProviderInfo:
         return self._provider.get_provider_info()
+
+    def get_max_context_tokens(self) -> int | None:
+        """返回创建 adapter 时传入的 max_context_tokens（可能为 None）。"""
+        return self._max_context_tokens
 
     async def health_check(self) -> bool:
         try:
@@ -111,6 +117,7 @@ def create_adapter(
     base_url: str | None = None,
     retry_config: RetryConfig | None = None,
     breaker_config: CircuitBreakerConfig | None = None,
+    max_context_tokens: int | None = None,
 ) -> ResilientLLMAdapter:
     """工厂函数：按 provider 名称创建 ResilientLLMAdapter。"""
     if provider not in _PROVIDER_MAP:
@@ -135,4 +142,5 @@ def create_adapter(
         provider=provider_instance,
         retry_config=r_cfg,
         breaker=breaker,
+        max_context_tokens=max_context_tokens,
     )
