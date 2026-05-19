@@ -7,6 +7,7 @@ from agent_framework.agents.agent_loop import AgentLoop, LoopEvent
 from agent_framework.llm.base import ILLMAdapter
 from agent_framework.llm.types import (
     CompletionResult,
+    ProviderInfo,
     StopReason,
     TextBlock,
     ToolUseBlock,
@@ -20,7 +21,11 @@ from agent_framework.tools.types import ToolUseContext
 
 
 def _make_mock_adapter() -> AsyncMock:
-    return AsyncMock(spec=ILLMAdapter)
+    adapter = AsyncMock(spec=ILLMAdapter)
+    adapter.get_provider_info.return_value = ProviderInfo(
+        name="mock", base_url="https://mock", default_model="mock-model",
+    )
+    return adapter
 
 
 def _text_result(text: str, stop_reason: StopReason = StopReason.END_TURN) -> CompletionResult:
@@ -314,3 +319,41 @@ async def test_plan_context_not_accumulating(tmp_path):
         and ("当前计划进度" in m.content[0].text or "[偏离提醒]" in m.content[0].text)
     ]
     assert len(plan_msgs) == 1  # NOT accumulating
+
+
+# === Phase 5: 上下文管理集成测试 ===
+
+
+@pytest.mark.asyncio
+async def test_agent_loop_accepts_context_params():
+    """AgentLoop accepts compression parameters."""
+    mock_adapter = AsyncMock(spec=ILLMAdapter)
+    mock_adapter.get_provider_info.return_value = ProviderInfo(
+        name="mock", base_url="https://mock", default_model="mock-model",
+    )
+    loop = AgentLoop(
+        adapter=mock_adapter,
+        model="mock-model",
+        router=ToolRouter(create_builtin_registry()),
+        ctx=ToolUseContext(),
+        compact_keep_turns=10,
+        compact_trigger_pct=0.6,
+    )
+    assert loop.compact_keep_turns == 10
+    assert loop.compact_trigger_pct == 0.6
+
+
+@pytest.mark.asyncio
+async def test_compact_adapter_defaults_to_main():
+    """When compact_adapter not provided, reuse main adapter."""
+    mock_adapter = AsyncMock(spec=ILLMAdapter)
+    mock_adapter.get_provider_info.return_value = ProviderInfo(
+        name="mock", base_url="https://mock", default_model="mock-model",
+    )
+    loop = AgentLoop(
+        adapter=mock_adapter,
+        model="mock-model",
+        router=ToolRouter(create_builtin_registry()),
+        ctx=ToolUseContext(),
+    )
+    assert loop.compact_adapter is mock_adapter

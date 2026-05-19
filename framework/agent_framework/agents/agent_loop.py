@@ -19,6 +19,7 @@ from agent_framework.llm import (
     TextBlock,
     ToolMessage,
     ToolUseBlock,
+    UsageStats,
     UserMessage,
 )
 from agent_framework.orchestrator.planner import (
@@ -30,6 +31,12 @@ from agent_framework.orchestrator.planner import (
     strip_plan_tags,
 )
 from agent_framework.prompts.templates import DRIFT_WARN_TEMPLATE
+from agent_framework.tools.context.compactor import CompactConfig, compact, should_compact
+from agent_framework.tools.context.token_counter import (
+    estimate_tokens,
+    estimate_with_usage,
+    get_effective_window,
+)
 from agent_framework.tools.router import ToolRouter
 from agent_framework.tools.types import ToolCall, ToolUseContext
 
@@ -61,6 +68,9 @@ class AgentLoop:
         system_prompt: str = "你是一个有用的助手。可以使用工具来完成任务。",
         drift_warn: int = 3,
         drift_abort: int = 8,
+        compact_adapter: ILLMAdapter | None = None,
+        compact_keep_turns: int = 20,
+        compact_trigger_pct: float = 0.75,
     ) -> None:
         self.adapter = adapter
         self.model = model
@@ -70,6 +80,12 @@ class AgentLoop:
         self.system_prompt = system_prompt
         self.drift_warn = drift_warn
         self.drift_abort = drift_abort
+        self.compact_adapter = compact_adapter or adapter
+        self.compact_keep_turns = compact_keep_turns
+        self.compact_trigger_pct = compact_trigger_pct
+        self._compact_failures = 0
+        self._last_usage: UsageStats | None = None
+        self._messages_at_last_call = 0
 
     def _build_config(self, messages: list[Message]) -> CompletionConfig:
         tools = self.router.registry.get_definitions()
@@ -125,6 +141,43 @@ class AgentLoop:
             return False
         return first.text.startswith("当前计划进度：") or first.text.startswith("[偏离提醒]")
 
+    async def _maybe_compact(
+        self,
+        messages: list[Message],
+        step: int,
+    ) -> list[Message]:
+        """每轮调用前检查是否需要压缩。"""
+        config = self._build_config(messages)
+        window = get_effective_window(self.adapter, config)
+        compact_config = CompactConfig(
+            keep_turns=self.compact_keep_turns,
+            trigger_pct=self.compact_trigger_pct,
+        )
+
+        # Token estimation
+        if self._last_usage is not None and self._messages_at_last_call > 0:
+            new_msgs = messages[self._messages_at_last_call:]
+            estimated = estimate_with_usage(new_msgs, self._last_usage)
+        else:
+            estimated = estimate_tokens(messages)
+
+        if not should_compact(estimated, window, compact_config):
+            return messages
+
+        # Circuit breaker: skip after 3 consecutive failures
+        if self._compact_failures >= 3:
+            return messages
+
+        try:
+            result = await compact(
+                messages, self.compact_adapter, self.model, compact_config, step,
+            )
+            self._compact_failures = 0
+            return result
+        except Exception:
+            self._compact_failures += 1
+            return messages
+
     def _inject_plan_context(self, messages: list[Message], state: PlanningState) -> None:
         plan_text = state.format_for_injection()
         drift_text = ""
@@ -167,7 +220,14 @@ class AgentLoop:
                 self._inject_plan_context(messages, planning_state)
 
             try:
+                # Context management
+                messages = await self._maybe_compact(messages, step)
+
                 result = await self.adapter.complete(self._build_config(messages))
+
+                # Track usage for hybrid estimation
+                self._last_usage = result.usage
+                self._messages_at_last_call = len(messages)
             except Exception as exc:
                 yield LoopEvent(type="error", step=step, data={"error": str(exc)}, plan=self._make_plan_snapshot(planning_state))
                 return
