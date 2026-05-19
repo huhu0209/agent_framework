@@ -73,3 +73,47 @@ class TestNormalizeMessages:
         ]
         result = normalize_messages(messages)
         assert len(result) == 3
+
+    def test_orphan_tool_use_gets_placeholder(self):
+        """tool_use without tool_result → placeholder appended."""
+        messages = [
+            SystemMessage(content="s"),
+            UserMessage(content=[TextBlock(text="hi")]),
+            AssistantMessage(content=[ToolUseBlock(id="t1", name="read", input={"p": "f"})]),
+        ]
+        result = normalize_messages(messages)
+        assert len(result) == 4
+        assert isinstance(result[3], ToolMessage)
+        assert result[3].tool_call_id == "t1"
+        assert result[3].content == "(cancelled)"
+
+    def test_paired_tool_result_unchanged(self):
+        """tool_use with tool_result → no change."""
+        messages = [
+            SystemMessage(content="s"),
+            UserMessage(content=[TextBlock(text="hi")]),
+            AssistantMessage(content=[ToolUseBlock(id="t1", name="read", input={"p": "f"})]),
+            ToolMessage(tool_call_id="t1", content="file content"),
+        ]
+        result = normalize_messages(messages)
+        assert len(result) == 4
+        assert isinstance(result[3], ToolMessage)
+        assert result[3].content == "file content"
+
+    def test_multiple_orphans_each_get_placeholder(self):
+        """Multiple tool_uses, some without results → each gets placeholder."""
+        messages = [
+            UserMessage(content=[TextBlock(text="go")]),
+            AssistantMessage(content=[
+                ToolUseBlock(id="t1", name="a", input={}),
+                ToolUseBlock(id="t2", name="b", input={}),
+            ]),
+            ToolMessage(tool_call_id="t1", content="result a"),
+        ]
+        result = normalize_messages(messages)
+        tool_msgs = [m for m in result if isinstance(m, ToolMessage)]
+        assert len(tool_msgs) == 2
+        ids = {m.tool_call_id for m in tool_msgs}
+        assert ids == {"t1", "t2"}
+        t2_msg = next(m for m in tool_msgs if m.tool_call_id == "t2")
+        assert t2_msg.content == "(cancelled)"
