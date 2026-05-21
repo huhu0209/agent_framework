@@ -6,7 +6,8 @@ import pytest
 
 from agent_framework.tools.context.result_truncator import (
     MAX_RESULT_CHARS,
-    PREVIEW_CHARS,
+    PREVIEW_HEAD_CHARS,
+    PREVIEW_TAIL_CHARS,
     RESULT_DUMP_DIR,
     truncate_if_needed,
 )
@@ -57,6 +58,8 @@ def test_preview_cut_at_threshold(tmp_path):
     result = ToolResult(content=content)
     out = truncate_if_needed(result, "call_5", str(tmp_path))
 
-    preview = content[:PREVIEW_CHARS]
-    assert preview in out.content
+    head = content[:PREVIEW_HEAD_CHARS]
+    tail = content[-PREVIEW_TAIL_CHARS:]
+    assert head in out.content
+    assert tail in out.content
     assert f"{RESULT_DUMP_DIR}/call_5.txt" in out.content

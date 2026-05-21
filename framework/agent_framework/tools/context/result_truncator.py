@@ -8,7 +8,8 @@ from agent_framework.tools.types import ToolResult
 
 RESULT_DUMP_DIR = ".agent_results"
 MAX_RESULT_CHARS = 20_000
-PREVIEW_CHARS = 500
+PREVIEW_HEAD_CHARS = 250
+PREVIEW_TAIL_CHARS = 250
 
 
 def truncate_if_needed(
@@ -19,7 +20,11 @@ def truncate_if_needed(
         return result
 
     original_length = len(result.content)
-    preview = result.content[:PREVIEW_CHARS]
+    head = result.content[:PREVIEW_HEAD_CHARS]
+    tail = result.content[-PREVIEW_TAIL_CHARS:]
+    skipped = original_length - PREVIEW_HEAD_CHARS - PREVIEW_TAIL_CHARS
+    preview = f"{head}...[省略{skipped}字符]...{tail}"
+
     dump_dir = os.path.join(workdir, RESULT_DUMP_DIR)
     dump_filename = f"{tool_call_id}.txt"
     dump_path = os.path.join(dump_dir, dump_filename)
@@ -32,7 +37,7 @@ def truncate_if_needed(
     return ToolResult(
         content=(
             f"[工具结果过大({original_length}字符)。"
-            f"摘要: {preview}... "
+            f"摘要: {preview} "
             f"完整结果: {relative_path}]"
         ),
         is_error=result.is_error,
