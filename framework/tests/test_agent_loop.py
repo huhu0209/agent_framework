@@ -4,6 +4,7 @@ import pytest
 from unittest.mock import AsyncMock
 
 from agent_framework.agents.agent_loop import AgentLoop, LoopEvent
+from agent_framework.prompts.profiles import AgentProfile
 from agent_framework.llm.base import ILLMAdapter
 from agent_framework.llm.types import (
     CompletionResult,
@@ -357,3 +358,54 @@ async def test_compact_adapter_defaults_to_main():
         ctx=ToolUseContext(),
     )
     assert loop.compact_adapter is mock_adapter
+
+
+# === Phase 6: AgentProfile 集成测试 ===
+
+
+@pytest.mark.asyncio
+async def test_run_with_profile():
+    """AgentProfile 替代 system_prompt 字符串。"""
+    adapter = _make_mock_adapter()
+    adapter.complete.return_value = _text_result("回答")
+
+    profile = AgentProfile(
+        name="test",
+        description="test agent",
+        soul="你是一个测试助手。",
+        agents_rules="保持简洁。",
+        identity="测试身份。",
+    )
+
+    loop = _make_loop(adapter, profile=profile)
+    events = await _collect_events(loop, "你好")
+
+    done_events = [e for e in events if e.type == "done"]
+    assert len(done_events) == 1
+
+    # 验证 system prompt 用了 profile 内容
+    call_config = adapter.complete.call_args[0][0]
+    system_msg = call_config.messages[0]
+    assert "测试助手" in system_msg.content
+    assert "保持简洁" in system_msg.content
+
+
+@pytest.mark.asyncio
+async def test_profile_overrides_system_prompt():
+    """有 profile 时忽略 system_prompt 参数。"""
+    adapter = _make_mock_adapter()
+    adapter.complete.return_value = _text_result("回答")
+
+    profile = AgentProfile(
+        name="test",
+        description="test agent",
+        soul="profile soul",
+    )
+
+    loop = _make_loop(adapter, profile=profile, system_prompt="原始 prompt")
+    events = await _collect_events(loop, "你好")
+
+    call_config = adapter.complete.call_args[0][0]
+    system_msg = call_config.messages[0]
+    assert "profile soul" in system_msg.content
+    assert "原始 prompt" not in system_msg.content

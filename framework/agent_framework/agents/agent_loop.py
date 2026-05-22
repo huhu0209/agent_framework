@@ -30,6 +30,8 @@ from agent_framework.orchestrator.planner import (
     parse_plan_response,
     strip_plan_tags,
 )
+from agent_framework.prompts.assembler import PromptAssembler
+from agent_framework.prompts.profiles import AgentProfile
 from agent_framework.prompts.templates import DRIFT_WARN_TEMPLATE
 from agent_framework.tools.context.compactor import CompactConfig, compact, should_compact
 from agent_framework.tools.context.token_counter import (
@@ -66,18 +68,19 @@ class AgentLoop:
         ctx: ToolUseContext,
         max_steps: int = 10,
         system_prompt: str = "你是一个有用的助手。可以使用工具来完成任务。",
+        profile: AgentProfile | None = None,
         drift_warn: int = 3,
         drift_abort: int = 8,
         compact_adapter: ILLMAdapter | None = None,
         compact_keep_turns: int = 20,
         compact_trigger_pct: float = 0.75,
+        memory_flush_enabled: bool = False,
     ) -> None:
         self.adapter = adapter
         self.model = model
         self.router = router
         self.ctx = ctx
         self.max_steps = max_steps
-        self.system_prompt = system_prompt
         self.drift_warn = drift_warn
         self.drift_abort = drift_abort
         self.compact_adapter = compact_adapter or adapter
@@ -86,6 +89,14 @@ class AgentLoop:
         self._compact_failures = 0
         self._last_usage: UsageStats | None = None
         self._messages_at_last_call = 0
+        self.profile = profile
+        self._assembler = PromptAssembler()
+        self._memory_flush_enabled = memory_flush_enabled
+
+        if self.profile is not None:
+            self._system_prompt_text = self._assembler.render(self.profile)
+        else:
+            self._system_prompt_text = system_prompt
 
     def _build_config(self, messages: list[Message]) -> CompletionConfig:
         tools = self.router.registry.get_definitions()
@@ -196,7 +207,7 @@ class AgentLoop:
         """核心异步生成器：执行 ReAct 循环，支持 Session Planning。"""
         # 0. 初始化消息列表，
         messages: list[Message] = [
-            SystemMessage(content=self.system_prompt),
+            SystemMessage(content=self._system_prompt_text),
             UserMessage(content=[TextBlock(text=user_message)]),
         ]
 
