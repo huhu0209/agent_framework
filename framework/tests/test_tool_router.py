@@ -174,3 +174,63 @@ async def test_mcp_dispatch_invalid_name():
     )
     assert result.is_error is True
     assert "无效" in result.content
+
+
+# --- 权限管道集成测试 ---
+
+
+@pytest.mark.asyncio
+async def test_dispatch_denied_tool():
+    """权限管道拒绝的工具返回错误。"""
+    from agent_framework.prompts.profiles import AgentProfile
+    from agent_framework.safety.permissions import PermissionPipeline
+
+    profile = AgentProfile(
+        name="reader",
+        description="readonly",
+        soul="", agents_rules="", identity="",
+        disallowed_tools=["write_file"],
+    )
+    pipeline = PermissionPipeline(profile=profile)
+    registry = _make_registry_with_echo()
+    router = ToolRouter(registry=registry)
+    router.set_permission_pipeline(pipeline)
+
+    call = ToolCall(id="1", name="write_file", arguments={"path": "a.txt"})
+    result = await router.dispatch(call, ToolUseContext(working_dir="."))
+    assert result.is_error
+    assert "拒绝" in result.content
+
+
+@pytest.mark.asyncio
+async def test_dispatch_allowed_tool_passes():
+    """权限管道允许的工具正常执行。"""
+    from agent_framework.prompts.profiles import AgentProfile
+    from agent_framework.safety.permissions import PermissionPipeline
+
+    profile = AgentProfile(
+        name="reader",
+        description="readonly",
+        soul="", agents_rules="", identity="",
+        allowed_tools=["echo"],
+    )
+    pipeline = PermissionPipeline(profile=profile)
+    registry = _make_registry_with_echo()
+    router = ToolRouter(registry=registry)
+    router.set_permission_pipeline(pipeline)
+
+    call = ToolCall(id="1", name="echo", arguments={"msg": "hi"})
+    result = await router.dispatch(call, ToolUseContext(working_dir="."))
+    assert not result.is_error
+    assert "echo: hi" in result.content
+
+
+@pytest.mark.asyncio
+async def test_dispatch_no_pipeline_passes_all():
+    """无权限管道时所有工具直接通过。"""
+    registry = _make_registry_with_echo()
+    router = ToolRouter(registry=registry)
+
+    call = ToolCall(id="1", name="echo", arguments={"msg": "free"})
+    result = await router.dispatch(call, ToolUseContext(working_dir="."))
+    assert not result.is_error

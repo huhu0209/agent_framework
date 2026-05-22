@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_framework.safety.permissions import PermissionDecision, PermissionPipeline
 from agent_framework.tools.executor import ToolExecutor
 from agent_framework.tools.mcp.config import McpManager
 from agent_framework.tools.registry import ToolRegistry
@@ -19,9 +20,28 @@ class ToolRouter:
         self.registry = registry
         self._executor = ToolExecutor()
         self._mcp_manager = mcp_manager
+        self._permission_pipeline: PermissionPipeline | None = None
+
+    def set_permission_pipeline(self, pipeline: PermissionPipeline) -> None:
+        """设置权限管道。"""
+        self._permission_pipeline = pipeline
 
     async def dispatch(self, call: ToolCall, ctx: ToolUseContext) -> ToolResult:
         name = call.name
+
+        # 权限检查
+        if self._permission_pipeline is not None:
+            decision = self._permission_pipeline.check(name, call.arguments)
+            if decision.action == PermissionDecision.DENY:
+                return ToolResult(
+                    content=f"工具 '{name}' 被拒绝: {decision.reason}",
+                    is_error=True,
+                )
+            if decision.action == PermissionDecision.ASK:
+                return ToolResult(
+                    content=f"工具 '{name}' 需要用户确认: {decision.reason} (risk: {decision.risk_level.value})",
+                    is_error=True,
+                )
 
         if name.startswith("mcp__"):
             return await self._dispatch_mcp(name, call.arguments, ctx)
