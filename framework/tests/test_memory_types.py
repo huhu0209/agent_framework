@@ -62,3 +62,23 @@ class TestMemorySearchConfig:
         assert config.decay_half_life_days == 30
         assert config.mmr_lambda == 0.7
         assert config.top_k == 10
+
+
+class TestMemoryType:
+    def test_four_types(self):
+        from agent_framework.memory.types import MemoryType
+        assert MemoryType.USER.value == "user"
+        assert MemoryType.FEEDBACK.value == "feedback"
+        assert MemoryType.PROJECT.value == "project"
+        assert MemoryType.REFERENCE.value == "reference"
+
+    def test_semantic_memory_draft(self):
+        from agent_framework.memory.types import SemanticMemoryDraft, MemoryType
+        draft = SemanticMemoryDraft(
+            name="测试策略-真实数据库",
+            description="集成测试必须用真实数据库",
+            type=MemoryType.FEEDBACK,
+            body="集成测试必须连接真实数据库。\n\n**Why:** mock 导致生产失败\n**How to apply:** Docker 起实例",
+        )
+        assert draft.name == "测试策略-真实数据库"
+        assert draft.type == MemoryType.FEEDBACK

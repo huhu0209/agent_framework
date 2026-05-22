@@ -48,3 +48,21 @@ class MemorySearchConfig(BaseModel):
     decay_half_life_days: int = 30
     mmr_lambda: float = 0.7
     top_k: int = 10
+
+
+class MemoryType(str, Enum):
+    """语义记忆的四种类型。"""
+
+    USER = "user"
+    FEEDBACK = "feedback"
+    PROJECT = "project"
+    REFERENCE = "reference"
+
+
+class SemanticMemoryDraft(BaseModel):
+    """LLM 提取的语义记忆候选。"""
+
+    name: str
+    description: str
+    type: MemoryType
+    body: str
