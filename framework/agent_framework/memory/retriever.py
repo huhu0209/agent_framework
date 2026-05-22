@@ -1,0 +1,114 @@
+"""记忆召回 — LLM 评分路径。"""
+
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+from agent_framework.llm.base import ILLMAdapter
+from agent_framework.llm.types import (
+    CompletionConfig,
+    CompletionResult,
+    SystemMessage,
+    TextBlock,
+    UserMessage,
+)
+
+_SCORING_SYSTEM_PROMPT = """\
+从以下记忆列表中选择与查询最相关的，最多 5 条。不确定就不包含。
+返回 JSON 格式: {"selected": ["file1.md", "file2.md"]}
+只返回 JSON，不要其他内容。"""
+
+
+class LLMScoringRetriever:
+    """LLM 评分召回：扫描文件 → LLM 选择 → 返回内容。"""
+
+    def __init__(self, adapter: ILLMAdapter, model: str) -> None:
+        self._adapter = adapter
+        self._model = model
+
+    def _scan_candidates(self, memory_dir: Path) -> list[dict[str, str]]:
+        """扫描 memory 目录下的 .md 文件，提取 frontmatter 摘要。"""
+        candidates = []
+        for f in sorted(memory_dir.glob("*.md")):
+            if f.name == "MEMORY.md":
+                continue
+            content = f.read_text(encoding="utf-8")
+            lines = content.split("\n")
+            name = description = ""
+            in_frontmatter = False
+
+            for line in lines:
+                if line.strip() == "---":
+                    if in_frontmatter:
+                        break
+                    in_frontmatter = True
+                    continue
+                if in_frontmatter:
+                    if line.startswith("name:"):
+                        name = line.split(":", 1)[1].strip()
+                    elif line.startswith("description:"):
+                        description = line.split(":", 1)[1].strip()
+
+            candidates.append({
+                "file": f.name,
+                "name": name,
+                "description": description,
+            })
+
+        return candidates
+
+    async def retrieve(
+        self,
+        query: str,
+        memory_dir: Path,
+    ) -> list[dict[str, str]]:
+        """LLM 选择最相关的记忆文件，返回内容。"""
+        candidates = self._scan_candidates(memory_dir)
+        if not candidates:
+            return []
+
+        candidate_text = "\n".join(
+            f"- {c['file']}: {c['name']} — {c['description']}"
+            for c in candidates
+        )
+
+        messages = [
+            SystemMessage(content=_SCORING_SYSTEM_PROMPT),
+            UserMessage(content=[TextBlock(
+                text=f"查询: {query}\n\n可用记忆:\n{candidate_text}",
+            )]),
+        ]
+
+        config = CompletionConfig(
+            model=self._model,
+            messages=messages,
+            tools=[],
+            max_tokens=256,
+            temperature=0.0,
+        )
+
+        result: CompletionResult = await self._adapter.complete(config)
+
+        selected_files = []
+        for block in result.content:
+            if isinstance(block, TextBlock):
+                try:
+                    parsed = json.loads(block.text.strip())
+                    selected_files = parsed.get("selected", [])
+                except json.JSONDecodeError:
+                    pass
+
+        if not selected_files:
+            return []
+
+        selected = []
+        for fname in selected_files:
+            fpath = memory_dir / fname
+            if fpath.exists():
+                selected.append({
+                    "file": fname,
+                    "content": fpath.read_text(encoding="utf-8"),
+                })
+
+        return selected
