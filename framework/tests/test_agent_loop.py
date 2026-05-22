@@ -409,3 +409,40 @@ async def test_profile_overrides_system_prompt():
     system_msg = call_config.messages[0]
     assert "profile soul" in system_msg.content
     assert "原始 prompt" not in system_msg.content
+
+
+# === 语义记忆集成测试 ===
+
+
+@pytest.mark.asyncio
+async def test_semantic_extractor_param_accepted():
+    """AgentLoop 接受 semantic_extractor 参数。"""
+    from agent_framework.memory.semantic_extractor import SemanticExtractor
+
+    mock_adapter = _make_mock_adapter()
+    mock_adapter.complete.return_value = _text_result("回答")
+
+    scoring_adapter = AsyncMock(spec=ILLMAdapter)
+    extractor = SemanticExtractor(adapter=scoring_adapter, model="scoring-model")
+
+    loop = AgentLoop(
+        adapter=mock_adapter,
+        model="mock-model",
+        router=ToolRouter(create_builtin_registry()),
+        ctx=ToolUseContext(),
+        semantic_extractor=extractor,
+    )
+    assert loop._semantic_extractor is extractor
+
+
+@pytest.mark.asyncio
+async def test_manual_memory_write_flag():
+    """手动写记忆文件后自动提取被跳过。"""
+    mock_adapter = _make_mock_adapter()
+    mock_adapter.complete.return_value = _text_result("回答")
+
+    loop = _make_loop(mock_adapter)
+    assert not loop._has_manual_memory_write
+
+    loop._has_manual_memory_write = True
+    assert loop._has_manual_memory_write

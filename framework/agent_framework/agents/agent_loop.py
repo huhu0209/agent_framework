@@ -30,6 +30,7 @@ from agent_framework.orchestrator.planner import (
     parse_plan_response,
     strip_plan_tags,
 )
+from agent_framework.memory.semantic_extractor import SemanticExtractor
 from agent_framework.prompts.assembler import PromptAssembler
 from agent_framework.prompts.profiles import AgentProfile
 from agent_framework.prompts.templates import DRIFT_WARN_TEMPLATE
@@ -75,6 +76,7 @@ class AgentLoop:
         compact_keep_turns: int = 20,
         compact_trigger_pct: float = 0.75,
         memory_flush_enabled: bool = False,
+        semantic_extractor: SemanticExtractor | None = None,
     ) -> None:
         self.adapter = adapter
         self.model = model
@@ -92,6 +94,8 @@ class AgentLoop:
         self.profile = profile
         self._assembler = PromptAssembler()
         self._memory_flush_enabled = memory_flush_enabled
+        self._semantic_extractor = semantic_extractor
+        self._has_manual_memory_write = False
 
         if self.profile is not None:
             self._system_prompt_text = self._assembler.render(self.profile)
