@@ -4,29 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from agent_framework.llm.types import CompletionConfig, CompletionResult, StopReason, TextBlock, UsageStats
 from agent_framework.memory.retriever import LLMScoringRetriever
 
-
-class MockAdapter:
-    def __init__(self, response_text: str) -> None:
-        self._response = response_text
-
-    async def complete(self, config: CompletionConfig) -> CompletionResult:
-        return CompletionResult(
-            content=[TextBlock(text=self._response)],
-            stop_reason=StopReason.END_TURN,
-            usage=UsageStats(input_tokens=100, output_tokens=50),
-            id="test-id",
-            model=config.model,
-        )
-
-
-@pytest.fixture
-def memory_dir(tmp_path: Path) -> Path:
-    d = tmp_path / "memory"
-    d.mkdir()
-    return d
+from tests.conftest import MockAdapter
 
 
 class TestLLMScoringRetriever:

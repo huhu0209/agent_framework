@@ -5,33 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from agent_framework.llm.types import CompletionConfig, CompletionResult, StopReason, TextBlock, UsageStats
 from agent_framework.memory.flush import FlushExtractor
 from agent_framework.memory.log_manager import EpisodicLogManager
 from agent_framework.memory.types import EventType
 
-
-class MockAdapter:
-    """最小 mock adapter。"""
-
-    def __init__(self, response_text: str) -> None:
-        self._response = response_text
-
-    async def complete(self, config: CompletionConfig) -> CompletionResult:
-        return CompletionResult(
-            id="test-id",
-            model=config.model,
-            content=[TextBlock(text=self._response)],
-            stop_reason=StopReason.END_TURN,
-            usage=UsageStats(input_tokens=100, output_tokens=50),
-        )
-
-
-@pytest.fixture
-def memory_dir(tmp_path: Path) -> Path:
-    d = tmp_path / "memory"
-    d.mkdir()
-    return d
+from tests.conftest import MockAdapter
 
 
 class TestFlushExtractor:
