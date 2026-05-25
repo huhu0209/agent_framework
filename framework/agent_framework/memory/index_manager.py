@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
+import tempfile
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -20,6 +22,23 @@ class MemoryIndexManager:
 
     def __init__(self, index_path: Path) -> None:
         self._path = index_path
+
+    def _atomic_write(self, text: str) -> None:
+        """原子写入：write-to-temp + os.replace，防止崩溃时丢失。"""
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(
+            dir=self._path.parent, suffix=".tmp", prefix=".memory_idx_"
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(text)
+            os.replace(tmp_path, self._path)
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
     @staticmethod
     def _make_pattern(file_name: str) -> re.Pattern:
@@ -68,10 +87,9 @@ class MemoryIndexManager:
                 lines = header[-_MAX_LINES:]
             else:
                 lines = header + body[-max_body:]
-            logger.debug("MEMORY.md 索引超 %d 行，执行截断", _MAX_LINES)
+            logger.warning("MEMORY.md 索引超 %d 行，执行截断", _MAX_LINES)
 
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text("\n".join(lines), encoding="utf-8")
+        self._atomic_write("\n".join(lines))
 
     def remove(self, file_name: str) -> None:
         """删除索引行。"""
@@ -84,7 +102,7 @@ class MemoryIndexManager:
         pattern = self._make_pattern(file_name)
         lines = [l for l in lines if not pattern.match(l)]
 
-        self._path.write_text("\n".join(lines), encoding="utf-8")
+        self._atomic_write("\n".join(lines))
 
     def _format_line(self, file_name: str, name: str, description: str) -> str:
         line = f"- [{name}]({file_name}) — {description}"

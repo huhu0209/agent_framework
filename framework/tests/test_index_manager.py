@@ -57,3 +57,18 @@ class TestTruncation:
         content = index_path.read_text(encoding="utf-8")
         lines = content.split("\n")
         assert any(l.startswith("# Memory Index") for l in lines)
+
+
+class TestAtomicWrite:
+    def test_file_exists_after_write(self, index_mgr):
+        index_mgr.update("atomic.md", "原子测试", "验证原子写入")
+        assert index_mgr._path.exists()
+        content = index_mgr._path.read_text(encoding="utf-8")
+        assert "[原子测试](atomic.md)" in content
+        assert "验证原子写入" in content
+
+    def test_no_temp_file_left(self, index_mgr):
+        index_mgr.update("clean.md", "清理测试", "无残留临时文件")
+        parent = index_mgr._path.parent
+        tmp_files = list(parent.glob(".memory_idx_*.tmp"))
+        assert tmp_files == []
