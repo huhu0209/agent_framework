@@ -115,6 +115,41 @@ class TestWrite:
         assert "test" in index
 
 
+class TestMergeConflictDetection:
+    def test_merge_with_overlap_logs_warning(self, writer, caplog):
+        """merge 检测到关键词重叠时，应 logger.warning。"""
+        import logging
+
+        draft = SemanticMemoryDraft(
+            name="测试策略", description="desc",
+            type=MemoryType.FEEDBACK,
+            body="**Why:** mock 不够\n**How to apply:** 用真实 DB",
+        )
+        writer.write(draft)
+        with caplog.at_level(logging.WARNING, logger="agent_framework.memory.semantic_writer"):
+            writer.write(draft.model_copy(update={
+                "body": "**Why:** 还是用 mock 不够\n**How to apply:** 改用真实 DB",
+            }))
+        assert any("重叠" in r.message for r in caplog.records)
+
+    def test_merge_no_overlap_no_warning(self, writer, caplog):
+        """merge 无重叠时，不产生警告。"""
+        import logging
+
+        draft1 = SemanticMemoryDraft(
+            name="偏好A", description="desc",
+            type=MemoryType.USER, body="偏好详细解释",
+        )
+        draft2 = SemanticMemoryDraft(
+            name="偏好A", description="desc",
+            type=MemoryType.USER, body="完全不同的新内容关于部署流程",
+        )
+        writer.write(draft1)
+        with caplog.at_level(logging.WARNING, logger="agent_framework.memory.semantic_writer"):
+            writer.write(draft2)
+        assert not any("重叠" in r.message for r in caplog.records)
+
+
 class TestWriteBatch:
     def test_mixed_valid_invalid(self, writer):
         valid = SemanticMemoryDraft(

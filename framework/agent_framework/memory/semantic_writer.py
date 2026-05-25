@@ -105,8 +105,28 @@ class SemanticWriter:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
 
+    @staticmethod
+    def _detect_overlap(existing: str, new_body: str) -> str | None:
+        """检测新旧内容是否有语义重叠（基于 Why 行关键词匹配）。"""
+        why_match = re.search(r"\*\*Why:\*\*\s*(.+)", new_body)
+        if not why_match:
+            return None
+        why_phrase = why_match.group(1).strip()
+        if len(why_phrase) < 4:
+            return None
+        # 精确匹配或子串匹配：提取新 Why 行中的关键词片段
+        # 将短语按空格/标点拆分，检查连续片段是否出现在已有内容中
+        tokens = re.findall(r"[\w一-鿿]{2,}", why_phrase)
+        for tok in tokens:
+            if tok in existing:
+                return tok
+        return None
+
     def _merge(self, path: Path, draft: SemanticMemoryDraft, *, merged_at: date | None = None) -> None:
-        logger.debug("Merge 语义记忆: %s", path.name)
+        existing = path.read_text(encoding="utf-8")
+        overlap = self._detect_overlap(existing, draft.body)
+        if overlap:
+            logger.warning("语义记忆合并时检测到内容重叠: %s — %s", path.name, overlap)
         effective_date = (merged_at or date.today()).isoformat()
         append_text = f"\n<!-- {effective_date} 追加 -->\n{draft.body}\n"
         with open(path, "a", encoding="utf-8") as f:
