@@ -43,9 +43,10 @@ _MESSAGES_INTRO = "从以下对话中提取值得跨会话长期保留的语义�
 class SemanticExtractor:
     """从对话或事件中提取语义记忆候选。"""
 
-    def __init__(self, adapter: ILLMAdapter, model: str) -> None:
+    def __init__(self, adapter: ILLMAdapter, model: str, *, temperature: float = 0.0) -> None:
         self._adapter = adapter
         self._model = model
+        self._temperature = temperature
 
     async def extract_from_events(
         self,
@@ -77,7 +78,7 @@ class SemanticExtractor:
             messages=messages,
             tools=[],
             max_tokens=1000,
-            temperature=0.3,
+            temperature=self._temperature,
         )
 
         result: CompletionResult = await self._adapter.complete(config)
