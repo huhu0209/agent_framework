@@ -52,11 +52,13 @@ class EpisodicLogManager:
         return log_path.read_text(encoding="utf-8")
 
     def write_raw(self, date_str: str, content: str) -> None:
-        """直接写入原始内容到指定日期的日志（供 flush 使用）。"""
+        """直接写入内容到指定日期的日志（供 flush 使用），添加 flush 标记头。"""
         log_path = self._log_path(date_str)
         log_path.parent.mkdir(parents=True, exist_ok=True)
+        now = datetime.now()
+        header = f"\n## [{now.strftime('%H:%M')}] flush\n"
         with open(log_path, "a", encoding="utf-8") as f:
-            f.write(content)
+            f.write(header + content)
 
     def list_dates(self) -> list[str]:
         """列出所有有日志的日期（YYYY-MM-DD 格式）。"""

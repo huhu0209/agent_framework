@@ -52,6 +52,22 @@ class TestWriteRaw:
         assert "14:32" in content
 
 
+class TestWriteRawFormat:
+    def test_write_raw_adds_flush_header(self, log_mgr):
+        log_mgr.write_raw("2026-05-20", "## 决策\n选择 FastAPI\n")
+        content = log_mgr.read_log("2026-05-20")
+        assert "## [" in content
+        assert "flush" in content
+
+    def test_write_raw_and_append_coexist(self, log_mgr):
+        ts = datetime(2026, 5, 20, 10, 0, tzinfo=timezone.utc)
+        log_mgr.append(ts, EventType.PROGRESS, "完成 A")
+        log_mgr.write_raw("2026-05-20", "## 决策\n选择 FastAPI\n")
+        content = log_mgr.read_log("2026-05-20")
+        assert content is not None
+        assert content.count("## [") >= 2
+
+
 class TestListDates:
     def test_lists_sorted_dates(self, log_mgr):
         for day in [15, 10, 20]:
