@@ -8,6 +8,7 @@ from agent_framework.memory.retriever import LLMScoringRetriever
 from agent_framework.memory.search import handle_memory_search
 from agent_framework.memory.semantic_extractor import SemanticExtractor
 from agent_framework.memory.semantic_writer import SemanticWriter, ValidationResult, WriteBatchResult, name_to_slug
+from agent_framework.memory.store import MemorySearchResult, MemoryStore
 from agent_framework.memory.types import (
     EpisodicRecord,
     EventType,
@@ -25,6 +26,8 @@ __all__ = [
     "LLMScoringRetriever",
     "MemoryIndexManager",
     "MemoryLayer",
+    "MemorySearchResult",
+    "MemoryStore",
     "MemorySearchConfig",
     "MemoryType",
     "SemanticExtractor",
