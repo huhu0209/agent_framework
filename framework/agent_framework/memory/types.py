@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from enum import Enum
 
 from pydantic import BaseModel
@@ -23,21 +22,6 @@ class EventType(str, Enum):
     ERROR = "错误"
     CONVENTION = "约定"
     PROGRESS = "进展"
-
-
-class EpisodicRecord(BaseModel):
-    """每日日志中的一条记录。"""
-
-    timestamp: datetime
-    content: str
-    source_file: str
-    line_range: tuple[int, int]
-
-
-class MemorySearchConfig(BaseModel):
-    """搜索配置参数。"""
-
-    top_k: int = 10
 
 
 class MemoryType(str, Enum):

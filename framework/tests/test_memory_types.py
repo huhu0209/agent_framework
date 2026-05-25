@@ -1,12 +1,8 @@
 """记忆系统数据模型测试。"""
 
-from datetime import datetime, timezone
-
 from agent_framework.memory.types import (
-    EpisodicRecord,
     EventType,
     MemoryLayer,
-    MemorySearchConfig,
 )
 
 
@@ -23,24 +19,6 @@ class TestEventType:
         assert EventType.ERROR == "错误"
         assert EventType.CONVENTION == "约定"
         assert EventType.PROGRESS == "进展"
-
-
-class TestEpisodicRecord:
-    def test_create_record(self):
-        record = EpisodicRecord(
-            timestamp=datetime(2026, 5, 20, 14, 32, tzinfo=timezone.utc),
-            content="用户要求测试用真实数据库",
-            source_file="memory/logs/2026/05/2026-05-20.md",
-            line_range=(1, 5),
-        )
-        assert record.content == "用户要求测试用真实数据库"
-        assert record.line_range == (1, 5)
-
-
-class TestMemorySearchConfig:
-    def test_default_top_k(self):
-        config = MemorySearchConfig()
-        assert config.top_k == 10
 
 
 class TestMemoryType:

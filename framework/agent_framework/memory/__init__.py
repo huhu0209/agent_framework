@@ -10,17 +10,14 @@ from agent_framework.memory.semantic_extractor import SemanticExtractor
 from agent_framework.memory.semantic_writer import SemanticWriter, ValidationResult, WriteBatchResult, name_to_slug
 from agent_framework.memory.store import MemorySearchResult, MemoryStore
 from agent_framework.memory.types import (
-    EpisodicRecord,
     EventType,
     MemoryLayer,
-    MemorySearchConfig,
     MemoryType,
     SemanticMemoryDraft,
 )
 
 __all__ = [
     "EpisodicLogManager",
-    "EpisodicRecord",
     "EventType",
     "FlushExtractor",
     "LLMScoringRetriever",
@@ -28,7 +25,6 @@ __all__ = [
     "MemoryLayer",
     "MemorySearchResult",
     "MemoryStore",
-    "MemorySearchConfig",
     "MemoryType",
     "SemanticExtractor",
     "SemanticMemoryDraft",
