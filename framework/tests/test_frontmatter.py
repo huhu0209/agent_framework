@@ -26,6 +26,41 @@ class TestParseFrontmatter:
         assert parse_frontmatter("") == {}
 
 
+class TestQuotedValueParsing:
+    """parse_frontmatter 应正确处理双引号包裹的值（与 format_frontmatter 对称）。"""
+
+    def test_double_quoted_value_with_colon(self):
+        text = '---\ndescription: "why: because..."\n---\n'
+        result = parse_frontmatter(text)
+        assert result == {"description": "why: because..."}
+
+    def test_double_quoted_value_with_escape(self):
+        text = '---\nname: "contains \\"quotes\\""\n---\n'
+        result = parse_frontmatter(text)
+        assert result == {"name": 'contains "quotes"'}
+
+    def test_double_quoted_value_with_backslash(self):
+        text = '---\npath: "C:\\\\Users\\\\test"\n---\n'
+        result = parse_frontmatter(text)
+        assert result == {"path": "C:\\Users\\test"}
+
+    def test_unquoted_value_unchanged(self):
+        text = "---\nname: simple\n---\n"
+        result = parse_frontmatter(text)
+        assert result == {"name": "simple"}
+
+    def test_empty_quoted_value(self):
+        text = '---\nname: ""\n---\n'
+        result = parse_frontmatter(text)
+        assert result == {"name": ""}
+
+    def test_roundtrip_with_special_chars(self):
+        meta = {"name": "测试", "description": "why: 因为这样更好"}
+        text = format_frontmatter(meta)
+        result = parse_frontmatter(text)
+        assert result == meta
+
+
 class TestFormatFrontmatter:
     def test_normal_keys(self):
         result = format_frontmatter({"name": "test", "type": "user"})

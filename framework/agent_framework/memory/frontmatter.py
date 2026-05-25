@@ -44,6 +44,9 @@ def parse_frontmatter(text: str) -> dict[str, str]:
             break
         if ":" in line:
             key, value = line.split(":", 1)
-            result[key.strip()] = value.strip()
+            value = value.strip()
+            if len(value) >= 2 and value.startswith('"') and value.endswith('"'):
+                value = value[1:-1].replace('\\"', '"').replace('\\\\', '\\')
+            result[key.strip()] = value
 
     return result
