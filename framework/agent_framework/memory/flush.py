@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from agent_framework.llm.base import ILLMAdapter
+from agent_framework.memory.log_manager import EpisodicLogManager
 from agent_framework.llm.types import (
     CompletionConfig,
     CompletionResult,
@@ -78,7 +79,7 @@ class FlushExtractor:
         self,
         conversation_text: str,
         current_time: datetime,
-        log_manager,
+        log_manager: EpisodicLogManager,
     ) -> bool:
         """提取事件并追加到每日日志。有事件写入返回 True。"""
         events_text = await self.extract(conversation_text, current_time)
@@ -86,10 +87,6 @@ class FlushExtractor:
             return False
 
         date_str = current_time.strftime("%Y-%m-%d")
-        log_path = log_manager._log_path(date_str)
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-
-        with open(log_path, "a", encoding="utf-8") as f:
-            f.write(events_text)
+        log_manager.write_raw(date_str, events_text)
 
         return True

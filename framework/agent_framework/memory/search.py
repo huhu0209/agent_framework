@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from agent_framework.memory.log_manager import EpisodicLogManager
@@ -26,9 +27,13 @@ async def handle_memory_search(args: dict, ctx: ToolUseContext) -> ToolResult:
         if content is None:
             continue
 
-        for line in content.split("\n"):
-            if query.lower() in line.lower():
-                results.append(f"[{date}] {line.strip()}")
+        blocks = re.split(r"(?=^## )", content, flags=re.MULTILINE)
+
+        for block in blocks:
+            if not block.strip():
+                continue
+            if query.lower() in block.lower():
+                results.append(f"[{date}]\n{block.strip()}")
                 if len(results) >= top_k:
                     break
         if len(results) >= top_k:

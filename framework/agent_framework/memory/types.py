@@ -42,7 +42,11 @@ class MemorySearchResult(BaseModel):
 
 
 class MemorySearchConfig(BaseModel):
-    """搜索配置参数。"""
+    """搜索配置参数。
+
+    vector_weight, decay_half_life_days, mmr_lambda 为计划中向量搜索预留的参数，
+    当前 keyword-only 搜索未使用。
+    """
 
     vector_weight: float = 0.7
     decay_half_life_days: int = 30

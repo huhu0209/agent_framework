@@ -44,9 +44,19 @@ class MemoryIndexManager:
             else:
                 lines.append(line)
 
-        # 截断
+        # 截断 — preserve header lines (# prefixed), truncate body only
         if len(lines) > _MAX_LINES:
-            lines = lines[-_MAX_LINES:]
+            header: list[str] = []
+            body: list[str] = []
+            for line in lines:
+                if not body and (line.startswith("#") or not line.strip()):
+                    header.append(line)
+                else:
+                    body.append(line)
+            if not body:
+                lines = lines[-_MAX_LINES:]
+            else:
+                lines = header + body[-(_MAX_LINES - len(header)):]
 
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._path.write_text("\n".join(lines), encoding="utf-8")

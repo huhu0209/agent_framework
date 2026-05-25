@@ -67,3 +67,16 @@ class TestEpisodicLogManager:
         dates = manager.list_dates()
         assert "2026-05-19" in dates
         assert "2026-05-20" in dates
+
+    def test_write_raw_creates_file(self, manager: EpisodicLogManager, memory_dir: Path):
+        manager.write_raw("2026-05-20", "## [14:32] 决策\n做了一个决策\n")
+        content = manager.read_log("2026-05-20")
+        assert content is not None
+        assert "决策" in content
+
+    def test_write_raw_appends(self, manager: EpisodicLogManager, memory_dir: Path):
+        manager.write_raw("2026-05-20", "first chunk")
+        manager.write_raw("2026-05-20", " second chunk")
+        content = manager.read_log("2026-05-20")
+        assert "first chunk" in content
+        assert "second chunk" in content

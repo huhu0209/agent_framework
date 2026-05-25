@@ -68,3 +68,29 @@ class TestLLMScoringRetriever:
         retriever = LLMScoringRetriever(adapter=adapter, model="test-model")
         result = await retriever.retrieve(query="test", memory_dir=memory_dir)
         assert result == []
+
+    async def test_retrieve_skips_path_traversal(self, memory_dir: Path):
+        adapter = MockAdapter('{"selected": ["../../etc/passwd", "feedback_testing.md"]}')
+        memory_file = memory_dir / "feedback_testing.md"
+        memory_file.write_text(
+            "---\nname: test\ndescription: d\ntype: user\n---\n\ncontent",
+            encoding="utf-8",
+        )
+
+        retriever = LLMScoringRetriever(adapter=adapter, model="test-model")
+        result = await retriever.retrieve(query="test", memory_dir=memory_dir)
+
+        files = [r["file"] for r in result]
+        assert all("../../" not in f for f in files)
+        assert "feedback_testing.md" in files
+
+    def test_scan_candidates_respects_limit(self, memory_dir: Path):
+        for i in range(55):
+            (memory_dir / f"file_{i}.md").write_text(
+                "---\nname: test\ndescription: d\ntype: user\n---\n\nbody",
+                encoding="utf-8",
+            )
+        adapter = MockAdapter('{"selected": []}')
+        retriever = LLMScoringRetriever(adapter=adapter, model="test-model")
+        candidates = retriever._scan_candidates(memory_dir)
+        assert len(candidates) <= 50

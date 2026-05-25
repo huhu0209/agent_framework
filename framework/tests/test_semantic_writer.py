@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from agent_framework.memory.types import MemoryType, SemanticMemoryDraft
-from agent_framework.memory.semantic_writer import SemanticWriter, name_to_slug, ValidationResult
+from agent_framework.memory.semantic_writer import SemanticWriter, WriteBatchResult, name_to_slug, ValidationResult, _yaml_string
 
 
 @pytest.fixture
@@ -39,12 +39,14 @@ def _user_draft(**overrides) -> SemanticMemoryDraft:
 
 class TestNameToSlug:
     def test_basic(self):
-        # 中文字符无 ASCII 近似，NFKD 后被丢弃，只剩前缀和连字符/分隔符
-        assert name_to_slug("feedback", "测试策略-真实数据库") == "feedback_"
+        result = name_to_slug("feedback", "测试策略-真实数据库")
+        assert result.startswith("feedback_")
+        assert len(result) > len("feedback_")  # hash suffix appended
 
     def test_chinese_name(self):
         result = name_to_slug("user", "回复风格")
         assert result.startswith("user_")
+        assert len(result) > len("user_")  # hash suffix appended
 
     def test_special_chars_removed(self):
         result = name_to_slug("project", "v3.2 迁移计划!!")
@@ -55,6 +57,16 @@ class TestNameToSlug:
         long_name = "a" * 100
         result = name_to_slug("feedback", long_name)
         assert len(result) <= 60 + len("feedback_")
+
+    def test_pure_ascii_no_hash(self):
+        result = name_to_slug("feedback", "testing strategy")
+        assert result == "feedback_testing_strategy"
+        assert len(result) == len("feedback_testing_strategy")
+
+    def test_hash_uniqueness(self):
+        a = name_to_slug("user", "测试策略")
+        b = name_to_slug("user", "测试方案")
+        assert a != b  # different Chinese names produce different hashes
 
 
 class TestValidation:
@@ -123,8 +135,10 @@ class TestWrite:
             _feedback_draft(body="invalid"),  # invalid: no Why/How
             _user_draft(),  # valid
         ]
-        paths = writer.write_batch(drafts)
-        assert len(paths) == 2  # invalid one skipped
+        result = writer.write_batch(drafts)
+        assert len(result.written) == 2
+        assert len(result.skipped) == 1
+        assert "Why" in result.skipped[0][1]
 
     def test_creates_memory_md_index(self, memory_dir: Path):
         writer = SemanticWriter(memory_dir)
@@ -134,3 +148,20 @@ class TestWrite:
         assert index_path.exists()
         content = index_path.read_text(encoding="utf-8")
         assert "测试策略-真实数据库" in content
+
+
+class TestYamlString:
+    def test_plain_text(self):
+        assert _yaml_string("hello") == "hello"
+
+    def test_contains_colon_space(self):
+        result = _yaml_string("key: value")
+        assert result.startswith('"')
+        assert result.endswith('"')
+
+    def test_contains_quotes(self):
+        result = _yaml_string("it's a \"test\"")
+        assert '\\"' in result
+
+    def test_empty_string(self):
+        assert _yaml_string("") == '""'

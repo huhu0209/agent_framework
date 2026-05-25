@@ -39,6 +39,13 @@ class EpisodicLogManager:
             return None
         return log_path.read_text(encoding="utf-8")
 
+    def write_raw(self, date_str: str, content: str) -> None:
+        """直接写入原始内容到指定日期的日志（供 flush 使用）。"""
+        log_path = self._log_path(date_str)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(content)
+
     def list_dates(self) -> list[str]:
         """列出所有有日志的日期（YYYY-MM-DD 格式）。"""
         logs_dir = self._memory_dir / "logs"

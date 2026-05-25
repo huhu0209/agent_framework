@@ -13,6 +13,9 @@ from agent_framework.llm.types import (
     TextBlock,
     UserMessage,
 )
+from agent_framework.memory.frontmatter import parse_frontmatter
+
+_MAX_CANDIDATES = 50
 
 _SCORING_SYSTEM_PROMPT = """\
 从以下记忆列表中选择与查询最相关的，最多 5 条。不确定就不包含。
@@ -31,29 +34,16 @@ class LLMScoringRetriever:
         """扫描 memory 目录下的 .md 文件，提取 frontmatter 摘要。"""
         candidates = []
         for f in sorted(memory_dir.glob("*.md")):
+            if len(candidates) >= _MAX_CANDIDATES:
+                break
             if f.name == "MEMORY.md":
                 continue
             content = f.read_text(encoding="utf-8")
-            lines = content.split("\n")
-            name = description = ""
-            in_frontmatter = False
-
-            for line in lines:
-                if line.strip() == "---":
-                    if in_frontmatter:
-                        break
-                    in_frontmatter = True
-                    continue
-                if in_frontmatter:
-                    if line.startswith("name:"):
-                        name = line.split(":", 1)[1].strip()
-                    elif line.startswith("description:"):
-                        description = line.split(":", 1)[1].strip()
-
+            meta = parse_frontmatter(content)
             candidates.append({
                 "file": f.name,
-                "name": name,
-                "description": description,
+                "name": meta.get("name", ""),
+                "description": meta.get("description", ""),
             })
 
         return candidates
@@ -104,10 +94,12 @@ class LLMScoringRetriever:
 
         selected = []
         for fname in selected_files:
-            fpath = memory_dir / fname
+            fpath = (memory_dir / fname).resolve()
+            if not fpath.is_relative_to(memory_dir.resolve()):
+                continue
             if fpath.exists():
                 selected.append({
-                    "file": fname,
+                    "file": fpath.name,
                     "content": fpath.read_text(encoding="utf-8"),
                 })
 

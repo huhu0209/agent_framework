@@ -433,16 +433,3 @@ async def test_semantic_extractor_param_accepted():
         semantic_extractor=extractor,
     )
     assert loop._semantic_extractor is extractor
-
-
-@pytest.mark.asyncio
-async def test_manual_memory_write_flag():
-    """手动写记忆文件后自动提取被跳过。"""
-    mock_adapter = _make_mock_adapter()
-    mock_adapter.complete.return_value = _text_result("回答")
-
-    loop = _make_loop(mock_adapter)
-    assert not loop._has_manual_memory_write
-
-    loop._has_manual_memory_write = True
-    assert loop._has_manual_memory_write

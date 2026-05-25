@@ -63,3 +63,14 @@ class TestMemoryIndexManager:
 
         lines = index_file.read_text(encoding="utf-8").strip().split("\n")
         assert len(lines[0]) <= 150
+
+    def test_truncation_preserves_header(self, index_file: Path):
+        index_file.write_text("# Memory Index\n\n", encoding="utf-8")
+        manager = MemoryIndexManager(index_file)
+        for i in range(205):
+            manager.update(f"file_{i}.md", f"条目 {i}", f"描述 {i}")
+
+        content = index_file.read_text(encoding="utf-8")
+        assert content.startswith("# Memory Index")
+        lines = content.strip().split("\n")
+        assert len(lines) <= 200

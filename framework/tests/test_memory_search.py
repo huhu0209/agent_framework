@@ -47,3 +47,15 @@ class TestMemorySearch:
 
         assert result.is_error
         assert "未配置" in result.content
+
+    async def test_search_returns_full_event_block(self, memory_dir: Path, ctx: ToolUseContext):
+        log_mgr = EpisodicLogManager(memory_dir=memory_dir)
+        ts = datetime(2026, 5, 20, 14, 32, tzinfo=timezone.utc)
+        log_mgr.append(timestamp=ts, event_type=EventType.DECISION, content="用 FastAPI 框架")
+
+        ctx.extra["memory_dir"] = str(memory_dir)
+        result = await handle_memory_search({"query": "FastAPI", "top_k": 5}, ctx)
+
+        assert not result.is_error
+        assert "FastAPI" in result.content
+        assert "14:32" in result.content or "决策" in result.content

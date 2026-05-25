@@ -93,9 +93,10 @@ class AgentLoop:
         self._messages_at_last_call = 0
         self.profile = profile
         self._assembler = PromptAssembler()
+        # Integration hook: enable episodic memory flush at end of conversation.
         self._memory_flush_enabled = memory_flush_enabled
+        # Integration hook: extract semantic memories from conversation.
         self._semantic_extractor = semantic_extractor
-        self._has_manual_memory_write = False
 
         if self.profile is not None:
             self._system_prompt_text = self._assembler.render(self.profile)
