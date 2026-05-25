@@ -1,6 +1,6 @@
-"""frontmatter 解析测试。"""
+"""frontmatter 解析与生成测试。"""
 
-from agent_framework.memory.frontmatter import parse_frontmatter
+from agent_framework.memory.frontmatter import format_frontmatter, parse_frontmatter
 
 
 class TestParseFrontmatter:
@@ -24,3 +24,20 @@ class TestParseFrontmatter:
 
     def test_empty_input(self):
         assert parse_frontmatter("") == {}
+
+
+class TestFormatFrontmatter:
+    def test_normal_keys(self):
+        result = format_frontmatter({"name": "test", "type": "user"})
+        assert result.startswith("---\n")
+        assert result.endswith("\n---")
+        assert "name: test" in result
+        assert "type: user" in result
+
+    def test_special_chars_quoted(self):
+        result = format_frontmatter({"desc": "has: colon"})
+        assert '"has: colon"' in result
+
+    def test_empty_dict(self):
+        result = format_frontmatter({})
+        assert result == "---\n---"

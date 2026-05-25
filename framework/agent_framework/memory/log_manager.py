@@ -1,4 +1,8 @@
-"""每日日志管理器 — append-only 情景记忆存储。"""
+"""每日日志管理器 — append-only 情景记忆存储。
+
+注：文件 I/O 全部同步。当前 agent loop 为单会话串行执行，无并发竞争。
+若后续支持多会话并发，需引入 file locking 或迁移到 async IO。
+"""
 
 from __future__ import annotations
 

@@ -1,4 +1,7 @@
-"""语义记忆写入器 — 校验、命名、文件写入、merge。"""
+"""语义记忆写入器 — 校验、命名、文件写入、merge。
+
+注：文件 I/O 全部同步。语义记忆写入由 flush 管线串行调用，无并发竞争。
+"""
 
 from __future__ import annotations
 
@@ -11,6 +14,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from agent_framework.memory.frontmatter import format_frontmatter
 from agent_framework.memory.index_manager import MemoryIndexManager
 from agent_framework.memory.types import MemoryType, SemanticMemoryDraft
 
@@ -27,22 +31,6 @@ class WriteBatchResult(BaseModel):
 
     written: list[Path]
     skipped: list[tuple[SemanticMemoryDraft, str]]
-
-
-def _yaml_string(s: str) -> str:
-    """Quote a string for YAML frontmatter if it contains special chars."""
-    if not s:
-        return '""'
-    needs_quoting = any(c in s for c in (
-        ":", "'", '"', "#", "&", "*", "?", "|", "-", "<", ">",
-        "=", "!", "%", "@", "`", ",", "{", "}", "[", "]",
-    ))
-    if "\n" in s or ": " in s or s.startswith("---"):
-        needs_quoting = True
-    if needs_quoting:
-        escaped = s.replace("\\", "\\\\").replace('"', '\\"')
-        return f'"{escaped}"'
-    return s
 
 
 def name_to_slug(type_value: str, name: str) -> str:
@@ -112,16 +100,10 @@ class SemanticWriter:
         return WriteBatchResult(written=written, skipped=skipped)
 
     def _create(self, path: Path, draft: SemanticMemoryDraft) -> None:
-        frontmatter = (
-            f"---\n"
-            f"name: {_yaml_string(draft.name)}\n"
-            f"description: {_yaml_string(draft.description)}\n"
-            f"type: {draft.type.value}\n"
-            f"---\n\n"
-            f"{draft.body}\n"
-        )
+        meta = {"name": draft.name, "description": draft.description, "type": draft.type.value}
+        content = f"{format_frontmatter(meta)}\n\n{draft.body}\n"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(frontmatter, encoding="utf-8")
+        path.write_text(content, encoding="utf-8")
 
     def _merge(self, path: Path, draft: SemanticMemoryDraft, *, merged_at: date | None = None) -> None:
         logger.debug("Merge 语义记忆: %s", path.name)

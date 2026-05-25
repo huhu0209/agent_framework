@@ -3,6 +3,31 @@
 from __future__ import annotations
 
 
+def _yaml_string(s: str) -> str:
+    """Quote a string for YAML frontmatter if it contains special chars."""
+    if not s:
+        return '""'
+    needs_quoting = any(c in s for c in (
+        ":", "'", '"', "#", "&", "*", "?", "|", "-", "<", ">",
+        "=", "!", "%", "@", "`", ",", "{", "}", "[", "]",
+    ))
+    if "\n" in s or ": " in s or s.startswith("---"):
+        needs_quoting = True
+    if needs_quoting:
+        escaped = s.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    return s
+
+
+def format_frontmatter(meta: dict[str, str]) -> str:
+    """将键值对格式化为 YAML frontmatter 块。"""
+    lines = ["---"]
+    for k, v in meta.items():
+        lines.append(f"{k}: {_yaml_string(v)}")
+    lines.append("---")
+    return "\n".join(lines)
+
+
 def parse_frontmatter(text: str) -> dict[str, str]:
     """解析 Markdown 文件的 YAML frontmatter，返回键值对。
 

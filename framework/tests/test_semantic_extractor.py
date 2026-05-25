@@ -1,96 +1,59 @@
-"""SemanticExtractor 测试。"""
-
-import json
+"""语义记忆提取器测试。"""
 
 import pytest
 
-from agent_framework.llm.types import (
-    CompletionConfig,
-    CompletionResult,
-    StopReason,
-    TextBlock,
-    UsageStats,
-)
 from agent_framework.memory.semantic_extractor import SemanticExtractor
-from agent_framework.memory.types import MemoryType
-
-
-class MockAdapter:
-    def __init__(self, response_text: str) -> None:
-        self._response = response_text
-
-    async def complete(self, config: CompletionConfig) -> CompletionResult:
-        return CompletionResult(
-            id="test-id",
-            model=config.model,
-            content=[TextBlock(text=self._response)],
-            stop_reason=StopReason.END_TURN,
-            usage=UsageStats(input_tokens=100, output_tokens=50),
-        )
+from agent_framework.memory.types import SemanticMemoryDraft
+from tests.conftest import MockAdapter
 
 
 class TestExtractFromEvents:
-    @pytest.mark.asyncio
-    async def test_extracts_feedback_from_events(self):
-        response = json.dumps([{
-            "name": "测试策略-真实数据库",
-            "description": "集成测试必须用真实数据库",
-            "type": "feedback",
-            "body": "测试内容\n\n**Why:** mock 失败\n**How to apply:** Docker",
-        }])
-        adapter = MockAdapter(response)
-        extractor = SemanticExtractor(adapter=adapter, model="test-model")
+    async def test_extracts_multiple_drafts(self):
+        response = '[{"name": "策略", "description": "测试用真实DB", "type": "feedback", "body": "**Why:** mock 失败\\n**How to apply:** Docker"}]'
+        ext = SemanticExtractor(adapter=MockAdapter(response), model="test")
+        result = await ext.extract_from_events([("决策", "用真实数据库")])
+        assert len(result) == 1
+        assert result[0].name == "策略"
 
-        events = [("决策", "用户要求测试用真实数据库")]
-        drafts = await extractor.extract_from_events(events)
-
-        assert len(drafts) == 1
-        assert drafts[0].type == MemoryType.FEEDBACK
-        assert "真实数据库" in drafts[0].name
-
-    @pytest.mark.asyncio
-    async def test_returns_empty_on_no_relevant(self):
-        adapter = MockAdapter("[]")
-        extractor = SemanticExtractor(adapter=adapter, model="test-model")
-
-        events = [("进展", "完成了一些工作")]
-        drafts = await extractor.extract_from_events(events)
-
-        assert drafts == []
-
-    @pytest.mark.asyncio
-    async def test_handles_invalid_json(self):
-        adapter = MockAdapter("not json at all")
-        extractor = SemanticExtractor(adapter=adapter, model="test-model")
-
-        events = [("决策", "测试")]
-        drafts = await extractor.extract_from_events(events)
-
-        assert drafts == []
+    async def test_empty_array(self):
+        ext = SemanticExtractor(adapter=MockAdapter("[]"), model="test")
+        result = await ext.extract_from_events([("决策", "test")])
+        assert result == []
 
 
 class TestExtractFromMessages:
-    @pytest.mark.asyncio
-    async def test_extracts_user_preference(self):
-        response = json.dumps([{
-            "name": "回复风格",
-            "description": "用户偏好简洁回复",
-            "type": "user",
-            "body": "用户不希望每次回复末尾加总结。",
-        }])
-        adapter = MockAdapter(response)
-        extractor = SemanticExtractor(adapter=adapter, model="test-model")
+    async def test_extracts_from_conversation(self):
+        response = '[{"name": "偏好", "description": "偏好详细解释", "type": "user", "body": "用户喜欢详细解释"}]'
+        ext = SemanticExtractor(adapter=MockAdapter(response), model="test")
+        result = await ext.extract_from_messages("用户: 请详细解释")
+        assert len(result) == 1
+        assert result[0].type.value == "user"
 
-        drafts = await extractor.extract_from_messages("用户: 不要总结\n助手: 好的")
 
-        assert len(drafts) == 1
-        assert drafts[0].type == MemoryType.USER
+class TestEdgeCases:
+    async def test_invalid_json_returns_empty(self):
+        ext = SemanticExtractor(adapter=MockAdapter("not json"), model="test")
+        result = await ext.extract_from_events([("决策", "test")])
+        assert result == []
 
-    @pytest.mark.asyncio
-    async def test_returns_empty_for_trivial_conversation(self):
-        adapter = MockAdapter("[]")
-        extractor = SemanticExtractor(adapter=adapter, model="test-model")
+    async def test_missing_field_skips_item(self):
+        response = '[{"name": "test"}]'
+        ext = SemanticExtractor(adapter=MockAdapter(response), model="test")
+        result = await ext.extract_from_events([("决策", "test")])
+        assert result == []
 
-        drafts = await extractor.extract_from_messages("用户: 你好\n助手: 你好")
+    async def test_invalid_type_skips_item(self):
+        response = '[{"name": "t", "description": "d", "type": "invalid", "body": "b"}]'
+        ext = SemanticExtractor(adapter=MockAdapter(response), model="test")
+        result = await ext.extract_from_events([("决策", "test")])
+        assert result == []
 
-        assert drafts == []
+    async def test_non_list_returns_empty(self):
+        ext = SemanticExtractor(adapter=MockAdapter("{}"), model="test")
+        result = await ext.extract_from_events([("决策", "test")])
+        assert result == []
+
+    async def test_empty_textblock_returns_empty(self):
+        ext = SemanticExtractor(adapter=MockAdapter(""), model="test")
+        result = await ext.extract_from_events([("决策", "test")])
+        assert result == []
