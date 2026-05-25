@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 from pathlib import Path
 
 from agent_framework.memory.types import EventType
 
 logger = logging.getLogger(__name__)
+
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 class EpisodicLogManager:
@@ -19,6 +22,8 @@ class EpisodicLogManager:
 
     def _log_path(self, date: str) -> Path:
         """date 格式 YYYY-MM-DD → memory/logs/YYYY/MM/YYYY-MM-DD.md"""
+        if not _DATE_RE.match(date):
+            raise ValueError(f"日期格式应为 YYYY-MM-DD，得到: {date!r}")
         year, month, _ = date.split("-")
         return self._memory_dir / "logs" / year / month / f"{date}.md"
 

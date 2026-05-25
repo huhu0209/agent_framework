@@ -13,7 +13,6 @@ from agent_framework.memory.types import (
     EventType,
     MemoryLayer,
     MemorySearchConfig,
-    MemorySearchResult,
     MemoryType,
     SemanticMemoryDraft,
 )
@@ -27,7 +26,6 @@ __all__ = [
     "MemoryIndexManager",
     "MemoryLayer",
     "MemorySearchConfig",
-    "MemorySearchResult",
     "MemoryType",
     "SemanticExtractor",
     "SemanticMemoryDraft",

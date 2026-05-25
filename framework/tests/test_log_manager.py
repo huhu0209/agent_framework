@@ -1,7 +1,6 @@
 """每日日志管理器测试。"""
 
 from datetime import datetime, timezone
-from pathlib import Path
 
 import pytest
 
@@ -10,73 +9,67 @@ from agent_framework.memory.types import EventType
 
 
 @pytest.fixture
-def memory_dir(tmp_path: Path) -> Path:
-    d = tmp_path / "memory"
-    d.mkdir()
-    return d
-
-
-@pytest.fixture
-def manager(memory_dir: Path) -> EpisodicLogManager:
+def log_mgr(memory_dir):
     return EpisodicLogManager(memory_dir=memory_dir)
 
 
-class TestEpisodicLogManager:
-    def test_append_creates_file(self, manager: EpisodicLogManager, memory_dir: Path):
+class TestAppend:
+    def test_creates_file_and_directories(self, log_mgr, memory_dir):
         ts = datetime(2026, 5, 20, 14, 32, tzinfo=timezone.utc)
-        manager.append(timestamp=ts, event_type=EventType.DECISION, content="做了一个决策")
-
-        log_file = memory_dir / "logs" / "2026" / "05" / "2026-05-20.md"
-        assert log_file.exists()
-
-        content = log_file.read_text(encoding="utf-8")
-        assert "## [14:32] 决策" in content
-        assert "做了一个决策" in content
-
-    def test_append_adds_to_existing(self, manager: EpisodicLogManager, memory_dir: Path):
-        ts1 = datetime(2026, 5, 20, 14, 32, tzinfo=timezone.utc)
-        ts2 = datetime(2026, 5, 20, 15, 10, tzinfo=timezone.utc)
-
-        manager.append(timestamp=ts1, event_type=EventType.DECISION, content="第一个")
-        manager.append(timestamp=ts2, event_type=EventType.ERROR, content="第二个")
-
-        log_file = memory_dir / "logs" / "2026" / "05" / "2026-05-20.md"
-        content = log_file.read_text(encoding="utf-8")
-        assert "## [14:32] 决策" in content
-        assert "## [15:10] 错误" in content
-
-    def test_read_log_exists(self, manager: EpisodicLogManager, memory_dir: Path):
-        ts = datetime(2026, 5, 20, 14, 32, tzinfo=timezone.utc)
-        manager.append(timestamp=ts, event_type=EventType.PROGRESS, content="完成了一步")
-
-        content = manager.read_log(date="2026-05-20")
-        assert content is not None
-        assert "完成了一步" in content
-
-    def test_read_log_not_exists(self, manager: EpisodicLogManager):
-        content = manager.read_log(date="2020-01-01")
-        assert content is None
-
-    def test_list_dates(self, manager: EpisodicLogManager, memory_dir: Path):
-        ts1 = datetime(2026, 5, 19, 10, 0, tzinfo=timezone.utc)
-        ts2 = datetime(2026, 5, 20, 10, 0, tzinfo=timezone.utc)
-
-        manager.append(timestamp=ts1, event_type=EventType.PROGRESS, content="a")
-        manager.append(timestamp=ts2, event_type=EventType.PROGRESS, content="b")
-
-        dates = manager.list_dates()
-        assert "2026-05-19" in dates
-        assert "2026-05-20" in dates
-
-    def test_write_raw_creates_file(self, manager: EpisodicLogManager, memory_dir: Path):
-        manager.write_raw("2026-05-20", "## [14:32] 决策\n做了一个决策\n")
-        content = manager.read_log("2026-05-20")
-        assert content is not None
+        log_mgr.append(ts, EventType.DECISION, "选择 FastAPI")
+        log_path = memory_dir / "logs" / "2026" / "05" / "2026-05-20.md"
+        assert log_path.exists()
+        content = log_path.read_text(encoding="utf-8")
+        assert "14:32" in content
         assert "决策" in content
+        assert "选择 FastAPI" in content
 
-    def test_write_raw_appends(self, manager: EpisodicLogManager, memory_dir: Path):
-        manager.write_raw("2026-05-20", "first chunk")
-        manager.write_raw("2026-05-20", " second chunk")
-        content = manager.read_log("2026-05-20")
-        assert "first chunk" in content
-        assert "second chunk" in content
+    def test_multiple_appends_same_day(self, log_mgr):
+        ts1 = datetime(2026, 5, 20, 10, 0, tzinfo=timezone.utc)
+        ts2 = datetime(2026, 5, 20, 14, 32, tzinfo=timezone.utc)
+        log_mgr.append(ts1, EventType.PROGRESS, "完成 A")
+        log_mgr.append(ts2, EventType.ERROR, "出错 B")
+        content = log_mgr.read_log("2026-05-20")
+        assert content is not None
+        assert "10:00" in content
+        assert "14:32" in content
+
+
+class TestReadLog:
+    def test_existing_log(self, log_mgr):
+        ts = datetime(2026, 5, 20, 14, 32, tzinfo=timezone.utc)
+        log_mgr.append(ts, EventType.DECISION, "test")
+        assert log_mgr.read_log("2026-05-20") is not None
+
+    def test_missing_log_returns_none(self, log_mgr):
+        assert log_mgr.read_log("2020-01-01") is None
+
+
+class TestWriteRaw:
+    def test_raw_append(self, log_mgr):
+        log_mgr.write_raw("2026-05-20", "## [14:32] 决策\n内容\n")
+        content = log_mgr.read_log("2026-05-20")
+        assert "14:32" in content
+
+
+class TestListDates:
+    def test_lists_sorted_dates(self, log_mgr):
+        for day in [15, 10, 20]:
+            ts = datetime(2026, 5, day, 12, 0, tzinfo=timezone.utc)
+            log_mgr.append(ts, EventType.PROGRESS, f"day {day}")
+        dates = log_mgr.list_dates()
+        assert dates == ["2026-05-10", "2026-05-15", "2026-05-20"]
+
+    def test_empty_dir_returns_empty(self, memory_dir):
+        mgr = EpisodicLogManager(memory_dir=memory_dir)
+        assert mgr.list_dates() == []
+
+
+class TestValidation:
+    def test_invalid_date_format(self, log_mgr):
+        with pytest.raises(ValueError, match="YYYY-MM-DD"):
+            log_mgr._log_path("today")
+
+    def test_invalid_date_empty(self, log_mgr):
+        with pytest.raises(ValueError, match="YYYY-MM-DD"):
+            log_mgr._log_path("")

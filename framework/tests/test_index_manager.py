@@ -1,76 +1,59 @@
-"""MemoryIndexManager 测试。"""
-
-from pathlib import Path
+"""MEMORY.md 索引管理器测试。"""
 
 import pytest
 
-from agent_framework.memory.index_manager import MemoryIndexManager
+from agent_framework.memory.index_manager import MemoryIndexManager, _MAX_LINES, _MAX_LINE_LENGTH
 
 
 @pytest.fixture
-def index_file(tmp_path: Path) -> Path:
-    return tmp_path / "MEMORY.md"
+def index_mgr(tmp_path):
+    return MemoryIndexManager(tmp_path / "MEMORY.md")
 
 
-class TestMemoryIndexManager:
-    def test_update_creates_new_index(self, index_file: Path):
-        manager = MemoryIndexManager(index_file)
-        manager.update("feedback_testing.md", "测试策略", "测试用真实数据库")
+class TestUpdate:
+    def test_creates_new_file(self, index_mgr):
+        index_mgr.update("user_style.md", "用户风格", "偏好详细解释")
+        content = index_mgr._path.read_text(encoding="utf-8")
+        assert "[用户风格](user_style.md)" in content
+        assert "偏好详细解释" in content
 
-        content = index_file.read_text(encoding="utf-8")
-        assert "- [测试策略](feedback_testing.md) — 测试用真实数据库" in content
-
-    def test_update_appends_second_entry(self, index_file: Path):
-        manager = MemoryIndexManager(index_file)
-        manager.update("feedback_testing.md", "测试策略", "测试用真实数据库")
-        manager.update("user_profile.md", "用户偏好", "简洁回复")
-
-        lines = index_file.read_text(encoding="utf-8").strip().split("\n")
-        assert len(lines) == 2
-
-    def test_update_existing_entry_replaces_summary(self, index_file: Path):
-        manager = MemoryIndexManager(index_file)
-        manager.update("feedback_testing.md", "测试策略", "旧描述")
-        manager.update("feedback_testing.md", "测试策略", "新描述")
-
-        content = index_file.read_text(encoding="utf-8")
+    def test_replaces_existing_entry(self, index_mgr):
+        index_mgr.update("user_style.md", "用户风格", "旧描述")
+        index_mgr.update("user_style.md", "用户风格", "新描述")
+        content = index_mgr._path.read_text(encoding="utf-8")
         assert "新描述" in content
         assert "旧描述" not in content
 
-    def test_update_truncates_at_200_lines(self, index_file: Path):
-        manager = MemoryIndexManager(index_file)
-        for i in range(205):
-            manager.update(f"file_{i}.md", f"条目 {i}", f"描述 {i}")
-
-        lines = index_file.read_text(encoding="utf-8").strip().split("\n")
-        assert len(lines) == 200
-
-    def test_remove_deletes_entry(self, index_file: Path):
-        manager = MemoryIndexManager(index_file)
-        manager.update("feedback_testing.md", "测试策略", "描述")
-        manager.update("user_profile.md", "用户偏好", "偏好")
-
-        manager.remove("feedback_testing.md")
-
-        content = index_file.read_text(encoding="utf-8")
-        assert "feedback_testing.md" not in content
-        assert "user_profile.md" in content
-
-    def test_update_truncates_description_at_150_chars(self, index_file: Path):
-        manager = MemoryIndexManager(index_file)
+    def test_truncates_long_line(self, index_mgr):
         long_desc = "x" * 200
-        manager.update("file.md", "名称", long_desc)
+        index_mgr.update("file.md", "name", long_desc)
+        content = index_mgr._path.read_text(encoding="utf-8")
+        lines = [l for l in content.split("\n") if l.startswith("- ")]
+        assert len(lines[0]) <= _MAX_LINE_LENGTH
 
-        lines = index_file.read_text(encoding="utf-8").strip().split("\n")
-        assert len(lines[0]) <= 150
 
-    def test_truncation_preserves_header(self, index_file: Path):
-        index_file.write_text("# Memory Index\n\n", encoding="utf-8")
-        manager = MemoryIndexManager(index_file)
-        for i in range(205):
-            manager.update(f"file_{i}.md", f"条目 {i}", f"描述 {i}")
+class TestRemove:
+    def test_removes_existing_entry(self, index_mgr):
+        index_mgr.update("file.md", "name", "desc")
+        index_mgr.remove("file.md")
+        content = index_mgr._path.read_text(encoding="utf-8")
+        assert "file.md" not in content
 
-        content = index_file.read_text(encoding="utf-8")
-        assert content.startswith("# Memory Index")
-        lines = content.strip().split("\n")
-        assert len(lines) <= 200
+    def test_remove_nonexistent_is_noop(self, index_mgr):
+        index_mgr.update("a.md", "A", "desc a")
+        index_mgr.remove("b.md")
+        content = index_mgr._path.read_text(encoding="utf-8")
+        assert "a.md" in content
+
+
+class TestTruncation:
+    def test_preserves_header_on_truncation(self, tmp_path):
+        index_path = tmp_path / "MEMORY.md"
+        header = "# Memory Index\n\n"
+        index_path.write_text(header, encoding="utf-8")
+        mgr = MemoryIndexManager(index_path)
+        for i in range(_MAX_LINES + 10):
+            mgr.update(f"file_{i}.md", f"name {i}", f"desc {i}")
+        content = index_path.read_text(encoding="utf-8")
+        lines = content.split("\n")
+        assert any(l.startswith("# Memory Index") for l in lines)

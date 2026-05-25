@@ -86,6 +86,9 @@ class SemanticWriter:
 
     def write(self, draft: SemanticMemoryDraft, *, merged_at: date | None = None) -> Path:
         """写入 .md 文件。冲突时 merge 追加。"""
+        validation = self.validate(draft)
+        if not validation.passed:
+            raise ValueError(validation.reason)
         slug = name_to_slug(draft.type.value, draft.name)
         file_path = self._memory_dir / f"{slug}.md"
 
@@ -102,11 +105,10 @@ class SemanticWriter:
         written: list[Path] = []
         skipped: list[tuple[SemanticMemoryDraft, str]] = []
         for draft in drafts:
-            validation = self.validate(draft)
-            if validation.passed:
+            try:
                 written.append(self.write(draft))
-            else:
-                skipped.append((draft, validation.reason))
+            except ValueError as e:
+                skipped.append((draft, str(e)))
         return WriteBatchResult(written=written, skipped=skipped)
 
     def _create(self, path: Path, draft: SemanticMemoryDraft) -> None:

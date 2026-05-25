@@ -34,23 +34,9 @@ class EpisodicRecord(BaseModel):
     line_range: tuple[int, int]
 
 
-class MemorySearchResult(BaseModel):
-    """memory_search 工具的返回。"""
-
-    records: list[EpisodicRecord]
-    scores: list[float]
-
-
 class MemorySearchConfig(BaseModel):
-    """搜索配置参数。
+    """搜索配置参数。"""
 
-    vector_weight, decay_half_life_days, mmr_lambda 为计划中向量搜索预留的参数，
-    当前 keyword-only 搜索未使用。
-    """
-
-    vector_weight: float = 0.7
-    decay_half_life_days: int = 30
-    mmr_lambda: float = 0.7
     top_k: int = 10
 
 

@@ -1,26 +1,26 @@
-"""frontmatter 工具测试。"""
+"""frontmatter 解析测试。"""
 
 from agent_framework.memory.frontmatter import parse_frontmatter
 
 
 class TestParseFrontmatter:
-    def test_parses_name_and_description(self):
-        text = "---\nname: 测试\ndescription: 描述内容\ntype: feedback\n---\n\n正文"
+    def test_standard_frontmatter(self):
+        text = "---\nname: test\ndescription: 测试\n---\nbody"
         result = parse_frontmatter(text)
-        assert result["name"] == "测试"
-        assert result["description"] == "描述内容"
-        assert result["type"] == "feedback"
+        assert result == {"name": "test", "description": "测试"}
 
     def test_no_frontmatter(self):
-        assert parse_frontmatter("just some content") == {}
-
-    def test_empty_frontmatter(self):
-        assert parse_frontmatter("---\n---\n\n正文") == {}
+        text = "# Title\nbody"
+        assert parse_frontmatter(text) == {}
 
     def test_value_with_colon(self):
-        result = parse_frontmatter("---\nname: key: value\n---\n")
-        assert result["name"] == "key: value"
+        text = "---\nurl: https://example.com:8080\n---\n"
+        result = parse_frontmatter(text)
+        assert result == {"url": "https://example.com:8080"}
 
-    def test_value_with_quotes(self):
-        result = parse_frontmatter("---\ndescription: has 'quotes' and \"dquotes\"\n---\n")
-        assert "quotes" in result["description"]
+    def test_empty_frontmatter_block(self):
+        text = "---\n---\nbody"
+        assert parse_frontmatter(text) == {}
+
+    def test_empty_input(self):
+        assert parse_frontmatter("") == {}

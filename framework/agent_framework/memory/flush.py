@@ -72,7 +72,7 @@ class FlushExtractor:
         for block in result.content:
             if isinstance(block, TextBlock):
                 text = block.text.strip()
-                if not text or text == _NO_EVENTS:
+                if not text or text.strip().upper().startswith("NO_EVENTS"):
                     return None
                 return text
 

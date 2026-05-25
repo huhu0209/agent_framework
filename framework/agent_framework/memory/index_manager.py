@@ -53,7 +53,6 @@ class MemoryIndexManager:
 
         # 截断 — preserve header lines (# prefixed), truncate body only
         if len(lines) > _MAX_LINES:
-            logger.debug("MEMORY.md 索引超 %d 行，执行截断", _MAX_LINES)
             header: list[str] = []
             body: list[str] = []
             for line in lines:
@@ -61,10 +60,12 @@ class MemoryIndexManager:
                     header.append(line)
                 else:
                     body.append(line)
-            if not body:
-                lines = lines[-_MAX_LINES:]
+            max_body = _MAX_LINES - len(header)
+            if max_body <= 0:
+                lines = header[-_MAX_LINES:]
             else:
-                lines = header + body[-(_MAX_LINES - len(header)):]
+                lines = header + body[-max_body:]
+            logger.debug("MEMORY.md 索引超 %d 行，执行截断", _MAX_LINES)
 
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._path.write_text("\n".join(lines), encoding="utf-8")

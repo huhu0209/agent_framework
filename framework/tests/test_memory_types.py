@@ -7,7 +7,6 @@ from agent_framework.memory.types import (
     EventType,
     MemoryLayer,
     MemorySearchConfig,
-    MemorySearchResult,
 )
 
 
@@ -38,29 +37,9 @@ class TestEpisodicRecord:
         assert record.line_range == (1, 5)
 
 
-class TestMemorySearchResult:
-    def test_empty_result(self):
-        result = MemorySearchResult(records=[], scores=[])
-        assert result.records == []
-
-    def test_with_records(self):
-        record = EpisodicRecord(
-            timestamp=datetime(2026, 5, 20, 14, 32, tzinfo=timezone.utc),
-            content="测试内容",
-            source_file="2026-05-20.md",
-            line_range=(1, 3),
-        )
-        result = MemorySearchResult(records=[record], scores=[0.85])
-        assert len(result.records) == 1
-        assert result.scores[0] == 0.85
-
-
 class TestMemorySearchConfig:
-    def test_default_config(self):
+    def test_default_top_k(self):
         config = MemorySearchConfig()
-        assert config.vector_weight == 0.7
-        assert config.decay_half_life_days == 30
-        assert config.mmr_lambda == 0.7
         assert config.top_k == 10
 
 
