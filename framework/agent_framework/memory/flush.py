@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 
 from agent_framework.llm.base import ILLMAdapter
@@ -13,6 +14,8 @@ from agent_framework.llm.types import (
     TextBlock,
     UserMessage,
 )
+
+logger = logging.getLogger(__name__)
 
 _FLUSH_SYSTEM_PROMPT = """\
 从以下对话中提取值得跨会话保留的关键事件。
@@ -73,6 +76,7 @@ class FlushExtractor:
                     return None
                 return text
 
+        logger.debug("Flush 提取无结果: LLM 未返回有效内容")
         return None
 
     async def flush(

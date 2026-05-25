@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 _MAX_LINES = 200
 _MAX_LINE_LENGTH = 150
@@ -14,6 +17,10 @@ class MemoryIndexManager:
 
     def __init__(self, index_path: Path) -> None:
         self._path = index_path
+
+    @staticmethod
+    def _make_pattern(file_name: str) -> re.Pattern:
+        return re.compile(rf"^\- \[.*?\]\({re.escape(file_name)}\) — ")
 
     def update(self, file_name: str, name: str, description: str) -> None:
         """新增或更新索引行。>200 行时截断最旧行。"""
@@ -27,7 +34,7 @@ class MemoryIndexManager:
         lines = content.split("\n") if content else []
 
         # 查找已有条目
-        pattern = re.compile(rf"^\- \[.*?\]\({re.escape(file_name)}\) — ")
+        pattern = self._make_pattern(file_name)
         replace_idx = None
         for i, l in enumerate(lines):
             if pattern.match(l):
@@ -46,6 +53,7 @@ class MemoryIndexManager:
 
         # 截断 — preserve header lines (# prefixed), truncate body only
         if len(lines) > _MAX_LINES:
+            logger.debug("MEMORY.md 索引超 %d 行，执行截断", _MAX_LINES)
             header: list[str] = []
             body: list[str] = []
             for line in lines:
@@ -69,7 +77,7 @@ class MemoryIndexManager:
         content = self._path.read_text(encoding="utf-8")
         lines = content.split("\n")
 
-        pattern = re.compile(rf"^\- \[.*?\]\({re.escape(file_name)}\) — ")
+        pattern = self._make_pattern(file_name)
         lines = [l for l in lines if not pattern.match(l)]
 
         self._path.write_text("\n".join(lines), encoding="utf-8")

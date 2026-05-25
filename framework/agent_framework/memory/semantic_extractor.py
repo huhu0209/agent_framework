@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 
 from agent_framework.llm.base import ILLMAdapter
 from agent_framework.llm.types import (
@@ -14,9 +15,9 @@ from agent_framework.llm.types import (
 )
 from agent_framework.memory.types import MemoryType, SemanticMemoryDraft
 
-_EVENTS_SYSTEM_PROMPT = """\
-从以下已分类的事件中提取值得长期保留的语义记忆。
+logger = logging.getLogger(__name__)
 
+_PROMPT_BODY = """\
 只提取以下类型：
 - user: 用户偏好、工作风格、知识背景
 - feedback: 值得记住的纠错、最佳实践（必须包含 **Why:** 和 **How to apply:**）
@@ -35,26 +36,8 @@ feedback 和 project 类型的 body 必须包含：
 如果没有值得提取的内容，返回空数组 []。
 只返回 JSON，不要其他内容。"""
 
-_MESSAGES_SYSTEM_PROMPT = """\
-从以下对话中提取值得跨会话长期保留的语义记忆。
-
-只提取以下类型：
-- user: 用户偏好、工作风格、知识背景
-- feedback: 值得记住的纠错、最佳实践（必须包含 **Why:** 和 **How to apply:**）
-- project: 项目约束、截止日期、利益相关方信息（必须包含 **Why:** 和 **How to apply:**）
-- reference: 外部系统、文档、资源的指针
-
-不提取：临时调试信息、问候语、已在代码中体现的信息、一次性的具体操作细节。
-
-返回 JSON 数组，每个元素格式：
-{"name": "简短名称", "description": "一句话描述(≤150字)", "type": "user|feedback|project|reference", "body": "Markdown 正文"}
-
-feedback 和 project 类型的 body 必须包含：
-**Why:** [这条规则为什么存在]
-**How to apply:** [在什么场景下触发]
-
-如果没有值得提取的内容，返回空数组 []。
-只返回 JSON，不要其他内容。"""
+_EVENTS_INTRO = "从以下已分类的事件中提取值得长期保留的语义记忆。"
+_MESSAGES_INTRO = "从以下对话中提取值得跨会话长期保留的语义记忆。"
 
 
 class SemanticExtractor:
@@ -72,14 +55,14 @@ class SemanticExtractor:
         events_text = "\n".join(
             f"- [{etype}] {content}" for etype, content in events
         )
-        return await self._call_llm(_EVENTS_SYSTEM_PROMPT, events_text)
+        return await self._call_llm(f"{_EVENTS_INTRO}\n\n{_PROMPT_BODY}", events_text)
 
     async def extract_from_messages(
         self,
         conversation_text: str,
     ) -> list[SemanticMemoryDraft]:
         """对话结束时：从对话文本中提取。"""
-        return await self._call_llm(_MESSAGES_SYSTEM_PROMPT, conversation_text)
+        return await self._call_llm(f"{_MESSAGES_INTRO}\n\n{_PROMPT_BODY}", conversation_text)
 
     async def _call_llm(
         self, system_prompt: str, input_text: str,
@@ -111,6 +94,7 @@ class SemanticExtractor:
         try:
             items = json.loads(text)
         except json.JSONDecodeError:
+            logger.warning("LLM 返回非法 JSON，跳过提取: %s", text[:200])
             return []
 
         if not isinstance(items, list):
@@ -125,7 +109,8 @@ class SemanticExtractor:
                     type=MemoryType(item["type"]),
                     body=item["body"],
                 ))
-            except (KeyError, ValueError):
+            except (KeyError, ValueError) as e:
+                logger.warning("跳过格式不完整的记忆候选: %s (%s)", item, e)
                 continue
 
         return drafts

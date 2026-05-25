@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from pathlib import Path
 
 from agent_framework.memory.types import EventType
+
+logger = logging.getLogger(__name__)
 
 
 class EpisodicLogManager:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 from agent_framework.llm.base import ILLMAdapter
@@ -14,6 +15,8 @@ from agent_framework.llm.types import (
     UserMessage,
 )
 from agent_framework.memory.frontmatter import parse_frontmatter
+
+logger = logging.getLogger(__name__)
 
 _MAX_CANDIDATES = 50
 
@@ -87,7 +90,7 @@ class LLMScoringRetriever:
                     parsed = json.loads(block.text.strip())
                     selected_files = parsed.get("selected", [])
                 except json.JSONDecodeError:
-                    pass
+                    logger.warning("LLM 评分返回非法 JSON: %s", block.text.strip()[:200])
 
         if not selected_files:
             return []

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import re
 import unicodedata
 from datetime import date
@@ -12,6 +13,8 @@ from pydantic import BaseModel
 
 from agent_framework.memory.index_manager import MemoryIndexManager
 from agent_framework.memory.types import MemoryType, SemanticMemoryDraft
+
+logger = logging.getLogger(__name__)
 
 
 class ValidationResult(BaseModel):
@@ -119,6 +122,7 @@ class SemanticWriter:
         path.write_text(frontmatter, encoding="utf-8")
 
     def _merge(self, path: Path, draft: SemanticMemoryDraft, *, merged_at: date | None = None) -> None:
+        logger.debug("Merge 语义记忆: %s", path.name)
         effective_date = (merged_at or date.today()).isoformat()
         append_text = f"\n<!-- {effective_date} 追加 -->\n{draft.body}\n"
         with open(path, "a", encoding="utf-8") as f:
