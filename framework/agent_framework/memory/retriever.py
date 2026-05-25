@@ -18,26 +18,27 @@ from agent_framework.memory.frontmatter import parse_frontmatter
 
 logger = logging.getLogger(__name__)
 
-_MAX_CANDIDATES = 50
-
-_SCORING_SYSTEM_PROMPT = """\
-从以下记忆列表中选择与查询最相关的，最多 5 条。不确定就不包含。
-返回 JSON 格式: {"selected": ["file1.md", "file2.md"]}
-只返回 JSON，不要其他内容。"""
-
-
 class LLMScoringRetriever:
     """LLM 评分召回：扫描文件 → LLM 选择 → 返回内容。"""
 
-    def __init__(self, adapter: ILLMAdapter, model: str) -> None:
+    def __init__(self, adapter: ILLMAdapter, model: str, *, max_candidates: int = 50, max_results: int = 5) -> None:
         self._adapter = adapter
         self._model = model
+        self._max_candidates = max_candidates
+        self._max_results = max_results
+
+    def _scoring_prompt(self) -> str:
+        return (
+            f"从以下记忆列表中选择与查询最相关的，最多 {self._max_results} 条。不确定就不包含。\n"
+            '返回 JSON 格式: {"selected": ["file1.md", "file2.md"]}\n'
+            "只返回 JSON，不要其他内容。"
+        )
 
     def _scan_candidates(self, memory_dir: Path) -> list[dict[str, str]]:
         """扫描 memory 目录下的 .md 文件，提取 frontmatter 摘要。"""
         candidates = []
         for f in sorted(memory_dir.glob("*.md")):
-            if len(candidates) >= _MAX_CANDIDATES:
+            if len(candidates) >= self._max_candidates:
                 break
             if f.name == "MEMORY.md":
                 continue
@@ -67,7 +68,7 @@ class LLMScoringRetriever:
         )
 
         messages = [
-            SystemMessage(content=_SCORING_SYSTEM_PROMPT),
+            SystemMessage(content=self._scoring_prompt()),
             UserMessage(content=[TextBlock(
                 text=f"查询: {query}\n\n可用记忆:\n{candidate_text}",
             )]),
