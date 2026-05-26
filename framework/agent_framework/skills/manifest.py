@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from agent_framework.memory.frontmatter import parse_frontmatter
+from agent_framework.memory.frontmatter import parse_frontmatter_lines
 
 logger = logging.getLogger(__name__)
 
@@ -60,9 +60,8 @@ def _parse_skill_document(text: str) -> tuple[dict[str, str], str]:
     if end_idx is None:
         return {}, text
 
-    frontmatter_text = "\n".join(lines[: end_idx + 1])
     body = "\n".join(lines[end_idx + 1 :]).strip()
-    meta = parse_frontmatter(frontmatter_text)
+    meta = parse_frontmatter_lines(lines[1:end_idx])
     return meta, body
 
 

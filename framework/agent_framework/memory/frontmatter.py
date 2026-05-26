@@ -28,17 +28,10 @@ def format_frontmatter(meta: dict[str, str]) -> str:
     return "\n".join(lines)
 
 
-def parse_frontmatter(text: str) -> dict[str, str]:
-    """解析 Markdown 文件的 YAML frontmatter，返回键值对。
-
-    仅支持扁平键值对（name: value 格式），不依赖 YAML 库。
-    """
-    lines = text.split("\n")
-    if not lines or lines[0].strip() != "---":
-        return {}
-
+def parse_frontmatter_lines(lines: list[str]) -> dict[str, str]:
+    """解析 key:value 格式的行列表（不含 --- 分隔符）。"""
     result: dict[str, str] = {}
-    for line in lines[1:]:
+    for line in lines:
         stripped = line.strip()
         if stripped == "---":
             break
@@ -48,5 +41,15 @@ def parse_frontmatter(text: str) -> dict[str, str]:
             if len(value) >= 2 and value.startswith('"') and value.endswith('"'):
                 value = value[1:-1].replace('\\"', '"').replace('\\\\', '\\')
             result[key.strip()] = value
-
     return result
+
+
+def parse_frontmatter(text: str) -> dict[str, str]:
+    """解析 Markdown 文件的 YAML frontmatter，返回键值对。
+
+    仅支持扁平键值对（name: value 格式），不依赖 YAML 库。
+    """
+    lines = text.split("\n")
+    if not lines or lines[0].strip() != "---":
+        return {}
+    return parse_frontmatter_lines(lines[1:])
