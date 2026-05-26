@@ -7,6 +7,7 @@ from pathlib import Path
 
 from agent_framework.skills.manifest import (
     SkillDocument,
+    SkillLoadResult,
     SkillManifest,
     _parse_bool,
     _parse_list,
@@ -40,14 +41,17 @@ class SkillRegistry:
             lines.append(f"- {name}: {doc.manifest.description}")
         return "\n".join(lines)
 
-    def load_full_text(self, name: str) -> str:
+    def load_full_text(self, name: str) -> SkillLoadResult:
         """L2: 完整 skill 正文 + references 索引。自动检查更新。"""
         self._maybe_refresh()
         doc = self._documents.get(name)
         if doc is None:
             known = ", ".join(sorted(self._documents)) or "(无)"
-            return f"错误：未知 skill '{name}'。可用 skills: {known}"
-        return self._format_skill_body(doc)
+            return SkillLoadResult(
+                content=f"未知 skill '{name}'。可用 skills: {known}",
+                is_error=True,
+            )
+        return SkillLoadResult(content=self._format_skill_body(doc))
 
     def get_names(self) -> list[str]:
         """返回所有已注册 skill 名称。"""

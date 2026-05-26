@@ -33,6 +33,14 @@ class SkillDocument:
     body: str
 
 
+@dataclass
+class SkillLoadResult:
+    """load_full_text 返回类型，显式区分成功与错误。"""
+
+    content: str
+    is_error: bool = False
+
+
 def _parse_skill_document(text: str) -> tuple[dict[str, str], str]:
     """解析 SKILL.md，返回 (meta_dict, body_string)。
 

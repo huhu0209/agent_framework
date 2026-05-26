@@ -73,7 +73,7 @@ class TestSkillRegistryScan:
 
         registry = SkillRegistry([personal, project])
         assert len(registry.get_names()) == 1
-        assert "个人版部署" in registry.load_full_text("deploy")
+        assert "个人版部署" in registry.load_full_text("deploy").content
 
     def test_missing_name_uses_directory_name(self, tmp_path, caplog):
         import logging
@@ -168,9 +168,10 @@ class TestLoadFullText:
         registry = SkillRegistry([skills_dir])
         result = registry.load_full_text("deploy")
 
-        assert result.startswith('<skill name="deploy">')
-        assert "# 部署流程" in result
-        assert result.strip().endswith("</skill>")
+        assert result.is_error is False
+        assert result.content.startswith('<skill name="deploy">')
+        assert "# 部署流程" in result.content
+        assert result.content.strip().endswith("</skill>")
 
     def test_unknown_skill_returns_error_with_suggestions(self, tmp_path):
         skills_dir = tmp_path / "skills"
@@ -180,8 +181,8 @@ class TestLoadFullText:
         registry = SkillRegistry([skills_dir])
         result = registry.load_full_text("nonexistent")
 
-        assert result.startswith("错误：")
-        assert "deploy" in result
+        assert result.is_error is True
+        assert "deploy" in result.content
 
     def test_with_references(self, tmp_path):
         skills_dir = tmp_path / "skills"
@@ -195,8 +196,8 @@ class TestLoadFullText:
         registry = SkillRegistry([skills_dir])
         result = registry.load_full_text("deploy")
 
-        assert "references/cli.md" in result
-        assert "references/env.md" in result
+        assert "references/cli.md" in result.content
+        assert "references/env.md" in result.content
 
     def test_no_references_only_body(self, tmp_path):
         skills_dir = tmp_path / "skills"
@@ -206,7 +207,7 @@ class TestLoadFullText:
         registry = SkillRegistry([skills_dir])
         result = registry.load_full_text("deploy")
 
-        assert "参考文档" not in result
+        assert "参考文档" not in result.content
 
     def test_references_truncated_at_10(self, tmp_path):
         skills_dir = tmp_path / "skills"
@@ -220,7 +221,7 @@ class TestLoadFullText:
         registry = SkillRegistry([skills_dir])
         result = registry.load_full_text("big")
 
-        assert result.count("references/") == 10
+        assert result.content.count("references/") == 10
 
 
 class TestAutoDiscovery:
