@@ -136,19 +136,24 @@ class SkillRegistry:
             doc.body,
             "</skill>",
         ]
-        refs = self._list_references(doc.manifest.path)
+        refs, total = self._list_references(doc.manifest.path)
         if refs:
             parts.append("\n此 skill 包含以下参考文档，可用 read_file 按需加载：")
             for rel_path in refs:
                 parts.append(f"- references/{rel_path}")
+            remaining = total - len(refs)
+            if remaining > 0:
+                parts.append(f"- ... 还有 {remaining} 个文件未显示")
         return "\n".join(parts)
 
-    def _list_references(self, skill_dir: Path) -> list[str]:
+    def _list_references(self, skill_dir: Path) -> tuple[list[str], int]:
+        """返回 (文件列表最多10个, 总数)。"""
         ref_dir = skill_dir / "references"
         if not ref_dir.is_dir():
-            return []
-        files = []
-        for f in sorted(ref_dir.rglob("*")):
-            if f.is_file():
-                files.append(str(f.relative_to(ref_dir)))
-        return files[:10]
+            return [], 0
+        files = sorted(
+            str(f.relative_to(ref_dir))
+            for f in ref_dir.rglob("*")
+            if f.is_file()
+        )
+        return files[:10], len(files)

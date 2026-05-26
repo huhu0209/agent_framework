@@ -222,6 +222,7 @@ class TestLoadFullText:
         result = registry.load_full_text("big")
 
         assert result.content.count("references/") == 10
+        assert "还有 5 个文件未显示" in result.content
 
 
 class TestAutoDiscovery:
