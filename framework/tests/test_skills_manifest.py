@@ -72,6 +72,10 @@ class TestParseBool:
         assert _parse_bool(None, True) is True
         assert _parse_bool(None, False) is False
 
+    def test_unrecognized_value_returns_default(self):
+        assert _parse_bool("maybe", True) is True
+        assert _parse_bool("maybe", False) is False
+
 
 class TestParseList:
     def test_comma_separated(self):

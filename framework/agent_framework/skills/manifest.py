@@ -69,7 +69,12 @@ def _parse_skill_document(text: str) -> tuple[dict[str, str], str]:
 def _parse_bool(value: str | None, default: bool) -> bool:
     if value is None:
         return default
-    return value.strip().lower() in ("true", "yes", "1")
+    normalized = value.strip().lower()
+    if normalized in ("true", "yes", "1"):
+        return True
+    if normalized in ("false", "no", "0"):
+        return False
+    return default
 
 
 def _parse_list(value: str | None) -> list[str] | None:
