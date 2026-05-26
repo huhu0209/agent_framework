@@ -267,3 +267,36 @@ class TestAutoDiscovery:
 
         registry.refresh()
         assert "added" in registry.get_names()
+
+
+class TestGetManifest:
+    def test_existing_skill_returns_manifest(self, tmp_path):
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        create_skill(skills_dir, "deploy", "部署应用", "body")
+
+        registry = SkillRegistry([skills_dir])
+        manifest = registry.get_manifest("deploy")
+
+        assert manifest is not None
+        assert manifest.name == "deploy"
+        assert manifest.description == "部署应用"
+        assert manifest.user_invocable is True
+
+    def test_nonexistent_skill_returns_none(self, tmp_path):
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+
+        registry = SkillRegistry([skills_dir])
+        assert registry.get_manifest("nope") is None
+
+    def test_user_invocable_false(self, tmp_path):
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        create_skill(skills_dir, "internal", "内部 skill", "body", **{"user-invocable": "false"})
+
+        registry = SkillRegistry([skills_dir])
+        manifest = registry.get_manifest("internal")
+
+        assert manifest is not None
+        assert manifest.user_invocable is False

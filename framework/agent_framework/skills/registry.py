@@ -58,6 +58,12 @@ class SkillRegistry:
         """返回所有已注册 skill 名称。"""
         return sorted(self._documents.keys())
 
+    def get_manifest(self, name: str) -> SkillManifest | None:
+        """返回指定 skill 的 manifest，不存在返回 None。"""
+        self._maybe_refresh()
+        doc = self._documents.get(name)
+        return doc.manifest if doc else None
+
     def refresh(self) -> None:
         """强制全量重新扫描。"""
         self._full_refresh()
