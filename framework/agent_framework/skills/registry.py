@@ -64,6 +64,7 @@ class SkillRegistry:
     # ---- 内部方法 ----
 
     def _maybe_refresh(self) -> None:
+        needs_refresh = False
         for d in self._dirs:
             if not d.exists():
                 continue
@@ -72,16 +73,21 @@ class SkillRegistry:
             except OSError:
                 continue
             if self._dir_mtimes.get(d, 0) < current_mtime:
-                self._scan_dir(d)
-                self._dir_mtimes[d] = current_mtime
+                needs_refresh = True
+                break
+        if needs_refresh:
+            self._full_refresh()
 
     def _full_refresh(self) -> None:
         self._documents = {}
         self._dir_mtimes = {}
         for d in self._dirs:
-            if d.exists():
-                self._scan_dir(d)
-                self._dir_mtimes[d] = d.stat().st_mtime
+            try:
+                if d.exists():
+                    self._scan_dir(d)
+                    self._dir_mtimes[d] = d.stat().st_mtime
+            except OSError:
+                logger.warning("无法访问 skill 目录 %s，跳过", d)
 
     def _scan_dir(self, root: Path) -> None:
         if not root.exists():

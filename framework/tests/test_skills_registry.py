@@ -240,7 +240,7 @@ class TestAutoDiscovery:
         catalog = registry.describe_available()
         assert "new-skill" in catalog
 
-    def test_deleted_skill_not_removed_until_full_refresh(self, tmp_path):
+    def test_deleted_skill_removed_on_auto_refresh(self, tmp_path):
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
         _create_skill(skills_dir, "keep", "保留")
@@ -255,9 +255,6 @@ class TestAutoDiscovery:
         os.utime(skills_dir, (stored_mtime + 1, stored_mtime + 1))
 
         registry.describe_available()
-        assert "remove" in registry.get_names()
-
-        registry.refresh()
         assert "remove" not in registry.get_names()
         assert "keep" in registry.get_names()
 
