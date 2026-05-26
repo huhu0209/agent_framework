@@ -29,6 +29,7 @@ from ..base import (
     LLMAdapterError,
     RateLimitError,
     ServiceUnavailableError,
+    handle_http_error,
 )
 from ..streaming import OpenAIStreamParser, parse_sse_lines
 from ..transform import (
@@ -131,32 +132,7 @@ def _parse_response(data: dict) -> CompletionResult:
 
 
 def _handle_error(response: httpx.Response) -> None:
-    """将 HTTP 错误转换为对应的 LLMAdapterError。"""
-    status = response.status_code
-
-    try:
-        body = response.json()
-        message = body.get("error", {}).get("message", response.text)
-    except Exception:
-        message = response.text
-
-    if status == 429:
-        retry_after = response.headers.get("retry-after")
-        raise RateLimitError(
-            message,
-            provider="deepseek",
-            retry_after=float(retry_after) if retry_after else None,
-        )
-
-    if status >= 500:
-        raise ServiceUnavailableError(
-            message,
-            provider="deepseek",
-            status_code=status,
-        )
-
-    if status >= 400:
-        raise InvalidRequestError(message, provider="deepseek")
+    handle_http_error(response, "deepseek")
 
 
 class DeepSeekProvider(ILLMAdapter):

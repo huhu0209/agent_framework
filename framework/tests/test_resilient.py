@@ -2,6 +2,7 @@
 
 import time
 
+import httpx
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -459,3 +460,45 @@ class TestLifecycle:
             assert isinstance(adapter, ResilientLLMAdapter)
 
         mock_provider.close.assert_called_once()
+
+
+class TestHandleHttpError:
+    """验证公共 handle_http_error 函数。"""
+
+    def test_429_raises_rate_limit(self):
+        from agent_framework.llm.base import handle_http_error, RateLimitError
+
+        response = MagicMock(spec=httpx.Response)
+        response.status_code = 429
+        response.json.return_value = {"error": {"message": "slow down"}}
+        response.headers = {"retry-after": "30"}
+
+        with pytest.raises(RateLimitError) as exc_info:
+            handle_http_error(response, "test")
+
+        assert exc_info.value.retry_after == 30.0
+
+    def test_500_raises_service_unavailable(self):
+        from agent_framework.llm.base import handle_http_error, ServiceUnavailableError
+
+        response = MagicMock(spec=httpx.Response)
+        response.status_code = 503
+        response.json.return_value = {"error": {"message": "overloaded"}}
+        response.headers = {}
+
+        with pytest.raises(ServiceUnavailableError) as exc_info:
+            handle_http_error(response, "test")
+
+        assert exc_info.value.status_code == 503
+
+    def test_400_raises_invalid_request(self):
+        from agent_framework.llm.base import handle_http_error, InvalidRequestError
+
+        response = MagicMock(spec=httpx.Response)
+        response.status_code = 400
+        response.json.side_effect = ValueError("no json")
+        response.text = "bad request"
+        response.headers = {}
+
+        with pytest.raises(InvalidRequestError):
+            handle_http_error(response, "test")

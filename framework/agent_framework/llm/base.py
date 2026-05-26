@@ -168,3 +168,28 @@ class CircuitOpenError(LLMAdapterError):
             status_code=503,
             retryable=False,
         )
+
+
+def handle_http_error(response: "httpx.Response", provider: str) -> None:
+    """将 HTTP 错误响应转为 typed LLM 异常。"""
+    status = response.status_code
+
+    try:
+        body = response.json()
+        message = body.get("error", {}).get("message", response.text)
+    except Exception:
+        message = response.text
+
+    if status == 429:
+        retry_after = response.headers.get("retry-after")
+        raise RateLimitError(
+            message,
+            provider=provider,
+            retry_after=float(retry_after) if retry_after else None,
+        )
+
+    if status >= 500:
+        raise ServiceUnavailableError(message, provider=provider, status_code=status)
+
+    if status >= 400:
+        raise InvalidRequestError(message, provider=provider)

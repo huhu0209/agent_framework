@@ -10,6 +10,7 @@ from .base import (
     LLMAdapterError,
     RateLimitError,
     ServiceUnavailableError,
+    handle_http_error,
 )
 from .resilient import ResilientLLMAdapter, create_adapter
 from .types import (
@@ -45,6 +46,7 @@ __all__ = [
     "ServiceUnavailableError",
     "InvalidRequestError",
     "CircuitOpenError",
+    "handle_http_error",
     # Resilient adapter
     "ResilientLLMAdapter",
     "create_adapter",
