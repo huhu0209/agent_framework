@@ -1,0 +1,169 @@
+"""CommandRouter 测试。"""
+
+from pathlib import Path
+import sys
+
+import pytest
+
+from agent_framework.commands.router import CommandRouter
+from agent_framework.commands.types import CommandSource
+from agent_framework.skills.registry import SkillRegistry
+
+sys.path.insert(0, str(Path(__file__).parent))
+from conftest import create_skill
+
+
+class TestNonCommandInput:
+    def test_plain_text(self):
+        router = CommandRouter()
+        result = router.resolve("hello world")
+        assert result.is_command is False
+        assert result.content == "hello world"
+
+    def test_slash_only(self):
+        router = CommandRouter()
+        result = router.resolve("/")
+        assert result.is_command is False
+        assert result.content == "/"
+
+    def test_double_slash(self):
+        router = CommandRouter()
+        result = router.resolve("//")
+        assert result.is_command is False
+        assert result.content == "//"
+
+    def test_unknown_command_no_registry(self):
+        router = CommandRouter()
+        result = router.resolve("/unknown")
+        assert result.is_command is False
+        assert result.content == "/unknown"
+
+
+class TestHelpBuiltin:
+    def test_help_lists_builtins(self):
+        router = CommandRouter()
+        result = router.resolve("/help")
+        assert result.is_command is True
+        assert result.skill_loaded is False
+        assert result.source == CommandSource.BUILTIN
+        assert "/help" in result.content
+
+    def test_help_lists_user_invocable_skills(self, tmp_path):
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        create_skill(skills_dir, "deploy", "部署应用", "body")
+        create_skill(skills_dir, "internal", "内部", "body", **{"user-invocable": "false"})
+
+        registry = SkillRegistry([skills_dir])
+        router = CommandRouter(skill_registry=registry)
+        result = router.resolve("/help")
+
+        assert result.is_command is True
+        assert "/deploy" in result.content
+        assert "/internal" not in result.content
+
+    def test_help_ignores_args(self):
+        router = CommandRouter()
+        result = router.resolve("/help something")
+        assert result.is_command is True
+        assert "/help" in result.content
+
+
+class TestSkillLoading:
+    def test_existing_skill(self, tmp_path):
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        create_skill(skills_dir, "deploy", "部署", "执行部署: $ARGUMENTS")
+
+        registry = SkillRegistry([skills_dir])
+        router = CommandRouter(skill_registry=registry)
+        result = router.resolve("/deploy --env prod")
+
+        assert result.is_command is True
+        assert result.skill_loaded is True
+        assert result.source == CommandSource.SKILL
+        assert "--env prod" in result.content
+        assert "$ARGUMENTS" not in result.content
+
+    def test_skill_no_args_empty_replacement(self, tmp_path):
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        create_skill(skills_dir, "review", "审查", "参数: [$ARGUMENTS]")
+
+        registry = SkillRegistry([skills_dir])
+        router = CommandRouter(skill_registry=registry)
+        result = router.resolve("/review")
+
+        assert result.is_command is True
+        assert "参数: []" in result.content
+
+    def test_nonexistent_skill_falls_through(self, tmp_path):
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+
+        registry = SkillRegistry([skills_dir])
+        router = CommandRouter(skill_registry=registry)
+        result = router.resolve("/nope")
+
+        assert result.is_command is False
+        assert result.content == "/nope"
+
+    def test_user_invocable_false_falls_through(self, tmp_path):
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        create_skill(skills_dir, "internal", "内部", "body", **{"user-invocable": "false"})
+
+        registry = SkillRegistry([skills_dir])
+        router = CommandRouter(skill_registry=registry)
+        result = router.resolve("/internal")
+
+        assert result.is_command is False
+        assert result.content == "/internal"
+
+
+class TestEdgeCases:
+    def test_builtin_priority_over_skill(self, tmp_path):
+        """同名时 builtin 优先于 skill。"""
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        create_skill(skills_dir, "help", "帮助 skill", "skill help body")
+
+        registry = SkillRegistry([skills_dir])
+        router = CommandRouter(skill_registry=registry)
+        result = router.resolve("/help")
+
+        assert result.is_command is True
+        assert result.source == CommandSource.BUILTIN
+        assert result.skill_loaded is False
+
+    def test_whitespace_in_args(self, tmp_path):
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        create_skill(skills_dir, "search", "搜索", "查找: $ARGUMENTS")
+
+        registry = SkillRegistry([skills_dir])
+        router = CommandRouter(skill_registry=registry)
+        result = router.resolve("/search   hello   world  ")
+
+        assert result.is_command is True
+        assert "hello   world" in result.content
+
+    def test_skill_body_without_arguments_placeholder(self, tmp_path):
+        """skill 正文没有 $ARGUMENTS 时正常加载，不做替换。"""
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        create_skill(skills_dir, "status", "状态", "系统运行正常")
+
+        registry = SkillRegistry([skills_dir])
+        router = CommandRouter(skill_registry=registry)
+        result = router.resolve("/status --verbose")
+
+        assert result.is_command is True
+        assert "系统运行正常" in result.content
+
+    def test_no_registry_unknown_command(self):
+        """无 registry 时，未知命令直接降级。"""
+        router = CommandRouter()
+        result = router.resolve("/deploy")
+        assert result.is_command is False
+        assert result.content == "/deploy"
