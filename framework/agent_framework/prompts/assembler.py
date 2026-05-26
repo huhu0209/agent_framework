@@ -1,12 +1,20 @@
-"""PromptAssembler — 将 AgentProfile 组装成 system prompt。"""
+"""PromptAssembler — 将 AgentProfile + Skills 组装成 system prompt。"""
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from agent_framework.prompts.profiles import AgentProfile, PromptBlock
+
+if TYPE_CHECKING:
+    from agent_framework.skills.registry import SkillRegistry
 
 
 class PromptAssembler:
     """将 AgentProfile 的各模块组装成有序的 PromptBlock 列表或 system prompt 字符串。"""
+
+    def __init__(self, skill_registry: SkillRegistry | None = None) -> None:
+        self._skill_registry = skill_registry
 
     def assemble(self, profile: AgentProfile) -> list[PromptBlock]:
         """组装 profile 为 PromptBlock 列表。"""
@@ -46,6 +54,17 @@ class PromptAssembler:
                 source="injected",
                 stability="semi_static",
                 cache_breakpoint=True,
+            ))
+
+        # SKILLS block — 在 TOOL_GUIDANCE 之前
+        if self._skill_registry is not None:
+            catalog = self._skill_registry.describe_available()
+            blocks.append(PromptBlock(
+                name="SKILLS",
+                content=f"可用 Skills（按需调用 load_skill 加载完整指令）：\n{catalog}",
+                source="auto_generated",
+                stability="static",
+                cache_breakpoint=False,
             ))
 
         if profile.tool_guidance:
