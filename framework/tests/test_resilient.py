@@ -431,3 +431,31 @@ class TestStreamRetry:
 
         assert call_count == 2
         assert len(collected) == 1
+
+
+class TestLifecycle:
+    """验证 ResilientLLMAdapter 的生命周期管理。"""
+
+    @pytest.mark.asyncio
+    async def test_close_delegates_to_provider(self):
+        mock_provider = AsyncMock(spec=ILLMAdapter)
+        mock_provider.get_provider_info.return_value = ProviderInfo(
+            name="test", base_url="", supported_features=[], default_model="m",
+        )
+
+        adapter = ResilientLLMAdapter(provider=mock_provider)
+        await adapter.close()
+
+        mock_provider.close.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_context_manager(self):
+        mock_provider = AsyncMock(spec=ILLMAdapter)
+        mock_provider.get_provider_info.return_value = ProviderInfo(
+            name="test", base_url="", supported_features=[], default_model="m",
+        )
+
+        async with ResilientLLMAdapter(provider=mock_provider) as adapter:
+            assert isinstance(adapter, ResilientLLMAdapter)
+
+        mock_provider.close.assert_called_once()

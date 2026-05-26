@@ -69,6 +69,16 @@ class ILLMAdapter(ABC):
         应该是轻量级操作（如发一个短请求或检查连接）。
         """
 
+    @abstractmethod
+    async def close(self) -> None:
+        """关闭底层连接（httpx client 等）。"""
+
+    async def __aenter__(self) -> ILLMAdapter:
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        await self.close()
+
 
 class LLMAdapterError(Exception):
     """LLM Adapter 异常基类。"""

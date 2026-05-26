@@ -119,6 +119,15 @@ class ResilientLLMAdapter(ILLMAdapter):
             self._breaker.record_failure()
             raise
 
+    async def close(self) -> None:
+        await self._provider.close()
+
+    async def __aenter__(self) -> ResilientLLMAdapter:
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        await self.close()
+
 
 # ============================================================
 # 工厂函数
