@@ -16,11 +16,8 @@ async def _handle_load_skill(args: dict, ctx: ToolUseContext) -> ToolResult:
     if not name:
         return ToolResult(content="请指定 skill 名称", is_error=True)
 
-    full_text = registry.load_full_text(name)
-    if full_text.startswith("错误："):
-        return ToolResult(content=full_text, is_error=True)
-
-    return ToolResult(content=full_text)
+    result = registry.load_full_text(name)
+    return ToolResult(content=result.content, is_error=result.is_error)
 
 
 def create_load_skill_spec() -> ToolSpec:

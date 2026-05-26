@@ -56,7 +56,7 @@ class TestLoadSkillHandler:
 
         result = await spec.handler({"name": "nonexistent"}, ctx)
         assert result.is_error
-        assert "错误" in result.content
+        assert "未知" in result.content
 
     async def test_load_empty_name(self, tmp_path):
         registry = _make_registry_with_skill(tmp_path)

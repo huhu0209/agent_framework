@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from xml.sax.saxutils import quoteattr
 
 from agent_framework.skills.manifest import (
     SkillDocument,
+    SkillLoadResult,
     SkillManifest,
     _parse_bool,
     _parse_list,
@@ -40,14 +42,17 @@ class SkillRegistry:
             lines.append(f"- {name}: {doc.manifest.description}")
         return "\n".join(lines)
 
-    def load_full_text(self, name: str) -> str:
+    def load_full_text(self, name: str) -> SkillLoadResult:
         """L2: 完整 skill 正文 + references 索引。自动检查更新。"""
         self._maybe_refresh()
         doc = self._documents.get(name)
         if doc is None:
             known = ", ".join(sorted(self._documents)) or "(无)"
-            return f"错误：未知 skill '{name}'。可用 skills: {known}"
-        return self._format_skill_body(doc)
+            return SkillLoadResult(
+                content=f"未知 skill '{name}'。可用 skills: {known}",
+                is_error=True,
+            )
+        return SkillLoadResult(content=self._format_skill_body(doc))
 
     def get_names(self) -> list[str]:
         """返回所有已注册 skill 名称。"""
@@ -60,6 +65,7 @@ class SkillRegistry:
     # ---- 内部方法 ----
 
     def _maybe_refresh(self) -> None:
+        needs_refresh = False
         for d in self._dirs:
             if not d.exists():
                 continue
@@ -68,16 +74,21 @@ class SkillRegistry:
             except OSError:
                 continue
             if self._dir_mtimes.get(d, 0) < current_mtime:
-                self._scan_dir(d)
-                self._dir_mtimes[d] = current_mtime
+                needs_refresh = True
+                break
+        if needs_refresh:
+            self._full_refresh()
 
     def _full_refresh(self) -> None:
         self._documents = {}
         self._dir_mtimes = {}
         for d in self._dirs:
-            if d.exists():
-                self._scan_dir(d)
-                self._dir_mtimes[d] = d.stat().st_mtime
+            try:
+                if d.exists():
+                    self._scan_dir(d)
+                    self._dir_mtimes[d] = d.stat().st_mtime
+            except OSError:
+                logger.warning("无法访问 skill 目录 %s，跳过", d)
 
     def _scan_dir(self, root: Path) -> None:
         if not root.exists():
@@ -121,24 +132,29 @@ class SkillRegistry:
 
     def _format_skill_body(self, doc: SkillDocument) -> str:
         parts = [
-            f'<skill name="{doc.manifest.name}">',
+            f"<skill name={quoteattr(doc.manifest.name)}>",
             f"描述：{doc.manifest.description}",
             doc.body,
             "</skill>",
         ]
-        refs = self._list_references(doc.manifest.path)
+        refs, total = self._list_references(doc.manifest.path)
         if refs:
             parts.append("\n此 skill 包含以下参考文档，可用 read_file 按需加载：")
             for rel_path in refs:
                 parts.append(f"- references/{rel_path}")
+            remaining = total - len(refs)
+            if remaining > 0:
+                parts.append(f"- ... 还有 {remaining} 个文件未显示")
         return "\n".join(parts)
 
-    def _list_references(self, skill_dir: Path) -> list[str]:
+    def _list_references(self, skill_dir: Path) -> tuple[list[str], int]:
+        """返回 (文件列表最多10个, 总数)。"""
         ref_dir = skill_dir / "references"
         if not ref_dir.is_dir():
-            return []
-        files = []
-        for f in sorted(ref_dir.rglob("*")):
-            if f.is_file():
-                files.append(str(f.relative_to(ref_dir)))
-        return files[:10]
+            return [], 0
+        files = sorted(
+            str(f.relative_to(ref_dir))
+            for f in ref_dir.rglob("*")
+            if f.is_file()
+        )
+        return files[:10], len(files)

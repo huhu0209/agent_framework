@@ -2,42 +2,23 @@
 
 import os
 import shutil
+import sys
 from pathlib import Path
 
 import pytest
 
 from agent_framework.skills.registry import SkillRegistry
 
-
-def _create_skill(
-    skills_dir: Path,
-    name: str,
-    description: str,
-    body: str = "",
-    **meta_extra: str,
-) -> Path:
-    """在 skills_dir/name/ 下创建 SKILL.md。"""
-    skill_path = skills_dir / name
-    skill_path.mkdir(parents=True, exist_ok=True)
-
-    meta_lines = ["---"]
-    meta_lines.append(f"name: {name}")
-    meta_lines.append(f"description: {description}")
-    for k, v in meta_extra.items():
-        meta_lines.append(f"{k}: {v}")
-    meta_lines.append("---")
-
-    content = "\n".join(meta_lines) + "\n" + body
-    skill_file = skill_path / "SKILL.md"
-    skill_file.write_text(content, encoding="utf-8")
-    return skill_file
+# conftest.py 同目录，加入 path 以便 import
+sys.path.insert(0, str(Path(__file__).parent))
+from conftest import create_skill  # noqa: E402
 
 
 class TestSkillRegistryScan:
     def test_scan_single_skill(self, tmp_path):
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
-        _create_skill(skills_dir, "deploy", "部署应用", "# 部署\n步骤 1")
+        create_skill(skills_dir, "deploy", "部署应用", "# 部署\n步骤 1")
 
         registry = SkillRegistry([skills_dir])
         assert registry.get_names() == ["deploy"]
@@ -45,8 +26,8 @@ class TestSkillRegistryScan:
     def test_scan_multiple_skills(self, tmp_path):
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
-        _create_skill(skills_dir, "deploy", "部署")
-        _create_skill(skills_dir, "review", "审查")
+        create_skill(skills_dir, "deploy", "部署")
+        create_skill(skills_dir, "review", "审查")
 
         registry = SkillRegistry([skills_dir])
         assert registry.get_names() == ["deploy", "review"]
@@ -68,12 +49,12 @@ class TestSkillRegistryScan:
         personal.mkdir()
         project.mkdir()
 
-        _create_skill(personal, "deploy", "个人版部署")
-        _create_skill(project, "deploy", "项目版部署")
+        create_skill(personal, "deploy", "个人版部署")
+        create_skill(project, "deploy", "项目版部署")
 
         registry = SkillRegistry([personal, project])
         assert len(registry.get_names()) == 1
-        assert "个人版部署" in registry.load_full_text("deploy")
+        assert "个人版部署" in registry.load_full_text("deploy").content
 
     def test_missing_name_uses_directory_name(self, tmp_path, caplog):
         import logging
@@ -115,7 +96,7 @@ class TestSkillRegistryScan:
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
 
-        _create_skill(skills_dir, "good", "正常 skill")
+        create_skill(skills_dir, "good", "正常 skill")
 
         bad_dir = skills_dir / "bad"
         bad_dir.mkdir()
@@ -132,7 +113,7 @@ class TestSkillRegistryScan:
 
     def test_nested_skill_directory(self, tmp_path):
         skills_dir = tmp_path / "skills"
-        _create_skill(skills_dir / "category", "deploy", "部署")
+        create_skill(skills_dir / "category", "deploy", "部署")
 
         registry = SkillRegistry([skills_dir])
         assert "deploy" in registry.get_names()
@@ -142,8 +123,8 @@ class TestDescribeAvailable:
     def test_format(self, tmp_path):
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
-        _create_skill(skills_dir, "deploy", "部署应用")
-        _create_skill(skills_dir, "review", "代码审查")
+        create_skill(skills_dir, "deploy", "部署应用")
+        create_skill(skills_dir, "review", "代码审查")
 
         registry = SkillRegistry([skills_dir])
         catalog = registry.describe_available()
@@ -163,29 +144,30 @@ class TestLoadFullText:
     def test_existing_skill_returns_wrapped_body(self, tmp_path):
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
-        _create_skill(skills_dir, "deploy", "部署", "# 部署流程\n步骤 1\n步骤 2")
+        create_skill(skills_dir, "deploy", "部署", "# 部署流程\n步骤 1\n步骤 2")
 
         registry = SkillRegistry([skills_dir])
         result = registry.load_full_text("deploy")
 
-        assert result.startswith('<skill name="deploy">')
-        assert "# 部署流程" in result
-        assert result.strip().endswith("</skill>")
+        assert result.is_error is False
+        assert result.content.startswith('<skill name="deploy">')
+        assert "# 部署流程" in result.content
+        assert result.content.strip().endswith("</skill>")
 
     def test_unknown_skill_returns_error_with_suggestions(self, tmp_path):
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
-        _create_skill(skills_dir, "deploy", "部署")
+        create_skill(skills_dir, "deploy", "部署")
 
         registry = SkillRegistry([skills_dir])
         result = registry.load_full_text("nonexistent")
 
-        assert result.startswith("错误：")
-        assert "deploy" in result
+        assert result.is_error is True
+        assert "deploy" in result.content
 
     def test_with_references(self, tmp_path):
         skills_dir = tmp_path / "skills"
-        _create_skill(skills_dir, "deploy", "部署", "body")
+        create_skill(skills_dir, "deploy", "部署", "body")
 
         ref_dir = skills_dir / "deploy" / "references"
         ref_dir.mkdir()
@@ -195,22 +177,37 @@ class TestLoadFullText:
         registry = SkillRegistry([skills_dir])
         result = registry.load_full_text("deploy")
 
-        assert "references/cli.md" in result
-        assert "references/env.md" in result
+        assert "references/cli.md" in result.content
+        assert "references/env.md" in result.content
 
     def test_no_references_only_body(self, tmp_path):
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
-        _create_skill(skills_dir, "deploy", "部署", "body text")
+        create_skill(skills_dir, "deploy", "部署", "body text")
 
         registry = SkillRegistry([skills_dir])
         result = registry.load_full_text("deploy")
 
-        assert "参考文档" not in result
+        assert "参考文档" not in result.content
+
+    def test_skill_name_with_special_chars_escaped(self, tmp_path):
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        skill_path = skills_dir / 'weird"skill'
+        skill_path.mkdir()
+        (skill_path / "SKILL.md").write_text(
+            '---\nname: "weird\\"skill"\ndescription: test\n---\nbody',
+            encoding="utf-8",
+        )
+        registry = SkillRegistry([skills_dir])
+        result = registry.load_full_text('weird"skill')
+        assert result.is_error is False
+        # quoteattr wraps in single quotes when value contains double quote
+        assert "name='weird\"skill'" in result.content
 
     def test_references_truncated_at_10(self, tmp_path):
         skills_dir = tmp_path / "skills"
-        _create_skill(skills_dir, "big", "大 skill", "body")
+        create_skill(skills_dir, "big", "大 skill", "body")
 
         ref_dir = skills_dir / "big" / "references"
         ref_dir.mkdir()
@@ -220,7 +217,8 @@ class TestLoadFullText:
         registry = SkillRegistry([skills_dir])
         result = registry.load_full_text("big")
 
-        assert result.count("references/") == 10
+        assert result.content.count("references/") == 10
+        assert "还有 5 个文件未显示" in result.content
 
 
 class TestAutoDiscovery:
@@ -231,7 +229,7 @@ class TestAutoDiscovery:
         registry = SkillRegistry([skills_dir])
         assert registry.get_names() == []
 
-        _create_skill(skills_dir, "new-skill", "新增的 skill")
+        create_skill(skills_dir, "new-skill", "新增的 skill")
 
         stored_mtime = registry._dir_mtimes.get(skills_dir, 0)
         os.utime(skills_dir, (stored_mtime + 1, stored_mtime + 1))
@@ -239,11 +237,11 @@ class TestAutoDiscovery:
         catalog = registry.describe_available()
         assert "new-skill" in catalog
 
-    def test_deleted_skill_not_removed_until_full_refresh(self, tmp_path):
+    def test_deleted_skill_removed_on_auto_refresh(self, tmp_path):
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
-        _create_skill(skills_dir, "keep", "保留")
-        _create_skill(skills_dir, "remove", "待删除")
+        create_skill(skills_dir, "keep", "保留")
+        create_skill(skills_dir, "remove", "待删除")
 
         registry = SkillRegistry([skills_dir])
         assert "remove" in registry.get_names()
@@ -254,21 +252,18 @@ class TestAutoDiscovery:
         os.utime(skills_dir, (stored_mtime + 1, stored_mtime + 1))
 
         registry.describe_available()
-        assert "remove" in registry.get_names()
-
-        registry.refresh()
         assert "remove" not in registry.get_names()
         assert "keep" in registry.get_names()
 
     def test_forced_refresh(self, tmp_path):
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
-        _create_skill(skills_dir, "initial", "初始")
+        create_skill(skills_dir, "initial", "初始")
 
         registry = SkillRegistry([skills_dir])
         assert registry.get_names() == ["initial"]
 
-        _create_skill(skills_dir, "added", "新增")
+        create_skill(skills_dir, "added", "新增")
 
         registry.refresh()
         assert "added" in registry.get_names()

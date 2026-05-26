@@ -7,12 +7,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from agent_framework.memory.frontmatter import parse_frontmatter
+from agent_framework.memory.frontmatter import parse_frontmatter_lines
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True)
 class SkillManifest:
     """SKILL.md frontmatter 解析结果。"""
 
@@ -22,15 +22,23 @@ class SkillManifest:
     user_invocable: bool = True
     allowed_tools: list[str] | None = None
     model: str | None = None
-    hooks: dict | None = None
+    hooks: dict[str, Any] | None = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class SkillDocument:
     """完整 Skill 文档 = manifest + body。"""
 
     manifest: SkillManifest
     body: str
+
+
+@dataclass(frozen=True)
+class SkillLoadResult:
+    """load_full_text 返回类型，显式区分成功与错误。"""
+
+    content: str
+    is_error: bool = False
 
 
 def _parse_skill_document(text: str) -> tuple[dict[str, str], str]:
@@ -52,16 +60,20 @@ def _parse_skill_document(text: str) -> tuple[dict[str, str], str]:
     if end_idx is None:
         return {}, text
 
-    frontmatter_text = "\n".join(lines[: end_idx + 1])
     body = "\n".join(lines[end_idx + 1 :]).strip()
-    meta = parse_frontmatter(frontmatter_text)
+    meta = parse_frontmatter_lines(lines[1:end_idx])
     return meta, body
 
 
 def _parse_bool(value: str | None, default: bool) -> bool:
     if value is None:
         return default
-    return value.strip().lower() in ("true", "yes", "1")
+    normalized = value.strip().lower()
+    if normalized in ("true", "yes", "1"):
+        return True
+    if normalized in ("false", "no", "0"):
+        return False
+    return default
 
 
 def _parse_list(value: str | None) -> list[str] | None:
