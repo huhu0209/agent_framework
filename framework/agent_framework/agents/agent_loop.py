@@ -40,6 +40,8 @@ from agent_framework.tools.context.token_counter import (
     estimate_with_usage,
     get_effective_window,
 )
+from agent_framework.skills.registry import SkillRegistry
+from agent_framework.skills.tool import create_load_skill_spec
 from agent_framework.tools.router import ToolRouter
 from agent_framework.tools.types import ToolCall, ToolUseContext
 
@@ -77,6 +79,7 @@ class AgentLoop:
         compact_trigger_pct: float = 0.75,
         memory_flush_enabled: bool = False,
         semantic_extractor: SemanticExtractor | None = None,
+        skill_dirs: list[Path] | None = None,
     ) -> None:
         self.adapter = adapter
         self.model = model
@@ -92,7 +95,16 @@ class AgentLoop:
         self._last_usage: UsageStats | None = None
         self._messages_at_last_call = 0
         self.profile = profile
-        self._assembler = PromptAssembler()
+
+        # Skills 集成
+        self._skill_registry = SkillRegistry(skill_dirs) if skill_dirs else None
+        self._assembler = PromptAssembler(skill_registry=self._skill_registry)
+
+        if self._skill_registry is not None:
+            spec = create_load_skill_spec()
+            self.router.registry.register(spec)
+            self.ctx.extra["skill_registry"] = self._skill_registry
+
         # Integration hook: enable episodic memory flush at end of conversation.
         self._memory_flush_enabled = memory_flush_enabled
         # Integration hook: extract semantic memories from conversation.
@@ -100,6 +112,12 @@ class AgentLoop:
 
         if self.profile is not None:
             self._system_prompt_text = self._assembler.render(self.profile)
+        elif self._skill_registry is not None:
+            catalog = self._skill_registry.describe_available()
+            self._system_prompt_text = (
+                f"{system_prompt}\n\n"
+                f"可用 Skills（按需调用 load_skill 加载完整指令）：\n{catalog}"
+            )
         else:
             self._system_prompt_text = system_prompt
 

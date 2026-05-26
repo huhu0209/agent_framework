@@ -433,3 +433,54 @@ async def test_semantic_extractor_param_accepted():
         semantic_extractor=extractor,
     )
     assert loop._semantic_extractor is extractor
+
+
+# === Skills 集成测试 ===
+
+
+from pathlib import Path
+from agent_framework.tools.registry import ToolRegistry
+from agent_framework.skills.tool import create_load_skill_spec
+
+
+class TestAgentLoopSkills:
+    def test_skill_dirs_creates_registry(self, tmp_path):
+        """传入 skill_dirs 时自动创建 SkillRegistry 并注册 load_skill。"""
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        skill_path = skills_dir / "test-skill"
+        skill_path.mkdir()
+        (skill_path / "SKILL.md").write_text(
+            "---\nname: test-skill\ndescription: 测试\n---\nbody", encoding="utf-8"
+        )
+
+        adapter = _make_mock_adapter()
+        router = ToolRouter(registry=ToolRegistry())
+        ctx = ToolUseContext()
+
+        loop = AgentLoop(
+            adapter=adapter,
+            model="test",
+            router=router,
+            ctx=ctx,
+            skill_dirs=[skills_dir],
+        )
+
+        assert router.registry.get("load_skill") is not None
+        assert "skill_registry" in ctx.extra
+        assert "test-skill" in loop._system_prompt_text
+
+    def test_no_skill_dirs_no_load_skill(self):
+        """不传 skill_dirs 时 load_skill 不注册。"""
+        adapter = _make_mock_adapter()
+        router = ToolRouter(registry=ToolRegistry())
+        ctx = ToolUseContext()
+
+        loop = AgentLoop(
+            adapter=adapter,
+            model="test",
+            router=router,
+            ctx=ctx,
+        )
+
+        assert router.registry.get("load_skill") is None
