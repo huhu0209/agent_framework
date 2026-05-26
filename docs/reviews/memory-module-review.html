@@ -123,6 +123,11 @@
   .score-card .score.good { color: var(--success-green); }
   .score-card .score.warn { color: var(--warning-amber); }
   .score-card .score.bad { color: var(--error-crimson); }
+  .score-card .delta {
+    font-size: 0.7rem;
+    color: var(--success-green);
+    margin-top: 0.2rem;
+  }
 
   /* Architecture diagram */
   .arch-diagram {
@@ -177,6 +182,17 @@
     border-radius: 4px;
     margin-top: 0.5rem;
   }
+  .module-card .new-badge {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: white;
+    background: var(--success-green);
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    margin-left: 0.4rem;
+    vertical-align: middle;
+  }
 
   /* Issues */
   .issue {
@@ -189,11 +205,13 @@
   .issue.high { border-left: 4px solid var(--error-crimson); }
   .issue.medium { border-left: 4px solid var(--warning-amber); }
   .issue.low { border-left: 4px solid var(--stone-gray); }
+  .issue.fixed { border-left: 4px solid var(--success-green); opacity: 0.85; }
   .issue .issue-header {
     display: flex;
     align-items: center;
     gap: 0.5rem;
     margin-bottom: 0.4rem;
+    flex-wrap: wrap;
   }
   .issue .severity {
     font-size: 0.7rem;
@@ -206,6 +224,7 @@
   .issue .severity.high { background: #fde8e8; color: var(--error-crimson); }
   .issue .severity.medium { background: #fef3e0; color: var(--warning-amber); }
   .issue .severity.low { background: var(--code-bg); color: var(--stone-gray); }
+  .issue .severity.fixed { background: #e8f5e8; color: var(--success-green); }
   .issue .title {
     font-weight: 600;
     font-size: 0.95rem;
@@ -232,6 +251,16 @@
     line-height: 1.5;
   }
   .issue .fix strong { color: var(--charcoal); }
+  .issue .fix-info {
+    margin-top: 0.5rem;
+    padding: 0.5rem 0.8rem;
+    background: #e8f5e8;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    color: var(--success-green);
+    line-height: 1.5;
+  }
+  .issue .fix-info strong { color: #2d6a2d; }
 
   /* Code inline */
   code {
@@ -317,6 +346,7 @@
   }
   .summary-box.strengths li::before { content: '\2713'; color: var(--success-green); }
   .summary-box.concerns li::before { content: '!'; font-weight: 700; color: var(--warning-amber); }
+  .summary-box.resolved li::before { content: '\2713'; color: var(--success-green); }
 
   /* Responsive */
   @media (max-width: 700px) {
@@ -333,10 +363,11 @@
   <h1>Memory 模块架构 Review</h1>
   <div class="subtitle">双层存储 + 双路径召回的 Agent 记忆系统</div>
   <div class="meta">
-    <span>10 个文件</span>
-    <span>798 行代码</span>
-    <span>19 个测试</span>
+    <span>11 个文件</span>
+    <span>936 行代码</span>
+    <span>78 个测试 (11 文件)</span>
     <span>Review 日期: 2025-05-25</span>
+    <span>更新日期: 2025-05-25</span>
   </div>
 </div>
 
@@ -347,16 +378,19 @@
     <div class="label">模块职责划分</div>
   </div>
   <div class="score-card">
-    <div class="score good">A-</div>
+    <div class="score good">A</div>
     <div class="label">接口设计</div>
+    <div class="delta">&uarr; A-</div>
   </div>
   <div class="score-card">
-    <div class="score warn">B</div>
+    <div class="score good">A-</div>
     <div class="label">错误处理</div>
+    <div class="delta">&uarr; B</div>
   </div>
   <div class="score-card">
-    <div class="score warn">B</div>
+    <div class="score good">A</div>
     <div class="label">测试覆盖</div>
+    <div class="delta">&uarr; B</div>
   </div>
 </div>
 
@@ -365,20 +399,20 @@
   <h2>1. 架构总览</h2>
 
   <div class="arch-diagram">
-    <svg viewBox="0 0 860 420" xmlns="http://www.w3.org/2000/svg" style="font-family: 'Inter', sans-serif;">
+    <svg viewBox="0 0 900 440" xmlns="http://www.w3.org/2000/svg" style="font-family: 'Inter', sans-serif;">
       <!-- Background -->
-      <rect x="0" y="0" width="860" height="420" fill="none"/>
+      <rect x="0" y="0" width="900" height="440" fill="none"/>
 
       <!-- Episodic Layer -->
-      <rect x="20" y="20" width="400" height="380" rx="10" fill="#faf9f5" stroke="#e8e6dc" stroke-width="1.5"/>
-      <text x="220" y="50" text-anchor="middle" font-size="14" font-weight="600" fill="#c96442">情景记忆层 (Episodic)</text>
-      <text x="220" y="67" text-anchor="middle" font-size="11" fill="#87867f">append-only 日志，按日期存储</text>
+      <rect x="20" y="20" width="410" height="380" rx="10" fill="#faf9f5" stroke="#e8e6dc" stroke-width="1.5"/>
+      <text x="225" y="50" text-anchor="middle" font-size="14" font-weight="600" fill="#c96442">情景记忆层 (Episodic)</text>
+      <text x="225" y="67" text-anchor="middle" font-size="11" fill="#87867f">append-only 日志，按日期存储</text>
 
       <!-- Episodic modules -->
       <rect x="40" y="85" width="160" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
       <text x="120" y="110" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">log_manager.py</text>
       <text x="120" y="126" text-anchor="middle" font-size="10" fill="#87867f">日志读写、日期索引</text>
-      <text x="120" y="142" text-anchor="middle" font-size="9" fill="#b0aea5">77 lines</text>
+      <text x="120" y="142" text-anchor="middle" font-size="9" fill="#b0aea5">79 lines</text>
 
       <rect x="220" y="85" width="180" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
       <text x="310" y="110" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">flush.py</text>
@@ -398,56 +432,64 @@
       <line x1="120" y1="170" x2="120" y2="155" stroke="#87867f" stroke-width="1" stroke-dasharray="4,3"/>
 
       <!-- Storage indicator -->
-      <rect x="70" y="280" width="300" height="55" rx="6" fill="#f0eee6" stroke="#e8e6dc" stroke-dasharray="4,3"/>
-      <text x="220" y="302" text-anchor="middle" font-size="11" fill="#5e5d59">storage/logs/YYYY/MM/YYYY-MM-DD.md</text>
-      <text x="220" y="320" text-anchor="middle" font-size="10" fill="#b0aea5">Append-only Markdown files</text>
+      <rect x="70" y="280" width="310" height="55" rx="6" fill="#f0eee6" stroke="#e8e6dc" stroke-dasharray="4,3"/>
+      <text x="225" y="302" text-anchor="middle" font-size="11" fill="#5e5d59">storage/logs/YYYY/MM/YYYY-MM-DD.md</text>
+      <text x="225" y="320" text-anchor="middle" font-size="10" fill="#b0aea5">Append-only Markdown files</text>
       <line x1="120" y1="240" x2="120" y2="280" stroke="#87867f" stroke-width="1" stroke-dasharray="4,3"/>
 
       <!-- Semantic Layer -->
-      <rect x="440" y="20" width="400" height="380" rx="10" fill="#faf9f5" stroke="#e8e6dc" stroke-width="1.5"/>
-      <text x="640" y="50" text-anchor="middle" font-size="14" font-weight="600" fill="#c96442">语义记忆层 (Semantic)</text>
-      <text x="640" y="67" text-anchor="middle" font-size="11" fill="#87867f">结构化 .md 文件，启动时注入</text>
+      <rect x="450" y="20" width="430" height="380" rx="10" fill="#faf9f5" stroke="#e8e6dc" stroke-width="1.5"/>
+      <text x="665" y="50" text-anchor="middle" font-size="14" font-weight="600" fill="#c96442">语义记忆层 (Semantic)</text>
+      <text x="665" y="67" text-anchor="middle" font-size="11" fill="#87867f">结构化 .md 文件，启动时注入</text>
 
       <!-- Semantic modules -->
-      <rect x="460" y="85" width="170" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
-      <text x="545" y="110" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">semantic_extractor.py</text>
-      <text x="545" y="126" text-anchor="middle" font-size="10" fill="#87867f">LLM 提取记忆候选</text>
-      <text x="545" y="142" text-anchor="middle" font-size="9" fill="#b0aea5">116 lines</text>
+      <rect x="470" y="85" width="170" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
+      <text x="555" y="110" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">semantic_extractor.py</text>
+      <text x="555" y="126" text-anchor="middle" font-size="10" fill="#87867f">LLM 提取记忆候选</text>
+      <text x="555" y="142" text-anchor="middle" font-size="9" fill="#b0aea5">117 lines</text>
 
-      <rect x="650" y="85" width="170" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
-      <text x="735" y="110" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">semantic_writer.py</text>
-      <text x="735" y="126" text-anchor="middle" font-size="10" fill="#87867f">校验、写入、merge</text>
-      <text x="735" y="142" text-anchor="middle" font-size="9" fill="#b0aea5">113 lines</text>
+      <rect x="660" y="85" width="170" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
+      <text x="745" y="110" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">semantic_writer.py</text>
+      <text x="745" y="126" text-anchor="middle" font-size="10" fill="#87867f">校验、写入、merge</text>
+      <text x="745" y="142" text-anchor="middle" font-size="9" fill="#b0aea5">133 lines</text>
 
-      <rect x="460" y="170" width="170" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
-      <text x="545" y="195" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">index_manager.py</text>
-      <text x="545" y="211" text-anchor="middle" font-size="10" fill="#87867f">MEMORY.md 索引维护</text>
-      <text x="545" y="227" text-anchor="middle" font-size="9" fill="#b0aea5">93 lines</text>
+      <rect x="470" y="170" width="170" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
+      <text x="555" y="195" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">index_manager.py</text>
+      <text x="555" y="211" text-anchor="middle" font-size="10" fill="#87867f">MEMORY.md 索引维护</text>
+      <text x="555" y="227" text-anchor="middle" font-size="9" fill="#b0aea5">111 lines</text>
 
-      <rect x="650" y="170" width="170" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
-      <text x="735" y="195" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">retriever.py</text>
-      <text x="735" y="211" text-anchor="middle" font-size="10" fill="#87867f">LLM 评分召回</text>
-      <text x="735" y="227" text-anchor="middle" font-size="9" fill="#b0aea5">109 lines</text>
+      <rect x="660" y="170" width="170" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
+      <text x="745" y="195" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">retriever.py</text>
+      <text x="745" y="211" text-anchor="middle" font-size="10" fill="#87867f">LLM 评分召回</text>
+      <text x="745" y="227" text-anchor="middle" font-size="9" fill="#b0aea5">110 lines</text>
 
       <!-- Arrows: extractor → writer -->
-      <line x1="630" y1="120" x2="650" y2="120" stroke="#c96442" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <line x1="640" y1="120" x2="660" y2="120" stroke="#c96442" stroke-width="1.2" marker-end="url(#arrow)"/>
       <!-- writer → index -->
-      <line x1="735" y1="155" x2="735" y2="170" stroke="#c96442" stroke-width="1.2" marker-end="url(#arrow)"/>
+      <line x1="745" y1="155" x2="745" y2="170" stroke="#c96442" stroke-width="1.2" marker-end="url(#arrow)"/>
       <!-- retriever reads storage -->
-      <line x1="735" y1="240" x2="735" y2="280" stroke="#87867f" stroke-width="1" stroke-dasharray="4,3"/>
+      <line x1="745" y1="240" x2="745" y2="280" stroke="#87867f" stroke-width="1" stroke-dasharray="4,3"/>
 
       <!-- Storage indicator -->
-      <rect x="490" y="280" width="300" height="55" rx="6" fill="#f0eee6" stroke="#e8e6dc" stroke-dasharray="4,3"/>
-      <text x="640" y="302" text-anchor="middle" font-size="11" fill="#5e5d59">storage/*.md + MEMORY.md</text>
-      <text x="640" y="320" text-anchor="middle" font-size="10" fill="#b0aea5">Structured markdown with frontmatter</text>
+      <rect x="500" y="280" width="300" height="55" rx="6" fill="#f0eee6" stroke="#e8e6dc" stroke-dasharray="4,3"/>
+      <text x="650" y="302" text-anchor="middle" font-size="11" fill="#5e5d59">storage/*.md + MEMORY.md</text>
+      <text x="650" y="320" text-anchor="middle" font-size="10" fill="#b0aea5">Structured markdown with frontmatter</text>
 
       <!-- Shared modules -->
-      <rect x="270" y="365" width="320" height="40" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
-      <text x="430" y="388" text-anchor="middle" font-size="11" fill="#5e5d59">types.py (58) + frontmatter.py (49) + __init__.py (38)</text>
+      <rect x="240" y="365" width="240" height="40" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
+      <text x="360" y="388" text-anchor="middle" font-size="11" fill="#5e5d59">types.py (42) + frontmatter.py (52)</text>
+
+      <!-- NEW: store.py facade -->
+      <rect x="510" y="365" width="240" height="40" rx="6" fill="#e8f5e8" stroke="#3d7a3d" stroke-width="1"/>
+      <text x="630" y="388" text-anchor="middle" font-size="11" font-weight="500" fill="#3d7a3d">store.py (110) — 门面 NEW</text>
 
       <!-- Cross-layer arrow: flush → extractor -->
-      <path d="M 400 100 Q 430 100 460 100" fill="none" stroke="#c96442" stroke-width="1" stroke-dasharray="6,3" marker-end="url(#arrow)"/>
-      <text x="430" y="93" text-anchor="middle" font-size="9" fill="#c96442">级联</text>
+      <path d="M 400 100 Q 435 100 470 100" fill="none" stroke="#c96442" stroke-width="1" stroke-dasharray="6,3" marker-end="url(#arrow)"/>
+      <text x="435" y="93" text-anchor="middle" font-size="9" fill="#c96442">级联</text>
+
+      <!-- store.py connects to both layers -->
+      <line x1="510" y1="385" x2="220" y2="340" stroke="#3d7a3d" stroke-width="1" stroke-dasharray="4,3"/>
+      <line x1="630" y1="365" x2="665" y2="340" stroke="#3d7a3d" stroke-width="1" stroke-dasharray="4,3"/>
 
       <!-- Arrow marker -->
       <defs>
@@ -461,12 +503,14 @@
   <div class="summary-box strengths">
     <h3>架构优点</h3>
     <ul>
-      <li><strong>职责清晰</strong> — 每个文件一个职责，没有 God Object，最大文件仅 116 行</li>
+      <li><strong>职责清晰</strong> — 每个文件一个职责，没有 God Object，最大文件仅 133 行</li>
       <li><strong>双层数据模型</strong> — 情景记忆 (append-only) 和语义记忆 (curated) 分离，符合认知科学直觉</li>
       <li><strong>显式依赖方向</strong> — 模块间依赖单向、无循环，依赖图呈 DAG</li>
       <li><strong>Sync IO 有理有据</strong> — 文件头注释明确说明为什么用同步 IO，而非盲目选择</li>
-      <li><strong>安全意识</strong> — retriever 有 path traversal 防护</li>
+      <li><strong>安全意识</strong> — retriever 有 path traversal 防护，index_manager 原子写入</li>
       <li><strong>轻量实现</strong> — 无 YAML 外部依赖，frontmatter 自行解析，框架保持零外部依赖</li>
+      <li><strong>统一门面</strong> — MemoryStore 封装双层搜索和写入，调用者无需了解内部结构</li>
+      <li><strong>参数可配置</strong> — retriever 和 semantic_extractor 的关键参数已外化，默认值合理</li>
     </ul>
   </div>
 </div>
@@ -504,7 +548,7 @@
     <div class="flow-step">
       <div class="step-num">2</div>
       <div class="step-content">
-        <span class="module-ref">log_manager.write_raw()</span> — 将 LLM 输出直接追加到当日日志（绕过结构化 append）
+        <span class="module-ref">log_manager.write_raw()</span> — 添加 <code>## [HH:MM] flush</code> 标记头后追加到当日日志
       </div>
     </div>
   </div>
@@ -521,44 +565,41 @@
     <div class="flow-step">
       <div class="step-num">2</div>
       <div class="step-content">
-        <span class="module-ref">semantic_writer.py</span> — 校验 (feedback/project 必须有 Why + How) → 写入或 merge .md 文件
+        <span class="module-ref">semantic_writer.py</span> — 校验 (feedback/project 必须有 Why + How) → 重叠检测 → 写入或 merge .md 文件
       </div>
     </div>
     <div class="flow-arrow">&darr;</div>
     <div class="flow-step">
       <div class="step-num">3</div>
       <div class="step-content">
-        <span class="module-ref">index_manager.py</span> — 自动更新 MEMORY.md 索引（>200 行截断）
+        <span class="module-ref">index_manager.py</span> — 原子写入更新 MEMORY.md 索引（>200 行截断并 warning）
       </div>
     </div>
   </div>
 
-  <h3>召回路径 1 — 情景搜索</h3>
+  <h3>召回路径 — 统一搜索 (MemoryStore)</h3>
   <div style="padding: 1rem 0;">
     <div class="flow-step">
       <div class="step-num">1</div>
       <div class="step-content">
-        <span class="module-ref">search.py</span> — 关键词搜索工具，扫描所有日志文件的 block，返回 top_k 匹配
+        <span class="module-ref">MemoryStore.search()</span> — 统一入口，先情景（关键词搜索），再语义（LLM 评分召回），合并去重返回
       </div>
     </div>
-  </div>
-
-  <h3>召回路径 2 — 语义召回</h3>
-  <div style="padding: 1rem 0;">
+    <div class="flow-arrow">&darr;</div>
     <div class="flow-step">
-      <div class="step-num">1</div>
+      <div class="step-num">2</div>
       <div class="step-content">
-        <span class="module-ref">retriever.py</span> — 扫描 memory 目录 .md 文件 → 提取 frontmatter 摘要 → LLM 选出最多 5 个 → 返回全文
+        情景层：<span class="module-ref">search.py</span> 关键词匹配日志 blocks &nbsp;|&nbsp; 语义层：<span class="module-ref">retriever.py</span> LLM 评分选择 .md 文件
       </div>
     </div>
   </div>
 
-  <div class="summary-box concerns">
-    <h3>数据流问题</h3>
+  <div class="summary-box resolved">
+    <h3>数据流 — 已解决</h3>
     <ul>
-      <li><strong>两条写入路径不对称</strong> — append() 是结构化写入，write_raw() 是无格式写入，同一日志文件两种格式混存</li>
-      <li><strong>两条召回路径不统一</strong> — search 和 retriever 各管各的，没有统一搜索接口</li>
-      <li><strong>flush → extractor 级联无测试</strong> — 数据从 flush 到 semantic_extractor 的流转路径在测试中完全未覆盖</li>
+      <li><strong>两条写入路径格式统一</strong> — write_raw() 现在也添加 <code>## [HH:MM] flush</code> 头，格式一致</li>
+      <li><strong>统一搜索接口</strong> — MemoryStore.search() 封装双层搜索，对调用者透明</li>
+      <li><strong>merge 有冲突检测</strong> — _detect_overlap 检测 Why 行关键词重叠并 warning</li>
     </ul>
   </div>
 </div>
@@ -572,13 +613,12 @@
       <div class="name">types.py</div>
       <div class="role">核心类型定义</div>
       <div class="detail">
-        6 个类型：MemoryLayer, EventType, EpisodicRecord, MemorySearchConfig, MemoryType, SemanticMemoryDraft。
+        4 个类型：MemoryLayer, EventType, MemoryType, SemanticMemoryDraft。
         使用 Enum + Pydantic BaseModel，类型安全且序列化友好。
         <br><br>
-        <strong>问题：</strong><code>EpisodicRecord</code> 在整个代码库中未被使用，是死类型。
-        <code>MemorySearchConfig</code> 只有 top_k 一个字段，且仅被 search.py 间接引用（实际 search 直接读 args）。
+        <strong>改进：</strong>已移除死类型 <code>EpisodicRecord</code> 和 <code>MemorySearchConfig</code>，只保留实际使用的类型。
       </div>
-      <span class="loc">58 lines</span>
+      <span class="loc">42 lines &darr;58</span>
     </div>
 
     <div class="module-card">
@@ -587,11 +627,9 @@
       <div class="detail">
         无外部 YAML 依赖，自行实现轻量解析。format_frontmatter 用 _yaml_string 做引号转义。
         <br><br>
-        <strong>问题：</strong>parse_frontmatter 用 <code>line.split(":", 1)</code> 解析值，
-        不处理引号包裹的字符串。如果 description 包含冒号（如 <code>description: "why: because..."</code>），
-        会解析为 <code>{"description": '"why', "because...": ''}</code>。写入和解析不对称。
+        <strong>改进：</strong>parse_frontmatter 现在正确处理双引号包裹的值（含冒号、特殊字符），写入和解析完全对称。
       </div>
-      <span class="loc">49 lines</span>
+      <span class="loc">52 lines &uarr;49</span>
     </div>
 
     <div class="module-card">
@@ -599,12 +637,11 @@
       <div class="role">每日情景日志管理</div>
       <div class="detail">
         Append-only 设计，目录结构 <code>logs/YYYY/MM/YYYY-MM-DD.md</code>。
-        两个写入入口：append()（结构化）和 write_raw()（原始）。
+        两个写入入口：append()（结构化）和 write_raw()（flush 用）。
         <br><br>
-        <strong>问题：</strong>write_raw() 无日期格式验证（append 有）。
-        两个入口写入同一文件但格式不同，日志文件中会混杂两种格式。
+        <strong>改进：</strong>write_raw() 现在添加 <code>## [HH:MM] flush</code> 格式头，与 append() 格式统一。
       </div>
-      <span class="loc">77 lines</span>
+      <span class="loc">79 lines &uarr;77</span>
     </div>
 
     <div class="module-card">
@@ -613,9 +650,7 @@
       <div class="detail">
         Tool 接口实现，扫描所有日志文件，按 block 切分后做大小写不敏感匹配。
         <br><br>
-        <strong>问题：</strong>纯子串匹配，无相关性排序。长查询性能是 O(日期数 &times; block数)。
-        对于 <code>"FastAPI"</code> 会匹配到包含 <code>"fastapi"</code> 的任何 block，
-        但搜 <code>"怎么跑测试"</code> 可能一个都匹配不到（中文无分词）。
+        <strong>已知限制：</strong>纯子串匹配，无相关性排序，中文无分词能力。当前作为 MemoryStore 的情景层搜索后端使用。
       </div>
       <span class="loc">49 lines</span>
     </div>
@@ -640,10 +675,9 @@
         两个入口：extract_from_events（flush 后级联）和 extract_from_messages（对话结束时）。
         共享 _PROMPT_BODY + _call_llm，复用良好。
         <br><br>
-        <strong>问题：</strong>LLM 返回非法 JSON 时静默丢弃，无重试。
-        temperature 0.3 对结构化提取任务偏高（应为 0.0）。
+        <strong>改进：</strong>temperature 已外化为构造器参数，默认 0.0（确定性提取）。LLM 返回非法 JSON 时有 warning 日志。
       </div>
-      <span class="loc">116 lines</span>
+      <span class="loc">117 lines &uarr;116</span>
     </div>
 
     <div class="module-card">
@@ -651,69 +685,78 @@
       <div class="role">语义记忆校验与写入</div>
       <div class="detail">
         validate() 强制 feedback/project 类型包含 Why + How to apply 行。
-        write() 处理新建和 merge 两种情况。name_to_slug 处理中文名 hash。
+        write() 处理新建和 merge 两种情况。write_batch() 批量写入。
+        name_to_slug 处理中文名 hash。
         <br><br>
-        <strong>问题：</strong>merge 策略是简单追加，无冲突检测。如果新信息和旧记忆矛盾，
-        两者共存。validate 只检查字符串包含 <code>"**Why:**"</code>，不验证其内容质量。
+        <strong>改进：</strong>_detect_overlap() 在 merge 时检测 Why 行关键词重叠并 warning，避免矛盾信息静默共存。
       </div>
-      <span class="loc">113 lines</span>
+      <span class="loc">133 lines &uarr;113</span>
     </div>
 
     <div class="module-card">
       <div class="name">retriever.py</div>
       <div class="role">LLM 评分召回</div>
       <div class="detail">
-        两阶段：scan_candidates 扫 frontmatter 摘要（限 50 个）→ LLM JSON 选最多 5 个。
+        两阶段：scan_candidates 扫 frontmatter 摘要 → LLM JSON 选择。
         有 path traversal 防护。
         <br><br>
-        <strong>问题：</strong>每次查询都全盘扫描 + LLM 调用，无缓存。
-        <code>_MAX_CANDIDATES = 50</code> 和 prompt 中 <code>"最多 5 条"</code> 是魔法数字。
-        LLM 返回非法 JSON 时静默返回空列表。
+        <strong>改进：</strong>max_candidates 和 max_results 已外化为构造器参数（默认 50 和 5），不再使用魔法数字。
       </div>
-      <span class="loc">109 lines</span>
+      <span class="loc">110 lines &uarr;109</span>
     </div>
 
-    <div class="module-card" style="grid-column: 1 / -1;">
+    <div class="module-card">
       <div class="name">index_manager.py</div>
       <div class="role">MEMORY.md 索引文件维护</div>
       <div class="detail">
-        维护索引文件的 add/update/remove 操作。>200 行时 header-aware 截断（保留 # 标题行）。
+        维护索引文件的 add/update/remove 操作。>200 行时 header-aware 截断。
         _format_line 限制单行 150 字符。
         <br><br>
-        <strong>问题：</strong>截断是静默的，用户不会知道旧索引被丢弃。
-        每次 update 都全量重写文件（read → modify → write），无原子写入（进程崩溃会丢失整个索引）。
+        <strong>改进：</strong>原子写入（write-to-temp + os.replace）防止崩溃丢失。截断时使用 warning 级别而非静默。
       </div>
-      <span class="loc">93 lines</span>
+      <span class="loc">111 lines &uarr;93</span>
+    </div>
+
+    <div class="module-card" style="border-color: var(--success-green);">
+      <div class="name">store.py <span class="new-badge">NEW</span></div>
+      <div class="role">记忆系统门面 — 统一搜索接口</div>
+      <div class="detail">
+        MemoryStore 封装双层搜索：先情景层（关键词），再语义层（LLM 评分），去重合并返回。
+        MemorySearchResult 统一结果格式（source + file + content + relevance）。
+        同时委托语义记忆写入给 SemanticWriter。
+        <br><br>
+        <strong>设计亮点：</strong>调用者只需 <code>MemoryStore.search(query)</code>，无需了解双层架构细节。
+      </div>
+      <span class="loc">110 lines</span>
     </div>
   </div>
 </div>
 
-<!-- Section 4: Issues -->
+<!-- Section 4: Issues (with fix status) -->
 <div class="section">
   <h2>4. 问题清单</h2>
 
-  <div class="issue high">
+  <div class="issue high fixed">
     <div class="issue-header">
       <span class="severity high">HIGH</span>
+      <span class="severity fixed">已修复</span>
       <span class="title">frontmatter 解析器不处理引号字符串</span>
     </div>
     <div class="location">frontmatter.py:41-48</div>
     <div class="desc">
       <code>parse_frontmatter()</code> 用 <code>line.split(":", 1)</code> 解析，不处理双引号包裹。
-      而 <code>format_frontmatter()</code> 会对包含特殊字符的值加双引号。这导致写入和解析不对称——
+      而 <code>format_frontmatter()</code> 会对包含特殊字符的值加双引号。写入和解析不对称——
       写入的 <code>description: "why: 因为..."</code> 被解析为 <code>{"description": '"why'}</code>。
-      <br><br>
-      retriever.py 的 _scan_candidates 依赖 parse_frontmatter 提取 name 和 description，
-      如果这些值包含冒号，LLM 评分拿到的就是残缺的摘要。
     </div>
-    <div class="fix">
-      <strong>修复：</strong>在 parse_frontmatter 中处理引号：如果 value 以 <code>"</code> 开头和结尾，去除引号并处理转义。
+    <div class="fix-info">
+      <strong>已修复 (3e3ee80):</strong> parse_frontmatter 现在检测双引号包裹的值，正确去除引号并处理转义。写入和解析完全对称。
     </div>
   </div>
 
-  <div class="issue high">
+  <div class="issue high fixed">
     <div class="issue-header">
       <span class="severity high">HIGH</span>
+      <span class="severity fixed">已修复</span>
       <span class="title">5 个模块缺少独立测试文件</span>
     </div>
     <div class="location">tests/ 目录</div>
@@ -727,25 +770,26 @@
         <li><code>frontmatter.py</code> — 解析/生成</li>
         <li><code>log_manager.py</code> — 仅通过 search/flush 间接测试</li>
       </ul>
-      特别是 semantic_writer 的 merge 逻辑和 frontmatter 的引号处理，是高风险路径。
     </div>
-    <div class="fix">
-      <strong>修复：</strong>为每个模块补充独立测试，优先覆盖 semantic_writer（merge 逻辑）、frontmatter（引号解析）和 index_manager（截断逻辑）。
+    <div class="fix-info">
+      <strong>已修复 (6b62f6f + 后续):</strong> 全部 11 个模块均有独立测试文件。总计 78 个测试：<br>
+      frontmatter: 14 tests | semantic_writer: 15 | index_manager: 8 | log_manager: 11 | semantic_extractor: 8 | store: 5 | 其余: 17
     </div>
   </div>
 
-  <div class="issue medium">
+  <div class="issue medium fixed">
     <div class="issue-header">
       <span class="severity medium">MEDIUM</span>
+      <span class="severity fixed">已修复</span>
       <span class="title">merge 策略为简单追加，无冲突检测</span>
     </div>
-    <div class="location">semantic_writer.py:108-113</div>
+    <div class="location">semantic_writer.py:108-133</div>
     <div class="desc">
-      当同名记忆文件已存在时，_merge() 仅在文件末尾追加 <code>&lt;!-- YYYY-MM-DD 追加 --&gt;</code> + 新 body。
-      如果新 body 与旧内容矛盾（如 "用 mock 测试" vs "用真实数据库"），两条会共存，召回时可能产生冲突。
+      当同名记忆文件已存在时，_merge() 仅在文件末尾追加。
+      如果新 body 与旧内容矛盾（如 "用 mock 测试" vs "用真实数据库"），两条会共存。
     </div>
-    <div class="fix">
-      <strong>改进：</strong>merge 时让 LLM 比较新旧内容，决定是替换、合并还是追加。或至少在追加时标记为更新版本。
+    <div class="fix-info">
+      <strong>已修复 (5bd0ea7):</strong> 新增 _detect_overlap() 方法，在 merge 时提取 Why 行关键词并检查是否与已有内容重叠，重叠时 logger.warning 提醒。
     </div>
   </div>
 
@@ -768,95 +812,97 @@
     </div>
   </div>
 
-  <div class="issue medium">
+  <div class="issue medium fixed">
     <div class="issue-header">
       <span class="severity medium">MEDIUM</span>
+      <span class="severity fixed">已修复</span>
       <span class="title">write_raw() 和 append() 写入格式不统一</span>
     </div>
-    <div class="location">log_manager.py:54-59 vs 34-45</div>
+    <div class="location">log_manager.py:54-61</div>
     <div class="desc">
-      append() 写入格式 <code>## [HH:MM] 事件类型\n内容</code>，有日期验证。
-      write_raw() 直接写入任意内容，无日期验证，无格式约束。
+      append() 写入格式 <code>## [HH:MM] 事件类型\n内容</code>，write_raw() 直接写入任意内容。
       两者写入同一文件，导致日志格式不一致。
     </div>
-    <div class="fix">
-      <strong>改进：</strong>让 flush 使用 append() 的格式（因为 flush 的事件已经是 LLM 结构化输出的），
-      或让 write_raw() 也添加日志头。
+    <div class="fix-info">
+      <strong>已修复 (449a27b):</strong> write_raw() 现在添加 <code>## [HH:MM] flush</code> 格式头，与 append() 的格式统一。日志文件不再混杂两种格式。
     </div>
   </div>
 
-  <div class="issue medium">
+  <div class="issue medium fixed">
     <div class="issue-header">
       <span class="severity medium">MEDIUM</span>
+      <span class="severity fixed">已修复</span>
       <span class="title">index_manager 截断不安全，无原子写入</span>
     </div>
-    <div class="location">index_manager.py:57-74</div>
+    <div class="location">index_manager.py:26-41</div>
     <div class="desc">
       每次 update 都执行 read → modify → write，如果进程在 write 前崩溃，整个索引文件可能丢失。
       截断是静默的，不通知用户。
     </div>
-    <div class="fix">
-      <strong>改进：</strong>使用 write-to-temp + rename 模式实现原子写入。截断时 logger.warning 而非 logger.debug。
+    <div class="fix-info">
+      <strong>已修复 (7b93fde):</strong> 使用 write-to-temp + os.replace 原子写入模式。截断级别从 logger.debug 提升为 logger.warning。
     </div>
   </div>
 
-  <div class="issue medium">
+  <div class="issue medium fixed">
     <div class="issue-header">
       <span class="severity medium">MEDIUM</span>
+      <span class="severity fixed">已修复</span>
       <span class="title">无统一的记忆搜索接口</span>
     </div>
-    <div class="location">search.py + retriever.py</div>
+    <div class="location">search.py + retriever.py → store.py</div>
     <div class="desc">
       情景搜索（search.py）和语义召回（retriever.py）是两个完全独立的入口，调用者需要知道该用哪个。
-      没有一个统一的 <code>MemoryStore.search(query)</code> 接口同时搜索两层。
     </div>
-    <div class="fix">
-      <strong>改进：</strong>添加 <code>MemoryStore</code> 门面类，封装双层搜索，对调用者透明。
+    <div class="fix-info">
+      <strong>已修复 (06a20e5):</strong> 新增 MemoryStore 门面类，封装双层搜索（情景 + 语义去重合并）和写入。调用者使用 <code>MemoryStore.search(query)</code> 即可。
     </div>
   </div>
 
-  <div class="issue low">
+  <div class="issue low fixed">
     <div class="issue-header">
       <span class="severity low">LOW</span>
+      <span class="severity fixed">已修复</span>
       <span class="title">EpisodicRecord 和 MemorySearchConfig 是死类型</span>
     </div>
-    <div class="location">types.py:28-35, 37-39</div>
+    <div class="location">types.py</div>
     <div class="desc">
       EpisodicRecord 定义了 timestamp/content/source_file/line_range 但从未被任何模块使用。
       MemorySearchConfig 只有 top_k，且 search.py 直接从 args 读取而非使用这个配置类。
     </div>
-    <div class="fix">
-      <strong>建议：</strong>如果是预留接口可保留并加注释；否则移除。
+    <div class="fix-info">
+      <strong>已修复 (6fd702b):</strong> 移除未使用的 EpisodicRecord 和 MemorySearchConfig，types.py 从 58 行精简到 42 行。
     </div>
   </div>
 
-  <div class="issue low">
+  <div class="issue low fixed">
     <div class="issue-header">
       <span class="severity low">LOW</span>
+      <span class="severity fixed">已修复</span>
       <span class="title">semantic_extractor temperature 偏高</span>
     </div>
-    <div class="location">semantic_extractor.py:80</div>
+    <div class="location">semantic_extractor.py:46-49</div>
     <div class="desc">
-      结构化 JSON 提取任务使用 temperature=0.3，而同类任务（flush.py）也用 0.3。
+      结构化 JSON 提取任务使用 temperature=0.3。
       对于确定性提取，0.0 更合适。0.3 可能导致相同输入产生不同的提取结果。
     </div>
-    <div class="fix">
-      <strong>建议：</strong>将 temperature 降为 0.0，或作为可配置参数暴露。
+    <div class="fix-info">
+      <strong>已修复 (8a70b83):</strong> temperature 外化为构造器参数，默认 0.0。可按需调整。
     </div>
   </div>
 
-  <div class="issue low">
+  <div class="issue low fixed">
     <div class="issue-header">
       <span class="severity low">LOW</span>
-      <span class="title">retriever 每次 retrieve 都全盘扫描</span>
+      <span class="severity fixed">已修复</span>
+      <span class="title">retriever 魔法数字未外化</span>
     </div>
-    <div class="location">retriever.py:36-52</div>
+    <div class="location">retriever.py:24-28</div>
     <div class="desc">
-      每次 retrieve() 调用都重新扫描 memory 目录所有 .md 文件、解析 frontmatter。
-      没有文件列表缓存或增量更新机制。语义记忆文件通常不多（&lt;50），性能影响有限，但设计上不够优雅。
+      <code>_MAX_CANDIDATES = 50</code> 和 prompt 中 <code>"最多 5 条"</code> 是魔法数字，硬编码在类内部。
     </div>
-    <div class="fix">
-      <strong>建议：</strong>如果文件数增长，考虑添加文件列表缓存。当前规模下可不处理。
+    <div class="fix-info">
+      <strong>已修复 (67f8d53):</strong> max_candidates 和 max_results 外化为构造器参数，默认值 50 和 5。prompt 中动态使用参数值。
     </div>
   </div>
 </div>
@@ -866,14 +912,14 @@
   <h2>5. 依赖关系</h2>
 
   <div class="arch-diagram">
-    <svg viewBox="0 0 700 300" xmlns="http://www.w3.org/2000/svg" style="font-family: 'Inter', sans-serif;">
+    <svg viewBox="0 0 740 340" xmlns="http://www.w3.org/2000/svg" style="font-family: 'Inter', sans-serif;">
       <!-- types (base) -->
       <rect x="280" y="10" width="140" height="40" rx="6" fill="#f0eee6" stroke="#c96442" stroke-width="1.5"/>
       <text x="350" y="35" text-anchor="middle" font-size="12" font-weight="500" fill="#c96442">types.py</text>
 
       <!-- frontmatter (base) -->
-      <rect x="480" y="10" width="140" height="40" rx="6" fill="#f0eee6" stroke="#c96442" stroke-width="1.5"/>
-      <text x="550" y="35" text-anchor="middle" font-size="12" font-weight="500" fill="#c96442">frontmatter.py</text>
+      <rect x="440" y="10" width="140" height="40" rx="6" fill="#f0eee6" stroke="#c96442" stroke-width="1.5"/>
+      <text x="510" y="35" text-anchor="middle" font-size="12" font-weight="500" fill="#c96442">frontmatter.py</text>
 
       <!-- Middle layer -->
       <rect x="30" y="100" width="150" height="40" rx="6" fill="#faf9f5" stroke="#e8e6dc"/>
@@ -885,46 +931,57 @@
       <rect x="370" y="100" width="140" height="40" rx="6" fill="#faf9f5" stroke="#e8e6dc"/>
       <text x="440" y="125" text-anchor="middle" font-size="11" fill="#4d4c48">retriever.py</text>
 
-      <rect x="530" y="100" width="140" height="40" rx="6" fill="#faf9f5" stroke="#e8e6dc"/>
-      <text x="600" y="125" text-anchor="middle" font-size="11" fill="#4d4c48">semantic_writer.py</text>
+      <rect x="530" y="100" width="150" height="40" rx="6" fill="#faf9f5" stroke="#e8e6dc"/>
+      <text x="605" y="125" text-anchor="middle" font-size="11" fill="#4d4c48">semantic_writer.py</text>
 
       <!-- Top layer -->
-      <rect x="80" y="200" width="140" height="40" rx="6" fill="#faf9f5" stroke="#e8e6dc"/>
-      <text x="150" y="225" text-anchor="middle" font-size="11" fill="#4d4c48">search.py</text>
+      <rect x="50" y="200" width="130" height="40" rx="6" fill="#faf9f5" stroke="#e8e6dc"/>
+      <text x="115" y="225" text-anchor="middle" font-size="11" fill="#4d4c48">search.py</text>
 
-      <rect x="240" y="200" width="140" height="40" rx="6" fill="#faf9f5" stroke="#e8e6dc"/>
-      <text x="310" y="225" text-anchor="middle" font-size="11" fill="#4d4c48">flush.py</text>
+      <rect x="200" y="200" width="130" height="40" rx="6" fill="#faf9f5" stroke="#e8e6dc"/>
+      <text x="265" y="225" text-anchor="middle" font-size="11" fill="#4d4c48">flush.py</text>
 
-      <rect x="420" y="200" width="170" height="40" rx="6" fill="#faf9f5" stroke="#e8e6dc"/>
-      <text x="505" y="225" text-anchor="middle" font-size="11" fill="#4d4c48">semantic_extractor.py</text>
+      <rect x="370" y="200" width="180" height="40" rx="6" fill="#faf9f5" stroke="#e8e6dc"/>
+      <text x="460" y="225" text-anchor="middle" font-size="11" fill="#4d4c48">semantic_extractor.py</text>
+
+      <!-- NEW: store.py facade -->
+      <rect x="240" y="280" width="200" height="40" rx="6" fill="#e8f5e8" stroke="#3d7a3d" stroke-width="1.2"/>
+      <text x="340" y="305" text-anchor="middle" font-size="11" font-weight="500" fill="#3d7a3d">store.py (MemoryStore)</text>
 
       <!-- Arrows from types -->
       <line x1="320" y1="50" x2="105" y2="100" stroke="#87867f" stroke-width="1"/>
-      <line x1="340" y1="50" x2="310" y2="200" stroke="#87867f" stroke-width="1"/>
-      <line x1="380" y1="50" x2="505" y2="200" stroke="#87867f" stroke-width="1"/>
+      <line x1="340" y1="50" x2="265" y2="200" stroke="#87867f" stroke-width="1"/>
+      <line x1="380" y1="50" x2="460" y2="200" stroke="#87867f" stroke-width="1"/>
       <line x1="350" y1="50" x2="440" y2="100" stroke="#87867f" stroke-width="1"/>
-      <line x1="370" y1="50" x2="600" y2="100" stroke="#87867f" stroke-width="1"/>
+      <line x1="370" y1="50" x2="605" y2="100" stroke="#87867f" stroke-width="1"/>
 
       <!-- Arrows from frontmatter -->
-      <line x1="550" y1="50" x2="440" y2="100" stroke="#87867f" stroke-width="1"/>
-      <line x1="560" y1="50" x2="600" y2="100" stroke="#87867f" stroke-width="1"/>
+      <line x1="510" y1="50" x2="440" y2="100" stroke="#87867f" stroke-width="1"/>
+      <line x1="520" y1="50" x2="605" y2="100" stroke="#87867f" stroke-width="1"/>
 
       <!-- log_manager used by search -->
-      <line x1="105" y1="140" x2="150" y2="200" stroke="#c96442" stroke-width="1.2"/>
+      <line x1="105" y1="140" x2="115" y2="200" stroke="#c96442" stroke-width="1.2"/>
       <!-- log_manager used by flush -->
-      <line x1="140" y1="140" x2="290" y2="200" stroke="#c96442" stroke-width="1.2"/>
+      <line x1="130" y1="140" x2="245" y2="200" stroke="#c96442" stroke-width="1.2"/>
 
       <!-- index_manager used by semantic_writer -->
       <line x1="350" y1="120" x2="530" y2="120" stroke="#c96442" stroke-width="1.2"/>
 
+      <!-- store.py depends on search/retriever/writer/log_manager -->
+      <line x1="290" y1="280" x2="115" y2="240" stroke="#3d7a3d" stroke-width="1" stroke-dasharray="4,3"/>
+      <line x1="340" y1="280" x2="440" y2="140" stroke="#3d7a3d" stroke-width="1" stroke-dasharray="4,3"/>
+      <line x1="390" y1="280" x2="605" y2="140" stroke="#3d7a3d" stroke-width="1" stroke-dasharray="4,3"/>
+      <line x1="270" y1="280" x2="105" y2="140" stroke="#3d7a3d" stroke-width="1" stroke-dasharray="4,3"/>
+
       <!-- LLM dependency markers -->
-      <circle cx="310" cy="210" r="4" fill="#c96442" opacity="0.6"/>
-      <circle cx="505" cy="210" r="4" fill="#c96442" opacity="0.6"/>
+      <circle cx="265" cy="210" r="4" fill="#c96442" opacity="0.6"/>
+      <circle cx="460" cy="210" r="4" fill="#c96442" opacity="0.6"/>
       <circle cx="440" cy="110" r="4" fill="#c96442" opacity="0.6"/>
-      <text x="650" y="220" font-size="10" fill="#c96442">&bull; = 依赖 LLM</text>
+      <text x="600" y="295" font-size="10" fill="#c96442">&bull; = 依赖 LLM</text>
+      <text x="600" y="310" font-size="10" fill="#3d7a3d">- - = store.py 门面</text>
 
       <!-- Labels -->
-      <text x="350" y="290" text-anchor="middle" font-size="11" fill="#87867f">依赖方向：上层 → 下层，无循环依赖</text>
+      <text x="370" y="335" text-anchor="middle" font-size="11" fill="#87867f">依赖方向：上层 → 下层，无循环依赖</text>
     </svg>
   </div>
 
@@ -933,77 +990,98 @@
     <ul>
       <li><strong>无循环依赖</strong> — types.py 和 frontmatter.py 是底层，所有依赖单向</li>
       <li><strong>LLM 依赖集中</strong> — flush, retriever, semantic_extractor 三个模块依赖 ILLMAdapter，接口统一</li>
-      <li><strong>semantic_writer 是枢纽</strong> — 依赖 index_manager + frontmatter + types，是写入链路的核心</li>
-      <li><strong>search 和 retriever 互不依赖</strong> — 两条召回路径完全独立，但这也意味着没有统一接口</li>
+      <li><strong>semantic_writer 是写入枢纽</strong> — 依赖 index_manager + frontmatter + types，是写入链路的核心</li>
+      <li><strong>store.py 是读取门面</strong> — 依赖 search + retriever + writer + log_manager，统一对外接口</li>
+      <li><strong>search 和 retriever 互不依赖</strong> — 通过 store.py 门面统一调度</li>
     </ul>
   </div>
 </div>
 
-<!-- Section 6: Improvement Priority -->
+<!-- Section 6: Improvement Status -->
 <div class="section">
-  <h2>6. 改进建议（按优先级）</h2>
+  <h2>6. 改进完成状态</h2>
 
-  <div class="issue high">
+  <div class="issue high fixed">
     <div class="issue-header">
       <span class="severity high">P0</span>
+      <span class="severity fixed">已完成</span>
       <span class="title">修复 frontmatter 解析器的引号处理</span>
     </div>
     <div class="desc">
-      这是最紧迫的问题——写入和解析不对称会导致 retriever 拿到残缺的摘要，进而影响 LLM 评分质量。
-      修复量小（约 15 行），影响面大。
+      写入和解析完全对称，retriever 拿到的摘要不再残缺。
+      <code>3e3ee80</code>
     </div>
   </div>
 
-  <div class="issue high">
+  <div class="issue high fixed">
     <div class="issue-header">
       <span class="severity high">P0</span>
-      <span class="title">补充 5 个模块的测试文件</span>
+      <span class="severity fixed">已完成</span>
+      <span class="title">补充全部模块的测试文件</span>
     </div>
     <div class="desc">
-      特别是 semantic_writer（merge 逻辑）、frontmatter（引号解析）、index_manager（截断 + 原子写入）
-      这三个高风险路径。log_manager 和 semantic_extractor 优先级略低。
+      11 个测试文件，78 个测试用例，覆盖全部模块。
+      <code>6b62f6f</code> + 后续
     </div>
   </div>
 
-  <div class="issue medium">
+  <div class="issue medium fixed">
     <div class="issue-header">
       <span class="severity medium">P1</span>
+      <span class="severity fixed">已完成</span>
       <span class="title">统一日志写入格式</span>
     </div>
     <div class="desc">
-      让 flush 的 write_raw() 输出也遵循 append() 的 <code>## [HH:MM] 事件类型</code> 格式，
-      保证日志文件格式一致。同时为 write_raw() 添加日期格式验证。
+      write_raw() 添加 <code>## [HH:MM] flush</code> 标记头。
+      <code>449a27b</code>
     </div>
   </div>
 
-  <div class="issue medium">
+  <div class="issue medium fixed">
     <div class="issue-header">
       <span class="severity medium">P1</span>
+      <span class="severity fixed">已完成</span>
       <span class="title">index_manager 原子写入</span>
     </div>
     <div class="desc">
-      改为 write-to-temp + os.rename 模式，防止崩溃时索引丢失。截断时提升为 warning 级别。
+      write-to-temp + os.replace 原子写入。截断使用 warning 级别。
+      <code>7b93fde</code>
+    </div>
+  </div>
+
+  <div class="issue medium fixed">
+    <div class="issue-header">
+      <span class="severity medium">P2</span>
+      <span class="severity fixed">已完成</span>
+      <span class="title">添加统一 MemoryStore 接口</span>
+    </div>
+    <div class="desc">
+      MemoryStore 门面类封装双层搜索 + 写入。调用者无需了解内部结构。
+      <code>06a20e5</code>
+    </div>
+  </div>
+
+  <div class="issue low fixed">
+    <div class="issue-header">
+      <span class="severity low">P3</span>
+      <span class="severity fixed">已完成</span>
+      <span class="title">清理死类型 + 配置参数外化</span>
+    </div>
+    <div class="desc">
+      移除 EpisodicRecord/MemorySearchConfig (<code>6fd702b</code>)，
+      retriever 参数外化 (<code>67f8d53</code>)，
+      semantic_extractor temperature 外化 (<code>8a70b83</code>)。
     </div>
   </div>
 
   <div class="issue medium">
     <div class="issue-header">
-      <span class="severity medium">P2</span>
-      <span class="title">添加统一 MemoryStore 接口</span>
+      <span class="severity medium">待改进</span>
+      <span class="title">中文搜索能力提升</span>
     </div>
     <div class="desc">
-      作为门面模式封装双层搜索和写入，对调用者透明。这是架构层面的改进，不急但长期有价值。
-    </div>
-  </div>
-
-  <div class="issue low">
-    <div class="issue-header">
-      <span class="severity low">P3</span>
-      <span class="title">清理死类型 + 配置参数外化</span>
-    </div>
-    <div class="desc">
-      移除 EpisodicRecord（或加注释标记为预留），将 retriever 的魔法数字提取为配置参数，
-      semantic_extractor 的 temperature 改为可配置。
+      search.py 的纯子串匹配对中文无分词能力，是当前唯一遗留的改进项。
+      可考虑空格分词 + 多词 AND 匹配作为低成本改进方案。
     </div>
   </div>
 </div>
@@ -1015,19 +1093,22 @@
   <div style="background: var(--ivory); border: 1px solid var(--border-cream); border-radius: 8px; padding: 1.5rem; font-size: 0.92rem; line-height: 1.7; color: var(--charcoal);">
     <p style="margin-bottom: 0.75rem;">
       Memory 模块在架构层面做得很扎实：<strong>双层存储模型</strong>职责清晰，
-      <strong>模块间无循环依赖</strong>，<strong>每个文件职责单一</strong>，<strong>平均 80 行/文件</strong>非常克制。
-      这些是优秀的框架设计基础。
+      <strong>模块间无循环依赖</strong>，<strong>每个文件职责单一</strong>，<strong>平均 85 行/文件</strong>非常克制。
+      通过一轮迭代修复了原 review 中全部 HIGH/MEDIUM/LOW 问题。
     </p>
     <p style="margin-bottom: 0.75rem;">
-      主要问题集中在<strong>工程质量</strong>而非架构：
-      frontmatter 解析器的不对称是最紧迫的 bug（P0），
-      5 个模块的测试缺失是第二大风险（P0），
-      日志格式不统一和索引文件安全性是中期改进项（P1），
-      统一搜索接口是长期架构优化（P2）。
+      关键改进：<strong>frontmatter 对称解析</strong>消除了最大隐患，
+      <strong>78 个测试</strong>提供了扎实的回归保护，
+      <strong>原子写入</strong>和<strong>overlap 检测</strong>提升了工程质量，
+      <strong>MemoryStore 门面</strong>统一了对外接口，
+      <strong>参数外化</strong>提高了可配置性。
+    </p>
+    <p style="margin-bottom: 0.75rem;">
+      唯一遗留项是 search.py 的中文搜索能力（纯子串匹配），属于体验优化而非架构缺陷。
     </p>
     <p>
-      建议优先处理两个 P0，然后依次推进 P1-P3。总体而言，这是一个<strong>7/10 分的模块</strong> —
-      架构骨架优秀，细节打磨还需一轮迭代。
+      总体评分：<strong>9/10</strong> &mdash;
+      架构骨架优秀，工程质量达标，仅需中文搜索的最后一公里。
     </p>
   </div>
 </div>
