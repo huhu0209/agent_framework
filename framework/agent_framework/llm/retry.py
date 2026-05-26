@@ -190,9 +190,8 @@ class CircuitBreaker:
     _success_count: int = 0
     _last_failure_time: float = 0.0
 
-    @property
-    def state(self) -> CircuitState:
-        """当前状态（自动检查是否该进入 HALF_OPEN）。"""
+    def _check_and_transition(self) -> CircuitState:
+        """检查是否该从 OPEN 进入 HALF_OPEN，并执行转换。"""
         if (
             self._state == CircuitState.OPEN
             and time.monotonic() - self._last_failure_time >= self.config.recovery_timeout
@@ -201,25 +200,31 @@ class CircuitBreaker:
             self._success_count = 0
         return self._state
 
+    @property
+    def state(self) -> CircuitState:
+        """当前状态（只读，无副作用）。"""
+        return self._state
+
     def allow_request(self) -> bool:
         """是否允许发起请求。"""
-        state = self.state
+        state = self._check_and_transition()
         if state == CircuitState.CLOSED:
             return True
         if state == CircuitState.HALF_OPEN:
-            return True  # 允许探测请求
-        return False  # OPEN 状态拒绝
+            return True
+        return False
 
     def record_success(self) -> None:
         """记录成功。"""
-        if self._state == CircuitState.HALF_OPEN:
+        state = self._check_and_transition()
+        if state == CircuitState.HALF_OPEN:
             self._success_count += 1
             if self._success_count >= self.config.success_threshold:
                 logger.info("Circuit breaker '%s' recovered: CLOSED", self.name)
                 self._state = CircuitState.CLOSED
                 self._failure_count = 0
                 self._success_count = 0
-        elif self._state == CircuitState.CLOSED:
+        elif state == CircuitState.CLOSED:
             self._failure_count = 0
 
     def record_failure(self) -> None:
@@ -243,7 +248,7 @@ class CircuitBreaker:
         """返回当前状态统计（用于监控）。"""
         return {
             "name": self.name,
-            "state": self.state.value,
+            "state": self._check_and_transition().value,
             "failure_count": self._failure_count,
             "success_count": self._success_count,
             "last_failure_time": self._last_failure_time,

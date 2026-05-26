@@ -1,5 +1,7 @@
 """ResilientLLMAdapter 测试。"""
 
+import time
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -318,3 +320,27 @@ async def test_health_check_records_failure():
     await adapter.health_check()
 
     assert breaker.state.value == "open"
+
+
+class TestCircuitBreakerState:
+    """验证 CircuitBreaker.state 是只读的，副作用在显式方法中。"""
+
+    def test_state_property_no_side_effects(self):
+        from agent_framework.llm.retry import CircuitBreaker, CircuitBreakerConfig, CircuitState
+
+        cb = CircuitBreaker(name="test", config=CircuitBreakerConfig(recovery_timeout=0.0))
+        cb._state = CircuitState.OPEN
+        cb._last_failure_time = time.monotonic() - 10  # 已过 recovery_timeout
+
+        for _ in range(5):
+            assert cb.state == CircuitState.OPEN
+
+    def test_allow_request_triggers_transition(self):
+        from agent_framework.llm.retry import CircuitBreaker, CircuitBreakerConfig, CircuitState
+
+        cb = CircuitBreaker(name="test", config=CircuitBreakerConfig(recovery_timeout=0.0))
+        cb._state = CircuitState.OPEN
+        cb._last_failure_time = time.monotonic() - 10
+
+        assert cb.allow_request() is True
+        assert cb._state == CircuitState.HALF_OPEN
