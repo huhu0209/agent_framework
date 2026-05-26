@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from typing import Any
 
-from .base import CircuitOpenError, ILLMAdapter, LLMAdapterError
+from .base import CircuitOpenError, ILLMAdapter, LLMAdapterError, RateLimitError
 from .retry import (
     CircuitBreaker,
     CircuitBreakerConfig,
@@ -57,13 +58,44 @@ class ResilientLLMAdapter(ILLMAdapter):
             info = self._provider.get_provider_info()
             raise CircuitOpenError(provider=info.name)
 
+        # 手动重试：仅在连接建立阶段
+        stream: AsyncIterator[StreamEvent] | None = None
+        first_event: StreamEvent | None = None
+        last_error: LLMAdapterError | None = None
+
+        for attempt in range(self._retry_config.max_retries + 1):
+            try:
+                gen = self._provider.stream(config)
+                first_event = await gen.__anext__()
+                stream = gen
+                break
+            except StopAsyncIteration:
+                self._breaker.record_success()
+                return
+            except LLMAdapterError as e:
+                last_error = e
+                if not e.retryable or attempt >= self._retry_config.max_retries:
+                    self._breaker.record_failure()
+                    raise
+                from .retry import _calculate_delay
+                retry_after = e.retry_after if isinstance(e, RateLimitError) else None
+                delay = _calculate_delay(attempt, self._retry_config, retry_after)
+                logger.warning(
+                    "Stream retry %d/%d after %.1fs: %s",
+                    attempt + 1, self._retry_config.max_retries, delay, str(e)[:100],
+                )
+                await asyncio.sleep(delay)
+
+        if stream is None:
+            if last_error:
+                raise last_error
+            raise RuntimeError("Unexpected stream retry loop exit")
+
         try:
-            stream = await retry_with_backoff(
-                fn=lambda: self._provider.stream(config),
-                config=self._retry_config,
-            )
+            yield first_event
+            async for event in stream:
+                yield event
             self._breaker.record_success()
-            return stream
         except LLMAdapterError:
             self._breaker.record_failure()
             raise
