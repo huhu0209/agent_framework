@@ -117,3 +117,22 @@ class TestNormalizeMessages:
         assert ids == {"t1", "t2"}
         t2_msg = next(m for m in tool_msgs if m.tool_call_id == "t2")
         assert t2_msg.content == "(cancelled)"
+
+
+class TestImmutability:
+    """验证 normalize_messages 不修改原始输入。"""
+
+    def test_original_messages_not_mutated(self):
+        original_content_1 = [TextBlock(text="hello")]
+        original_content_2 = [TextBlock(text="world")]
+
+        msg1 = UserMessage(content=list(original_content_1))
+        msg2 = UserMessage(content=list(original_content_2))
+
+        original_id_1 = id(msg1.content)
+
+        messages = [msg1, msg2]
+        normalize_messages(messages)
+
+        assert id(msg1.content) == original_id_1
+        assert msg1.content == original_content_1

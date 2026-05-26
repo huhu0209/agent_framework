@@ -516,7 +516,10 @@ def normalize_messages(messages: list[Message]) -> list[Message]:
 
     for msg in messages:
         if not result:
-            result.append(msg)
+            if isinstance(msg, (UserMessage, AssistantMessage)):
+                result.append(msg.model_copy(update={"content": list(msg.content)}))
+            else:
+                result.append(msg)
             continue
 
         last = result[-1]
@@ -531,7 +534,10 @@ def normalize_messages(messages: list[Message]) -> list[Message]:
             last.content = [*last.content, *msg.content]
             continue
 
-        result.append(msg)
+        if isinstance(msg, (UserMessage, AssistantMessage)):
+            result.append(msg.model_copy(update={"content": list(msg.content)}))
+        else:
+            result.append(msg)
 
     result = _pair_tool_results(result)
     return result
