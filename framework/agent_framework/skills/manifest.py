@@ -12,7 +12,7 @@ from agent_framework.memory.frontmatter import parse_frontmatter
 logger = logging.getLogger(__name__)
 
 
-@dataclass
+@dataclass(frozen=True)
 class SkillManifest:
     """SKILL.md frontmatter 解析结果。"""
 
@@ -22,10 +22,10 @@ class SkillManifest:
     user_invocable: bool = True
     allowed_tools: list[str] | None = None
     model: str | None = None
-    hooks: dict | None = None
+    hooks: dict[str, Any] | None = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class SkillDocument:
     """完整 Skill 文档 = manifest + body。"""
 
@@ -33,7 +33,7 @@ class SkillDocument:
     body: str
 
 
-@dataclass
+@dataclass(frozen=True)
 class SkillLoadResult:
     """load_full_text 返回类型，显式区分成功与错误。"""
 
