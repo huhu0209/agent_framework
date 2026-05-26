@@ -209,6 +209,21 @@ class TestLoadFullText:
 
         assert "参考文档" not in result.content
 
+    def test_skill_name_with_special_chars_escaped(self, tmp_path):
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        skill_path = skills_dir / 'weird"skill'
+        skill_path.mkdir()
+        (skill_path / "SKILL.md").write_text(
+            '---\nname: "weird\\"skill"\ndescription: test\n---\nbody',
+            encoding="utf-8",
+        )
+        registry = SkillRegistry([skills_dir])
+        result = registry.load_full_text('weird"skill')
+        assert result.is_error is False
+        # quoteattr wraps in single quotes when value contains double quote
+        assert "name='weird\"skill'" in result.content
+
     def test_references_truncated_at_10(self, tmp_path):
         skills_dir = tmp_path / "skills"
         _create_skill(skills_dir, "big", "大 skill", "body")

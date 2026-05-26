@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from xml.sax.saxutils import quoteattr
 
 from agent_framework.skills.manifest import (
     SkillDocument,
@@ -131,7 +132,7 @@ class SkillRegistry:
 
     def _format_skill_body(self, doc: SkillDocument) -> str:
         parts = [
-            f'<skill name="{doc.manifest.name}">',
+            f"<skill name={quoteattr(doc.manifest.name)}>",
             f"描述：{doc.manifest.description}",
             doc.body,
             "</skill>",
