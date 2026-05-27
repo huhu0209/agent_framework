@@ -15,6 +15,11 @@ class CommandRouter:
         self._register_builtins()
 
     def resolve(self, user_input: str) -> ResolvedCommand:
+        """解析 /command args -> ResolvedCommand。
+
+        返回的 content 可能包含未经净化的用户输入（skill 参数），
+        调用方在将 content 注入 LLM prompt 时需自行处理。
+        """
         if not user_input.startswith("/"):
             return ResolvedCommand(is_command=False, content=user_input)
 
@@ -31,21 +36,22 @@ class CommandRouter:
             cmd = self._builtins[name]
             if cmd.handler:
                 return cmd.handler(args)
+            return ResolvedCommand(is_command=True, content=f"/{name}", source=cmd.source)
 
         # skill
         if self._skill_registry:
-            result = self._try_load_skill(name, args)
+            result = self._try_load_skill(self._skill_registry, name, args)
             if result.is_command:
                 return result
 
         return ResolvedCommand(is_command=False, content=user_input)
 
-    def _try_load_skill(self, name: str, args: str) -> ResolvedCommand:
-        manifest = self._skill_registry.get_manifest(name)  # type: ignore[union-attr]
+    def _try_load_skill(self, registry: SkillRegistry, name: str, args: str) -> ResolvedCommand:
+        manifest = registry.get_manifest(name)
         if manifest is None or not manifest.user_invocable:
             return ResolvedCommand(is_command=False, content=f"/{name}")
 
-        load_result = self._skill_registry.load_full_text(name)  # type: ignore[union-attr]
+        load_result = registry.load_full_text(name)
         if load_result.is_error:
             return ResolvedCommand(is_command=False, content=f"/{name}")
 

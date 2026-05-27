@@ -167,3 +167,15 @@ class TestEdgeCases:
         result = router.resolve("/deploy")
         assert result.is_command is False
         assert result.content == "/deploy"
+
+    def test_builtin_without_handler(self):
+        """builtin handler 为 None 时仍返回 is_command=True。"""
+        from agent_framework.commands.types import SlashCommand, CommandSource
+        router = CommandRouter()
+        router._builtins["noop"] = SlashCommand(
+            name="noop", description="无操作", source=CommandSource.BUILTIN
+        )
+        result = router.resolve("/noop")
+        assert result.is_command is True
+        assert result.content == "/noop"
+        assert result.source == CommandSource.BUILTIN
