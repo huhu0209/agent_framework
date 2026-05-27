@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>LLM Adapter 模块架构 Review</title>
+<title>LLM Adapter 模块架构 Review (v2)</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Georgia&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
@@ -23,6 +23,7 @@
     --success-green: #3d7a3d;
     --warning-amber: #b58633;
     --code-bg: #f0eee6;
+    --info-blue: #2d6a9d;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -72,6 +73,17 @@
     background: var(--border-cream);
     border-radius: 100px;
     margin: 0.2rem;
+  }
+  .header .version-tag {
+    display: inline-block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: white;
+    background: var(--terracotta);
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    margin-right: 0.4rem;
+    vertical-align: middle;
   }
 
   /* Section */
@@ -125,9 +137,10 @@
   .score-card .score.bad { color: var(--error-crimson); }
   .score-card .delta {
     font-size: 0.7rem;
-    color: var(--success-green);
     margin-top: 0.2rem;
   }
+  .score-card .delta.up { color: var(--success-green); }
+  .score-card .delta.down { color: var(--error-crimson); }
 
   /* Architecture diagram */
   .arch-diagram {
@@ -182,17 +195,6 @@
     border-radius: 4px;
     margin-top: 0.5rem;
   }
-  .module-card .new-badge {
-    display: inline-block;
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: white;
-    background: var(--success-green);
-    padding: 0.1rem 0.4rem;
-    border-radius: 3px;
-    margin-left: 0.4rem;
-    vertical-align: middle;
-  }
 
   /* Issues */
   .issue {
@@ -206,7 +208,7 @@
   .issue.medium { border-left: 4px solid var(--warning-amber); }
   .issue.low { border-left: 4px solid var(--stone-gray); }
   .issue.fixed { border-left: 4px solid var(--success-green); opacity: 0.85; }
-  .issue.pending { border-left: 4px solid #2d6a9d; }
+  .issue.pending { border-left: 4px solid var(--info-blue); }
   .issue .issue-header {
     display: flex;
     align-items: center;
@@ -226,7 +228,7 @@
   .issue .severity.medium { background: #fef3e0; color: var(--warning-amber); }
   .issue .severity.low { background: var(--code-bg); color: var(--stone-gray); }
   .issue .severity.fixed { background: #e8f5e8; color: var(--success-green); }
-  .issue .severity.pending { background: #e0edf8; color: #2d6a9d; }
+  .issue .severity.pending { background: #e0edf8; color: var(--info-blue); }
   .issue .title {
     font-weight: 600;
     font-size: 0.95rem;
@@ -350,6 +352,58 @@
   .summary-box.concerns li::before { content: '!'; font-weight: 700; color: var(--warning-amber); }
   .summary-box.resolved li::before { content: '\2713'; color: var(--success-green); }
 
+  /* Changelog */
+  .changelog {
+    background: var(--ivory);
+    border: 1px solid var(--border-cream);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+  }
+  .changelog table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+  }
+  .changelog th {
+    text-align: left;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 2px solid var(--border-warm);
+    color: var(--olive-gray);
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .changelog td {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid var(--border-cream);
+    color: var(--charcoal);
+    vertical-align: top;
+  }
+  .changelog tr:last-child td { border-bottom: none; }
+  .changelog .commit {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--terracotta);
+  }
+  .changelog .status-fixed {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--success-green);
+    background: #e8f5e8;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+  }
+  .changelog .status-new {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--info-blue);
+    background: #e0edf8;
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+  }
+
   /* Responsive */
   @media (max-width: 700px) {
     .score-grid { grid-template-columns: repeat(2, 1fr); }
@@ -367,11 +421,11 @@
   <h1>LLM Adapter 模块架构 Review</h1>
   <div class="subtitle">统一 LLM 调用接口，归一化 OpenAI / DeepSeek / Anthropic 三家协议差异</div>
   <div class="meta">
-    <span>11 个文件</span>
-    <span>2,702 行代码</span>
-    <span>2 个测试文件 (439 行)</span>
-    <span>Review 日期: 2026-05-26</span>
-    <span>更新日期: 2026-05-26</span>
+    <span class="version-tag">v2</span>
+    <span>15 个源文件</span>
+    <span>2,749 行代码</span>
+    <span>5 个测试文件 (2,400 行)</span>
+    <span>Review: 2026-05-26 (v1) &rarr; 2026-05-26 (v2)</span>
   </div>
 </div>
 
@@ -388,17 +442,19 @@
     <div class="label">Provider 隔离</div>
   </div>
   <div class="score-card">
-    <div class="score good">A-</div>
+    <div class="score good">A</div>
     <div class="label">错误处理</div>
+    <div class="delta up">&uarr; A- &rarr; A</div>
   </div>
   <div class="score-card">
-    <div class="score warn">B</div>
+    <div class="score good">A-</div>
     <div class="label">测试覆盖</div>
-    <div class="delta">&darr; 主要提升空间</div>
+    <div class="delta up">&uarr; B &rarr; A-</div>
   </div>
   <div class="score-card">
-    <div class="score good">B+</div>
+    <div class="score good">A-</div>
     <div class="label">依赖管理</div>
+    <div class="delta up">&uarr; B+ &rarr; A-</div>
   </div>
 </div>
 
@@ -409,7 +465,7 @@
   <h2>1. 架构总览</h2>
 
   <div class="arch-diagram">
-    <svg viewBox="0 0 920 500" xmlns="http://www.w3.org/2000/svg" style="font-family: 'Inter', sans-serif;">
+    <svg viewBox="0 0 920 520" xmlns="http://www.w3.org/2000/svg" style="font-family: 'Inter', sans-serif;">
       <defs>
         <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
           <path d="M 0 0 L 10 5 L 0 10 z" fill="#c96442"/>
@@ -422,76 +478,86 @@
       <text x="460" y="67" text-anchor="middle" font-size="11" fill="#87867f">类型定义 · 接口抽象 · 格式转换 · 流式处理 · 弹性策略</text>
 
       <!-- types.py -->
-      <rect x="40" y="85" width="155" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
-      <text x="117" y="110" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">types.py</text>
-      <text x="117" y="126" text-anchor="middle" font-size="10" fill="#87867f">统一类型系统</text>
-      <text x="117" y="142" text-anchor="middle" font-size="9" fill="#b0aea5">257 lines</text>
+      <rect x="40" y="85" width="130" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
+      <text x="105" y="110" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">types.py</text>
+      <text x="105" y="126" text-anchor="middle" font-size="10" fill="#87867f">统一类型系统</text>
+      <text x="105" y="142" text-anchor="middle" font-size="9" fill="#b0aea5">257 lines</text>
 
       <!-- base.py -->
-      <rect x="210" y="85" width="155" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
-      <text x="287" y="110" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">base.py</text>
-      <text x="287" y="126" text-anchor="middle" font-size="10" fill="#87867f">ILLMAdapter 接口 + 异常层次</text>
-      <text x="287" y="142" text-anchor="middle" font-size="9" fill="#b0aea5">160 lines</text>
+      <rect x="185" y="85" width="130" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
+      <text x="250" y="110" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">base.py</text>
+      <text x="250" y="126" text-anchor="middle" font-size="10" fill="#87867f">ILLMAdapter + 异常层次</text>
+      <text x="250" y="142" text-anchor="middle" font-size="9" fill="#b0aea5">195 lines</text>
 
-      <!-- transform.py -->
-      <rect x="380" y="85" width="155" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
-      <text x="457" y="110" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">transform.py</text>
-      <text x="457" y="126" text-anchor="middle" font-size="10" fill="#87867f">消息格式双向转换</text>
-      <text x="457" y="142" text-anchor="middle" font-size="9" fill="#b0aea5">586 lines</text>
+      <!-- transform/ 包 -->
+      <rect x="330" y="80" width="250" height="80" rx="6" fill="#f5f4ed" stroke="#3d7a3d" stroke-width="1.2"/>
+      <text x="455" y="100" text-anchor="middle" font-size="11" font-weight="500" fill="#3d7a3d">transform/ (包)</text>
+      <text x="345" y="118" font-size="9" fill="#87867f">_openai.py (183)</text>
+      <text x="345" y="132" font-size="9" fill="#87867f">_anthropic.py (196)</text>
+      <text x="475" y="118" font-size="9" fill="#87867f">_deepseek.py (112)</text>
+      <text x="475" y="132" font-size="9" fill="#87867f">_normalize.py (103)</text>
+      <text x="455" y="150" text-anchor="middle" font-size="9" fill="#b0aea5">618 lines total</text>
 
       <!-- streaming.py -->
-      <rect x="550" y="85" width="155" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
-      <text x="627" y="110" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">streaming.py</text>
-      <text x="627" y="126" text-anchor="middle" font-size="10" fill="#87867f">SSE 解析 + 流式收集器</text>
-      <text x="627" y="142" text-anchor="middle" font-size="9" fill="#b0aea5">293 lines</text>
+      <rect x="595" y="85" width="130" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
+      <text x="660" y="110" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">streaming.py</text>
+      <text x="660" y="126" text-anchor="middle" font-size="10" fill="#87867f">SSE + 流式收集器</text>
+      <text x="660" y="142" text-anchor="middle" font-size="9" fill="#b0aea5">293 lines</text>
 
       <!-- retry.py -->
-      <rect x="720" y="85" width="165" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
-      <text x="802" y="110" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">retry.py</text>
-      <text x="802" y="126" text-anchor="middle" font-size="10" fill="#87867f">重试 + Circuit Breaker</text>
-      <text x="802" y="142" text-anchor="middle" font-size="9" fill="#b0aea5">257 lines</text>
+      <rect x="740" y="85" width="140" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
+      <text x="810" y="110" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">retry.py</text>
+      <text x="810" y="126" text-anchor="middle" font-size="10" fill="#87867f">重试 + Circuit Breaker</text>
+      <text x="810" y="142" text-anchor="middle" font-size="9" fill="#b0aea5">262 lines</text>
 
       <!-- resilient.py (门面) -->
-      <rect x="250" y="170" width="420" height="55" rx="6" fill="#e8f5e8" stroke="#3d7a3d" stroke-width="1.2"/>
-      <text x="460" y="193" text-anchor="middle" font-size="12" font-weight="500" fill="#3d7a3d">resilient.py — 门面层（create_adapter 工厂 + ResilientLLMAdapter）</text>
-      <text x="460" y="210" text-anchor="middle" font-size="9" fill="#5e5d59">组合 Provider + Retry + CircuitBreaker · 146 lines</text>
+      <rect x="230" y="175" width="460" height="55" rx="6" fill="#e8f5e8" stroke="#3d7a3d" stroke-width="1.2"/>
+      <text x="460" y="198" text-anchor="middle" font-size="12" font-weight="500" fill="#3d7a3d">resilient.py — 门面层（create_adapter 工厂 + ResilientLLMAdapter）</text>
+      <text x="460" y="215" text-anchor="middle" font-size="9" fill="#5e5d59">组合 Provider + Retry + CircuitBreaker · 生命周期管理 · 187 lines</text>
 
       <!-- Provider 实现层 -->
-      <rect x="20" y="260" width="880" height="220" rx="10" fill="#faf9f5" stroke="#e8e6dc" stroke-width="1.5"/>
-      <text x="460" y="290" text-anchor="middle" font-size="14" font-weight="600" fill="#4d4c48">Provider 实现层</text>
-      <text x="460" y="307" text-anchor="middle" font-size="11" fill="#87867f">各自封装 API 差异，实现 ILLMAdapter 接口</text>
+      <rect x="20" y="265" width="880" height="240" rx="10" fill="#faf9f5" stroke="#e8e6dc" stroke-width="1.5"/>
+      <text x="460" y="295" text-anchor="middle" font-size="14" font-weight="600" fill="#4d4c48">Provider 实现层</text>
+      <text x="460" y="312" text-anchor="middle" font-size="11" fill="#87867f">各自封装 API 差异，实现 ILLMAdapter 接口</text>
 
       <!-- OpenAI Provider -->
-      <rect x="40" y="325" width="270" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
-      <text x="175" y="350" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">openai_provider.py</text>
-      <text x="175" y="366" text-anchor="middle" font-size="10" fill="#87867f">OpenAI ChatCompletions</text>
-      <text x="175" y="382" text-anchor="middle" font-size="9" fill="#b0aea5">241 lines</text>
+      <rect x="40" y="330" width="270" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
+      <text x="175" y="355" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">openai_provider.py</text>
+      <text x="175" y="371" text-anchor="middle" font-size="10" fill="#87867f">OpenAI ChatCompletions</text>
+      <text x="175" y="387" text-anchor="middle" font-size="9" fill="#b0aea5">219 lines</text>
 
       <!-- DeepSeek Provider -->
-      <rect x="325" y="325" width="270" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
-      <text x="460" y="350" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">deepseek_provider.py</text>
-      <text x="460" y="366" text-anchor="middle" font-size="10" fill="#87867f">DeepSeek V4 (OpenAI 兼容)</text>
-      <text x="460" y="382" text-anchor="middle" font-size="9" fill="#b0aea5">288 lines</text>
+      <rect x="325" y="330" width="270" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
+      <text x="460" y="355" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">deepseek_provider.py</text>
+      <text x="460" y="371" text-anchor="middle" font-size="10" fill="#87867f">DeepSeek V4 (OpenAI 兼容)</text>
+      <text x="460" y="387" text-anchor="middle" font-size="9" fill="#b0aea5">264 lines</text>
 
       <!-- Anthropic Provider -->
-      <rect x="610" y="325" width="270" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
-      <text x="745" y="350" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">anthropic_provider.py</text>
-      <text x="745" y="366" text-anchor="middle" font-size="10" fill="#87867f">Anthropic Messages API</text>
-      <text x="745" y="382" text-anchor="middle" font-size="9" fill="#b0aea5">394 lines</text>
+      <rect x="610" y="330" width="270" height="70" rx="6" fill="#f5f4ed" stroke="#e8e6dc"/>
+      <text x="745" y="355" text-anchor="middle" font-size="12" font-weight="500" fill="#4d4c48">anthropic_provider.py</text>
+      <text x="745" y="371" text-anchor="middle" font-size="10" fill="#87867f">Anthropic Messages API</text>
+      <text x="745" y="387" text-anchor="middle" font-size="9" fill="#b0aea5">372 lines</text>
+
+      <!-- AnthropicStreamParser (独立) -->
+      <rect x="610" y="415" width="270" height="50" rx="6" fill="#fef3e0" stroke="#b58633" stroke-width="1" stroke-dasharray="4,2"/>
+      <text x="745" y="438" text-anchor="middle" font-size="10" font-weight="500" fill="#b58633">AnthropicStreamParser (内嵌)</text>
+      <text x="745" y="452" text-anchor="middle" font-size="9" fill="#87867f">6 种事件类型解析</text>
 
       <!-- 连线：resilient → providers -->
-      <line x1="350" y1="225" x2="175" y2="325" stroke="#87867f" stroke-width="1" stroke-dasharray="4,3"/>
-      <line x1="460" y1="225" x2="460" y2="325" stroke="#87867f" stroke-width="1" stroke-dasharray="4,3"/>
-      <line x1="570" y1="225" x2="745" y2="325" stroke="#87867f" stroke-width="1" stroke-dasharray="4,3"/>
+      <line x1="330" y1="230" x2="175" y2="330" stroke="#87867f" stroke-width="1" stroke-dasharray="4,3"/>
+      <line x1="460" y1="230" x2="460" y2="330" stroke="#87867f" stroke-width="1" stroke-dasharray="4,3"/>
+      <line x1="590" y1="230" x2="745" y2="330" stroke="#87867f" stroke-width="1" stroke-dasharray="4,3"/>
 
       <!-- providers → 核心层 -->
-      <line x1="175" y1="325" x2="287" y2="155" stroke="#c96442" stroke-width="1" marker-end="url(#arrow)"/>
-      <line x1="460" y1="325" x2="457" y2="155" stroke="#c96442" stroke-width="1" marker-end="url(#arrow)"/>
-      <line x1="745" y1="325" x2="627" y2="155" stroke="#c96442" stroke-width="1" marker-end="url(#arrow)"/>
+      <line x1="175" y1="330" x2="250" y2="155" stroke="#c96442" stroke-width="1" marker-end="url(#arrow)"/>
+      <line x1="460" y1="330" x2="455" y2="160" stroke="#c96442" stroke-width="1" marker-end="url(#arrow)"/>
+      <line x1="745" y1="330" x2="660" y2="155" stroke="#c96442" stroke-width="1" marker-end="url(#arrow)"/>
 
       <!-- 图例 -->
-      <text x="580" y="470" font-size="10" fill="#c96442">&mdash; = 依赖核心层</text>
-      <text x="730" y="470" font-size="10" fill="#87867f">- - = 门面委托</text>
+      <text x="40" y="480" font-size="10" fill="#c96442">&mdash; = 依赖核心层</text>
+      <text x="200" y="480" font-size="10" fill="#87867f">- - = 门面委托</text>
+      <rect x="350" y="468" width="60" height="14" rx="3" fill="none" stroke="#3d7a3d" stroke-width="1.2"/>
+      <text x="418" y="480" font-size="10" fill="#3d7a3d">= v2 拆分为包</text>
     </svg>
   </div>
 
@@ -500,32 +566,125 @@
     <ul>
       <li><strong>分层清晰</strong> — 核心抽象层（types/base/transform/streaming/retry）与 Provider 实现层完全分离，新增 Provider 只需实现 ILLMAdapter 接口</li>
       <li><strong>装饰器模式</strong> — ResilientLLMAdapter 以组合方式包装任意 Provider，retry 和 circuit breaker 可独立开关</li>
-      <li><strong>纯函数转换</strong> — transform.py 全部是无副作用纯函数，天然可测试，Provider 之间共享逻辑不重复</li>
+      <li><strong>纯函数转换</strong> — transform/ 包全部是无副作用纯函数，天然可测试，Provider 之间共享逻辑零重复（DeepSeek 复用 OpenAI 转换）</li>
       <li><strong>统一类型系统</strong> — content 永远是 ContentBlock 数组，消除了 OpenAI string|array 二义性，上层代码无需关心 Provider 差异</li>
       <li><strong>工厂函数</strong> — create_adapter() 通过字符串映射动态导入 Provider，上层代码零耦合</li>
+      <li><strong>生命周期管理</strong> — ILLMAdapter 定义 close() 抽象方法，ResilientLLMAdapter 委托给 Provider，支持 async context manager</li>
     </ul>
   </div>
 </div>
 
 <!-- ============================================================
-     SECTION 2: 数据流分析
+     SECTION 2: v1&rarr;v2 变更追踪
      ============================================================ -->
 <div class="section">
-  <h2>2. 数据流分析</h2>
+  <h2>2. v1 &rarr; v2 变更追踪</h2>
+
+  <div class="changelog">
+    <table>
+      <thead>
+        <tr>
+          <th>Commit</th>
+          <th>类型</th>
+          <th>描述</th>
+          <th>状态</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="commit">9adf6dc</td>
+          <td>fix</td>
+          <td>CircuitBreaker.state property 消除副作用，提取 _check_and_transition</td>
+          <td><span class="status-fixed">v1-LOW 已修复</span></td>
+        </tr>
+        <tr>
+          <td class="commit">a81da09</td>
+          <td>fix</td>
+          <td>stream() retry 重写 — 手动重试仅覆盖连接阶段，逐个 yield 事件</td>
+          <td><span class="status-fixed">v1-MEDIUM 已修复</span></td>
+        </tr>
+        <tr>
+          <td class="commit">0d69ec2</td>
+          <td>fix</td>
+          <td>normalize_messages 入口处创建新对象，避免修改原始消息</td>
+          <td><span class="status-fixed">v1-MEDIUM 已修复</span></td>
+        </tr>
+        <tr>
+          <td class="commit">c018210</td>
+          <td>feat</td>
+          <td>ILLMAdapter 添加 close() 抽象方法，ResilientLLMAdapter 实现生命周期管理</td>
+          <td><span class="status-fixed">v1-MEDIUM 已修复</span></td>
+        </tr>
+        <tr>
+          <td class="commit">116c36c</td>
+          <td>refactor</td>
+          <td>提取 handle_http_error 公共函数到 base.py，消除三家 Provider 重复代码</td>
+          <td><span class="status-fixed">v1-LOW 已修复</span></td>
+        </tr>
+        <tr>
+          <td class="commit">1396ca4</td>
+          <td>refactor</td>
+          <td>transform.py 拆分为 transform/ 包，按 Provider 组织（_openai/_anthropic/_deepseek/_normalize）</td>
+          <td><span class="status-fixed">v1-LOW 已修复</span></td>
+        </tr>
+        <tr>
+          <td class="commit">79e4e96</td>
+          <td>test</td>
+          <td>streaming 模块测试覆盖 — SSE 解析、Parser、Collector（417 行）</td>
+          <td><span class="status-fixed">v1-MEDIUM 已修复</span></td>
+        </tr>
+        <tr>
+          <td class="commit">3f70e32</td>
+          <td>test</td>
+          <td>transform 纯函数测试覆盖（638 行）</td>
+          <td><span class="status-fixed">v1-MEDIUM 已修复</span></td>
+        </tr>
+        <tr>
+          <td class="commit">98a6976</td>
+          <td>test</td>
+          <td>Provider mock 集成测试 — 请求构建、错误处理、生命周期（703 行）</td>
+          <td><span class="status-fixed">v1-MEDIUM 已修复</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="summary-box resolved">
+    <h3>v1 所有问题均已解决</h3>
+    <ul>
+      <li><strong>P0: 统一消息格式</strong> — content 永远是 ContentBlock 数组</li>
+      <li><strong>P0: Anthropic 支持</strong> — 完整实现，含 extended thinking</li>
+      <li><strong>P0: tool_use/tool_result 配对</strong> — normalize_messages 自动补 "(cancelled)"</li>
+      <li><strong>MEDIUM: 流式 retry 语义</strong> — 重写为手动重试，仅覆盖连接阶段</li>
+      <li><strong>MEDIUM: normalize_messages 不可变</strong> — 入口处 model_copy 创建新对象</li>
+      <li><strong>MEDIUM: httpx 客户端关闭</strong> — close() + async context manager</li>
+      <li><strong>MEDIUM: 测试覆盖</strong> — 从 439 行增加到 2,400 行（+447%）</li>
+      <li><strong>LOW: CircuitBreaker.state</strong> — 提取 _check_and_transition，property 只读</li>
+      <li><strong>LOW: transform.py 拆分</strong> — 按目标组织为 4 个子模块</li>
+      <li><strong>LOW: _handle_error 重复</strong> — 提取为 handle_http_error 公共函数</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============================================================
+     SECTION 3: 数据流分析
+     ============================================================ -->
+<div class="section">
+  <h2>3. 数据流分析</h2>
 
   <h3>非流式请求路径</h3>
   <div style="padding: 1rem 0;">
     <div class="flow-step">
       <div class="step-num">1</div>
       <div class="step-content">
-        <span class="module-ref">resilient.create_adapter()</span> — 工厂函数根据 provider 名称动态导入 Provider 类，创建 ResilientLLMAdapter 实例
+        <span class="module-ref">resilient.create_adapter()</span> — 工厂函数根据 provider 名称通过 <code>_PROVIDER_MAP</code> 动态导入 Provider 类，创建 ResilientLLMAdapter 实例
       </div>
     </div>
     <div class="flow-arrow">&darr;</div>
     <div class="flow-step">
       <div class="step-num">2</div>
       <div class="step-content">
-        <span class="module-ref">ResilientLLMAdapter.complete()</span> — 检查 CircuitBreaker 状态 → 调用 <code>retry_with_backoff()</code> 包装内部 Provider
+        <span class="module-ref">ResilientLLMAdapter.complete()</span> — 检查 CircuitBreaker（<code>allow_request()</code>）→ 通过 <code>retry_with_backoff()</code> 包装内部 Provider
       </div>
     </div>
     <div class="flow-arrow">&darr;</div>
@@ -539,14 +698,14 @@
     <div class="flow-step">
       <div class="step-num">4</div>
       <div class="step-content">
-        <span class="module-ref">httpx.AsyncClient.post()</span> — 发送 HTTP 请求，网络异常转为 <code>ServiceUnavailableError</code>
+        <span class="module-ref">httpx.AsyncClient.post()</span> — 发送 HTTP 请求。网络异常（<code>httpx.ConnectError</code>）转为 <code>ServiceUnavailableError</code>
       </div>
     </div>
     <div class="flow-arrow">&darr;</div>
     <div class="flow-step">
       <div class="step-num">5</div>
       <div class="step-content">
-        <span class="module-ref">Provider._handle_error() + _parse_response()</span> — HTTP 状态码映射到 <code>RateLimitError / InvalidRequestError</code>，响应体通过 <code>parse_openai/anthropic_response()</code> 转回统一类型
+        <span class="module-ref">handle_http_error() + _parse_response()</span> — 公共函数 <code>handle_http_error()</code> 按 HTTP 状态码映射到 typed 异常，响应体通过 <code>parse_openai/anthropic_response()</code> 转回统一类型
       </div>
     </div>
     <div class="flow-arrow">&darr;</div>
@@ -563,7 +722,7 @@
     <div class="flow-step">
       <div class="step-num">1</div>
       <div class="step-content">
-        <span class="module-ref">ResilientLLMAdapter.stream()</span> — 检查 CircuitBreaker → 调用 <code>retry_with_backoff()</code> 获取 <code>AsyncIterator[StreamEvent]</code>
+        <span class="module-ref">ResilientLLMAdapter.stream()</span> — 手动重试循环：检查 CircuitBreaker → 调用 <code>provider.stream()</code> → 尝试获取第一个事件（<code>__anext__()</code>）。仅连接阶段可重试
       </div>
     </div>
     <div class="flow-arrow">&darr;</div>
@@ -584,6 +743,13 @@
     <div class="flow-step">
       <div class="step-num">4</div>
       <div class="step-content">
+        <span class="module-ref">ResilientLLMAdapter</span> — yield 第一个事件后，继续 <code>async for event in stream</code> 逐个 yield 后续事件。流完成后 <code>record_success()</code>，异常则 <code>record_failure()</code>
+      </div>
+    </div>
+    <div class="flow-arrow">&darr;</div>
+    <div class="flow-step">
+      <div class="step-num">5</div>
+      <div class="step-content">
         <span class="module-ref">StreamCollector (可选)</span> — 消费端使用 <code>feed()</code> 累积事件，最终 <code>collect()</code> 得到完整 <code>CompletionResult</code>
       </div>
     </div>
@@ -592,53 +758,58 @@
   <div class="summary-box resolved">
     <h3>数据流 &mdash; 设计亮点与已知限制</h3>
     <ul>
-      <li><strong>错误提前转换</strong> — Provider 在收到非 200 响应时立即抛出 typed 异常（如 RateLimitError），retry 层按 <code>retryable</code> 字段决策，不需要解析原始错误</li>
-      <li><strong>流式重试风险</strong> — <code>ResilientLLMAdapter.stream()</code> 通过 retry 包装，但流一旦开始 yield 就无法重试。retry 只作用于"建立连接"阶段，中途断流不重试</li>
-      <li><strong>Anthropic 双解析器</strong> — Anthropic 流式事件类型远多于 OpenAI（message_start/content_block_start/delta/stop），需要独立的 AnthropicStreamParser 维护 index → block 映射</li>
+      <li><strong>错误提前转换</strong> — Provider 在收到非 200 响应时通过 <code>handle_http_error()</code> 立即抛出 typed 异常，retry 层按 <code>retryable</code> 字段决策</li>
+      <li><strong>流式重试语义明确</strong> — v2 重写后，retry 仅覆盖"建立连接 + 获取首个事件"阶段。一旦开始 yield，后续事件不受 retry 保护，语义清晰</li>
+      <li><strong>Anthropic 双解析器</strong> — Anthropic 流式事件类型远多于 OpenAI（message_start/content_block_start/delta/stop），需要独立的 AnthropicStreamParser 维护 index &rarr; block 映射</li>
+      <li><strong>流式超时静默化</strong> — 三家 Provider 的 stream() 中，<code>httpx.TimeoutException</code> 和 <code>httpx.ConnectError</code> yield ERROR 事件而非 raise，circuit breaker 不会感知（新发现）</li>
     </ul>
   </div>
 </div>
 
 <!-- ============================================================
-     SECTION 3: 各模块分析
+     SECTION 4: 各模块分析
      ============================================================ -->
 <div class="section">
-  <h2>3. 各模块分析</h2>
+  <h2>4. 各模块分析</h2>
 
   <div class="module-grid">
     <div class="module-card">
       <div class="name">types.py</div>
       <div class="role">统一类型系统 &mdash; 所有模块的基础</div>
       <div class="detail">
-        定义了完整的消息/内容块/工具/配置/结果/流式事件类型体系。设计决策：<strong>content 永远是 ContentBlock 数组</strong>（消除 OpenAI string|array 二义性），<strong>ToolMessage 独立 role</strong>（内部用独立 role，转换时按目标格式合并）。
+        定义了完整的消息/内容块/工具/配置/结果/流式事件类型体系。<strong>content 永远是 ContentBlock 数组</strong>（消除 OpenAI string|array 二义性），<strong>ToolMessage 独立 role</strong>（内部用独立 role，转换时按目标格式合并）。
         <br><br>
-        <strong>亮点：</strong>ThinkingBlock 预留了 signature 字段（Anthropic 回传校验），ThinkingConfig 用 budget_tokens 区分 provider 能力。provider_extras 字典允许上层透传各家特有参数，不污染统一接口。
+        <strong>亮点：</strong>ThinkingBlock 预留了 signature 字段（Anthropic 回传校验），ThinkingConfig 用 budget_tokens 区分 provider 能力。provider_extras 字典允许上层透传各家特有参数，不污染统一接口。UsageStats 包含 cache_read_tokens/cache_creation_tokens。
       </div>
       <span class="loc">257 lines</span>
     </div>
 
     <div class="module-card">
       <div class="name">base.py</div>
-      <div class="role">ILLMAdapter 抽象接口 + 异常层次</div>
+      <div class="role">ILLMAdapter 抽象接口 + 异常层次 + 公共错误处理</div>
       <div class="detail">
-        ABC 定义 4 个方法：<code>complete / stream / get_provider_info / health_check</code>。异常体系为 4 层继承：LLMAdapterError → RateLimitError / ServiceUnavailableError / InvalidRequestError / CircuitOpenError，每个异常自带 <code>retryable</code> 标记。
+        ABC 定义 5 个方法：<code>complete / stream / get_provider_info / health_check / close</code>（v2 新增 close）。异常体系为 4 层继承：LLMAdapterError &rarr; RateLimitError / ServiceUnavailableError / InvalidRequestError / CircuitOpenError，每个异常自带 <code>retryable</code> 标记。
         <br><br>
-        <strong>亮点：</strong>retryable 让 retry.py 不需要理解 HTTP 状态码，只看异常类型。health_check 为 circuit breaker 提供探测入口。
+        <strong>v2 新增：</strong><code>handle_http_error(response, provider_name)</code> 公共函数，消除三家 Provider 的 _handle_error 重复代码。按 HTTP 状态码映射到 typed 异常，支持 retry-after 头解析。
       </div>
-      <span class="loc">160 lines</span>
+      <span class="loc">195 lines</span>
     </div>
 
-    <div class="module-card">
-      <div class="name">transform.py</div>
-      <div class="role">消息格式双向转换 &mdash; 最大的核心模块</div>
+    <div class="module-card" style="border-color: var(--success-green);">
+      <div class="name">transform/ (包)</div>
+      <div class="role">消息格式双向转换 &mdash; v2 拆分为 4 个子模块</div>
       <div class="detail">
-        纯函数集合，负责内部统一格式 ↔ OpenAI/DeepSeek/Anthropic 三家格式互转。按目标分三组：<strong>messages_to_openai/deepseek/anthropic()</strong>（请求方向）、<strong>parse_openai/deepseek/anthropic_response()</strong>（响应方向）、<strong>tools_to_openai/anthropic()</strong>（工具定义）。
+        <strong>_openai.py</strong> (183 行) — OpenAI ChatCompletions 格式互转。ThinkingBlock 静默丢弃，tool arguments JSON-stringified。
+        <br>
+        <strong>_anthropic.py</strong> (196 行) — Anthropic Messages API 格式互转。system 分离为顶层字段，tool_use/tool_result 是 content block，arguments 是 object。
+        <br>
+        <strong>_deepseek.py</strong> (112 行) — 复用 OpenAI 格式，追加 reasoning_content 支持（tool call 场景必须回传）。
+        <br>
+        <strong>_normalize.py</strong> (103 行) — 发送前修复：配对补 "(cancelled)"、同角色合并、不可变保证。
         <br><br>
-        <strong>亮点：</strong><code>normalize_messages()</code> 在发送前做三件事 &mdash; tool_use/tool_result 配对补 "(cancelled)"、同角色合并、协议字段保留。<code>messages_to_anthropic()</code> 处理了 Anthropic 最棘手的 system 分离 + 严格交替要求。
-        <br><br>
-        <strong>注意：</strong>586 行是模块中最大的文件，但全是纯函数、无状态，复杂度可控。
+        <strong>亮点：</strong>DeepSeek 复用 OpenAI 转换函数（code reuse via delegation），normalize_messages 通过 model_copy 保证不可变。
       </div>
-      <span class="loc">586 lines</span>
+      <span class="loc">618 lines total (4 files)</span>
     </div>
 
     <div class="module-card">
@@ -647,7 +818,7 @@
       <div class="detail">
         三层设计：<strong>parse_sse_lines()</strong> 通用 SSE 行解析器（过滤 data: 前缀、处理 [DONE]）；<strong>OpenAIStreamParser</strong> 维护 tool_calls 增量拼接状态；<strong>StreamCollector</strong> 提供 text_stream / collect 两种消费方式。
         <br><br>
-        <strong>亮点：</strong>OpenAIStreamParser 用 index → buffer dict 处理多个并行 tool call 的增量拼接，finish_reason 时输出完整 TOOL_USE_END 事件。StreamCollector.get_text_so_far() 支持实时预览已收集文本。
+        <strong>亮点：</strong>OpenAIStreamParser 用 index &rarr; buffer dict 处理多个并行 tool call 的增量拼接，finish_reason 时输出完整 TOOL_USE_END 事件。StreamCollector.get_text_so_far() 支持实时预览已收集文本。
       </div>
       <span class="loc">293 lines</span>
     </div>
@@ -658,24 +829,24 @@
       <div class="detail">
         重试：<code>retry_with_backoff()</code> 实现指数退避 + jitter + retry-after 优先。should_retry() 按 retryable 标记决策，400 错误立即失败。
         <br><br>
-        Circuit Breaker：经典三态机 CLOSED → OPEN → HALF_OPEN。连续 N 次失败触发熔断，冷却期后允许探测，探测成功 M 次恢复。<code>state</code> property 自动检查是否该进入 HALF_OPEN（惰性转换，无需定时器）。
+        Circuit Breaker：经典三态机 CLOSED &rarr; OPEN &rarr; HALF_OPEN。连续 N 次失败触发熔断，冷却期后允许探测，探测成功 M 次恢复。
         <br><br>
-        <strong>亮点：</strong>数据驱动设计，RetryConfig / CircuitBreakerConfig 均为 frozen dataclass，所有策略参数可配置。get_stats() 暴露监控数据。
+        <strong>v2 改进：</strong><code>state</code> property 不再有副作用。状态转换通过显式的 <code>_check_and_transition()</code> 方法触发（在 <code>allow_request()</code> 内部调用），<code>state</code> property 只返回当前值，调试/监控场景安全。
       </div>
-      <span class="loc">257 lines</span>
+      <span class="loc">262 lines</span>
     </div>
 
     <div class="module-card">
       <div class="name">resilient.py</div>
-      <div class="role">门面层 &mdash; 工厂函数 + 弹性包装器</div>
+      <div class="role">门面层 &mdash; 工厂函数 + 弹性包装器 + 生命周期</div>
       <div class="detail">
-        <strong>ResilientLLMAdapter</strong> 组合 Provider + RetryConfig + CircuitBreaker，对外实现 ILLMAdapter 接口。每个方法先检查断路器，再通过 retry_with_backoff 委托给内部 Provider。
+        <strong>ResilientLLMAdapter</strong> 组合 Provider + RetryConfig + CircuitBreaker，对外实现 ILLMAdapter 接口。每个方法先检查断路器，再通过 retry 委托给内部 Provider。
         <br><br>
-        <strong>create_adapter()</strong> 工厂函数通过 <code>_PROVIDER_MAP</code> 字符串映射动态导入 Provider 类，上层代码只需传 provider 名称。
+        <strong>create_adapter()</strong> 工厂函数通过 <code>_PROVIDER_MAP</code> 字符串映射动态导入 Provider 类。
         <br><br>
-        <strong>亮点：</strong>装饰器模式 &mdash; 可以多层包装（理论上可以 retry-on-retry），Provider 实现完全不知道 retry/circuit breaker 的存在。
+        <strong>v2 改进：</strong>实现 <code>close()</code> 委托给 Provider，支持 async context manager。<code>stream()</code> 重写为手动重试循环，仅覆盖连接建立阶段。
       </div>
-      <span class="loc">146 lines</span>
+      <span class="loc">187 lines</span>
     </div>
 
     <div class="module-card">
@@ -684,9 +855,9 @@
       <div class="detail">
         最标准的 Provider 实现。_build_request_body() 调用 messages_to_openai() + tools_to_openai() + build_openai_sampling_params()。流式使用 OpenAIStreamParser。
         <br><br>
-        <strong>特点：</strong>支持 reasoning_effort（o 系列）、provider_extras 透传。不支持 reasoning_content（o 系列隐藏思考）。
+        <strong>特点：</strong>支持 reasoning_effort（o 系列）、provider_extras 透传。<code>handle_http_error()</code> 委托到 base.py 公共函数。默认模型 gpt-5，最大上下文 400K。
       </div>
-      <span class="loc">241 lines</span>
+      <span class="loc">219 lines</span>
     </div>
 
     <div class="module-card">
@@ -695,230 +866,273 @@
       <div class="detail">
         复用 OpenAI 框架但有关键差异：<strong>messages_to_deepseek()</strong> 保留 reasoning_content 字段（tool call 场景必须回传，否则 400）；<strong>_validate_no_image_blocks()</strong> 拒绝视觉输入；thinking 模式下 temperature/top_p 静默无效（发出 warning）。
         <br><br>
-        <strong>亮点：</strong>reasoning_effort 只接受 "high"/"max"，自动映射非法值。
+        <strong>亮点：</strong>reasoning_effort 只接受 "high"/"max"，自动映射非法值。默认模型 deepseek-v4-pro，最大上下文 1M。
       </div>
-      <span class="loc">288 lines</span>
+      <span class="loc">264 lines</span>
     </div>
 
     <div class="module-card">
       <div class="name">anthropic_provider.py</div>
-      <div class="role">Anthropic Messages API Provider</div>
+      <div class="role">Anthropic Messages API Provider + AnthropicStreamParser</div>
       <div class="detail">
-        协议差异最大的 Provider。system 是顶层字段、tool_use/tool_result 是 content block、arguments 是 object。需要独立的 <strong>AnthropicStreamParser</strong> 处理 message_start / content_block_start / delta / message_delta 多层事件。
+        协议差异最大的 Provider。system 是顶层字段、tool_use/tool_result 是 content block、arguments 是 object。需要独立的 <strong>AnthropicStreamParser</strong> 处理 6 种事件类型（message_start/content_block_start/delta/content_block_stop/message_delta/message_stop）。
         <br><br>
-        <strong>特点：</strong>Extended thinking 支持 budget_tokens + signature 回传。_build_request_body() 自动计算 max_tokens（必须 ≥ budget + 输出）。支持 cache_control / pdf / computer_use 通过 provider_extras。
+        <strong>特点：</strong>Extended thinking 支持 budget_tokens + signature 回传。auto-calculate max_tokens（budget + 8192）。支持 cache_control / pdf / computer_use 通过 provider_extras。默认模型 claude-sonnet-4-6。
         <br><br>
-        <strong>亮点：</strong>最复杂但最完整 &mdash; 394 行覆盖了 Anthropic 的所有关键差异点。
+        <strong>亮点：</strong>372 行覆盖了 Anthropic 的所有关键差异点。AnthropicStreamParser 维护 content_block_index &rarr; block 映射，支持并行 tool call。
       </div>
-      <span class="loc">394 lines</span>
+      <span class="loc">372 lines</span>
     </div>
 
     <div class="module-card">
-      <div class="name">__init__.py</div>
-      <div class="role">模块入口 &mdash; 统一导出</div>
+      <div class="name">__init__.py + providers/__init__.py</div>
+      <div class="role">模块入口 &mdash; 统一导出 + Provider 包标记</div>
       <div class="detail">
-        从 base / resilient / types 三处导出所有公开 API。__all__ 列表完整（38 个符号），按功能分组。上层代码只需 <code>from agent_framework.llm import create_adapter, CompletionConfig</code>。
+        <strong>llm/__init__.py</strong> (82 行) — 从 base / resilient / types 三处导出所有公开 API。__all__ 列表完整（43 个符号），按功能分组。上层代码只需 <code>from agent_framework.llm import create_adapter, CompletionConfig</code>。
+        <br><br>
+        <strong>providers/__init__.py</strong> — 空文件。Provider 类通过 resilient.py 中的 _PROVIDER_MAP 动态导入，上层代码不应直接导入 Provider。
       </div>
-      <span class="loc">80 lines</span>
-    </div>
-
-    <div class="module-card" style="border-color: var(--stone-gray);">
-      <div class="name">providers/__init__.py</div>
-      <div class="role">空文件 &mdash; Provider 包</div>
-      <div class="detail">
-        空文件。Provider 类通过 resilient.py 中的 _PROVIDER_MAP 动态导入，不在此处导出。这是有意为之 &mdash; 上层代码不应直接导入 Provider。
-      </div>
-      <span class="loc">0 lines</span>
+      <span class="loc">82 + 0 lines</span>
     </div>
   </div>
 </div>
 
 <!-- ============================================================
-     SECTION 4: 问题追踪
+     SECTION 5: 测试覆盖
+     ============================================================ -->
+<div class="section">
+  <h2>5. 测试覆盖</h2>
+
+  <div class="arch-diagram">
+    <svg viewBox="0 0 920 320" xmlns="http://www.w3.org/2000/svg" style="font-family: 'Inter', sans-serif;">
+      <defs>
+        <linearGradient id="barGrad" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#3d7a3d"/>
+          <stop offset="100%" stop-color="#5ea35e"/>
+        </linearGradient>
+      </defs>
+
+      <!-- 标题 -->
+      <text x="460" y="30" text-anchor="middle" font-size="14" font-weight="600" fill="#4d4c48">测试覆盖矩阵</text>
+
+      <!-- 表头 -->
+      <text x="30" y="60" font-size="11" font-weight="600" fill="#87867f">源文件</text>
+      <text x="250" y="60" font-size="11" font-weight="600" fill="#87867f">测试文件</text>
+      <text x="600" y="60" font-size="11" font-weight="600" fill="#87867f">覆盖度</text>
+      <text x="850" y="60" font-size="11" font-weight="600" fill="#87867f">测试数</text>
+      <line x1="20" y1="68" x2="900" y2="68" stroke="#e8e6dc" stroke-width="1"/>
+
+      <!-- types.py -->
+      <text x="30" y="92" font-size="11" fill="#4d4c48">types.py (257)</text>
+      <text x="250" y="92" font-size="11" fill="#87867f">被所有测试间接覆盖</text>
+      <rect x="600" y="80" width="150" height="14" rx="3" fill="#e8e6dc"/>
+      <rect x="600" y="80" width="135" height="14" rx="3" fill="url(#barGrad)" opacity="0.8"/>
+      <text x="760" y="92" font-size="10" fill="#3d7a3d">间接 90%</text>
+      <text x="850" y="92" font-size="10" fill="#87867f">&mdash;</text>
+
+      <!-- base.py -->
+      <text x="30" y="122" font-size="11" fill="#4d4c48">base.py (195)</text>
+      <text x="250" y="122" font-size="11" fill="#5e5d59">test_providers.py (handle_http_error)</text>
+      <rect x="600" y="110" width="150" height="14" rx="3" fill="#e8e6dc"/>
+      <rect x="600" y="110" width="120" height="14" rx="3" fill="url(#barGrad)" opacity="0.8"/>
+      <text x="760" y="122" font-size="10" fill="#3d7a3d">~80%</text>
+      <text x="850" y="122" font-size="10" fill="#87867f">12</text>
+
+      <!-- transform/ -->
+      <text x="30" y="152" font-size="11" fill="#4d4c48">transform/ (618)</text>
+      <text x="250" y="152" font-size="11" fill="#5e5d59">test_transform.py (638) + test_normalize_messages.py (138)</text>
+      <rect x="600" y="140" width="150" height="14" rx="3" fill="#e8e6dc"/>
+      <rect x="600" y="140" width="145" height="14" rx="3" fill="url(#barGrad)" opacity="0.8"/>
+      <text x="760" y="152" font-size="10" fill="#3d7a3d">~97%</text>
+      <text x="850" y="152" font-size="10" fill="#87867f">47</text>
+
+      <!-- streaming.py -->
+      <text x="30" y="182" font-size="11" fill="#4d4c48">streaming.py (293)</text>
+      <text x="250" y="182" font-size="11" fill="#5e5d59">test_streaming.py (417)</text>
+      <rect x="600" y="170" width="150" height="14" rx="3" fill="#e8e6dc"/>
+      <rect x="600" y="170" width="140" height="14" rx="3" fill="url(#barGrad)" opacity="0.8"/>
+      <text x="760" y="182" font-size="10" fill="#3d7a3d">~93%</text>
+      <text x="850" y="182" font-size="10" fill="#87867f">26</text>
+
+      <!-- retry.py -->
+      <text x="30" y="212" font-size="11" fill="#4d4c48">retry.py (262)</text>
+      <text x="250" y="212" font-size="11" fill="#5e5d59">test_resilient.py (504)</text>
+      <rect x="600" y="200" width="150" height="14" rx="3" fill="#e8e6dc"/>
+      <rect x="600" y="200" width="120" height="14" rx="3" fill="url(#barGrad)" opacity="0.8"/>
+      <text x="760" y="212" font-size="10" fill="#3d7a3d">~80%</text>
+      <text x="850" y="212" font-size="10" fill="#87867f">~15</text>
+
+      <!-- providers/ -->
+      <text x="30" y="242" font-size="11" fill="#4d4c48">providers/ (855)</text>
+      <text x="250" y="242" font-size="11" fill="#5e5d59">test_providers.py (703)</text>
+      <rect x="600" y="230" width="150" height="14" rx="3" fill="#e8e6dc"/>
+      <rect x="600" y="230" width="130" height="14" rx="3" fill="url(#barGrad)" opacity="0.8"/>
+      <text x="760" y="242" font-size="10" fill="#3d7a3d">~87%</text>
+      <text x="850" y="242" font-size="10" fill="#87867f">43</text>
+
+      <!-- resilient.py -->
+      <text x="30" y="272" font-size="11" fill="#4d4c48">resilient.py (187)</text>
+      <text x="250" y="272" font-size="11" fill="#5e5d59">test_resilient.py (504)</text>
+      <rect x="600" y="260" width="150" height="14" rx="3" fill="#e8e6dc"/>
+      <rect x="600" y="260" width="145" height="14" rx="3" fill="url(#barGrad)" opacity="0.8"/>
+      <text x="760" y="272" font-size="10" fill="#3d7a3d">~97%</text>
+      <text x="850" y="272" font-size="10" fill="#87867f">~20</text>
+
+      <!-- 总计 -->
+      <line x1="20" y1="290" x2="900" y2="290" stroke="#e8e6dc" stroke-width="1"/>
+      <text x="30" y="310" font-size="12" font-weight="600" fill="#4d4c48">总计: 5 个测试文件, 2,400 行</text>
+      <text x="600" y="310" font-size="12" font-weight="600" fill="#3d7a3d">v1: 439 行 &rarr; v2: 2,400 行 (+447%)</text>
+    </svg>
+  </div>
+
+  <div class="summary-box strengths">
+    <h3>测试覆盖亮点</h3>
+    <ul>
+      <li><strong>纯函数 97% 覆盖</strong> — transform/ 包 618 行纯函数，638 行测试 + 138 行 normalize 测试，几乎逐函数覆盖</li>
+      <li><strong>Provider mock 集成测试</strong> — 703 行测试用 mock HTTP 覆盖请求构建、错误处理、生命周期、完整 complete() 调用</li>
+      <li><strong>不可变性测试</strong> — test_normalize_messages 包含显式的不可变性断言，确保原始消息不被修改</li>
+      <li><strong>流式重试测试</strong> — test_resilient.py 专门测试 stream() 的连接阶段重试和事件 yield 行为</li>
+    </ul>
+  </div>
+</div>
+
+<!-- ============================================================
+     SECTION 6: 问题追踪 (v2)
      说明：已完成在前（P0 → P1），待改进在后（MEDIUM → LOW）
      ============================================================ -->
 <div class="section">
-  <h2>4. 问题追踪</h2>
+  <h2>6. 问题追踪 (v2)</h2>
 
-  <!-- ===== 已完成 ===== -->
-
-  <div class="issue high fixed">
-    <div class="issue-header">
-      <span class="severity high">P0</span>
-      <span class="severity fixed">已完成</span>
-      <span class="title">统一消息格式（消除 string|array 二义性）</span>
-    </div>
-    <div class="desc">
-      types.py 中 UserMessage/AssistantMessage 的 content 永远是 <code>list[ContentBlock]</code>，transform.py 在转换时处理各家的差异。
-    </div>
-  </div>
-
-  <div class="issue high fixed">
-    <div class="issue-header">
-      <span class="severity high">P0</span>
-      <span class="severity fixed">已完成</span>
-      <span class="title">Anthropic Messages API 支持</span>
-    </div>
-    <div class="desc">
-      完整实现 Anthropic Provider，包括 system 分离、content block 方式的 tool_use/tool_result、extended thinking、独立的 AnthropicStreamParser。
-      <code>anthropic_provider.py</code> 394 行覆盖了所有关键差异。
-    </div>
-  </div>
-
-  <div class="issue high fixed">
-    <div class="issue-header">
-      <span class="severity high">P0</span>
-      <span class="severity fixed">已完成</span>
-      <span class="title">tool_use/tool_result 配对验证</span>
-    </div>
-    <div class="desc">
-      <code>normalize_messages()</code> 中 <code>_pair_tool_results()</code> 扫描所有 ToolUseBlock，缺失的 tool_result 自动补 "(cancelled)" 占位。
-      <code>9e3e90a</code>
-    </div>
-  </div>
-
-  <div class="issue medium fixed">
-    <div class="issue-header">
-      <span class="severity medium">P1</span>
-      <span class="severity fixed">已完成</span>
-      <span class="title">max_context_tokens 配置</span>
-    </div>
-    <div class="desc">
-      CompletionConfig 新增 max_context_tokens 字段，create_adapter() 和 ResilientLLMAdapter 支持传入。上层可按 provider 能力设置上下文窗口大小。
-      <code>11cc89e</code>
-    </div>
-  </div>
-
-  <!-- ===== 待改进：MEDIUM ===== -->
+  <!-- ===== 新发现：MEDIUM ===== -->
 
   <div class="issue medium pending">
     <div class="issue-header">
       <span class="severity medium">MEDIUM</span>
-      <span class="severity pending">待改进</span>
-      <span class="title">流式请求的 retry 语义不完整</span>
+      <span class="severity pending">v2 新发现</span>
+      <span class="title">三家 Provider 样板代码重复 (~80%)</span>
     </div>
-    <div class="location">resilient.py:55-69</div>
+    <div class="location">openai_provider.py / deepseek_provider.py / anthropic_provider.py</div>
     <div class="desc">
-      <code>ResilientLLMAdapter.stream()</code> 通过 <code>retry_with_backoff()</code> 包装，但 retry 只作用于<strong>"建立 SSE 连接"</strong>阶段。一旦连接建立并开始 yield 事件，中途断流不会被重试。
+      三个 Provider 共享高度相似的代码：<code>complete()</code>（发请求 + 解析响应 + 异常处理）、<code>stream()</code>（SSE 连接 + 解析 + 超时 yield ERROR）、<code>close()</code>、<code>__aenter__/__aexit__</code>、超时处理。<strong>唯一真正的差异</strong>是 <code>_build_request_body()</code> 和 <code>_parse_response()</code>。
       <br><br>
-      <code>retry_with_backoff</code> 期望 fn 返回最终值，但 <code>provider.stream()</code> 返回 <code>AsyncIterator</code>。retry 在拿到 iterator 后立即返回，真正的流式消费发生在 retry 之外。
+      三家合计 855 行，其中约 600 行是重复样板。
     </div>
     <div class="fix">
-      <strong>改进方向：</strong>
-      方案 A：明确文档说明 retry 只覆盖连接建立阶段（最简单）。
-      方案 B：stream() 不走 retry_with_backoff，只在连接失败时手动重试。
+      <strong>推荐方案：</strong>提取 <code>BaseHTTPProvider</code> 基类，实现通用的 complete/stream/close/context manager。子类只需实现 <code>_build_request_body()</code>、<code>_parse_response()</code>、<code>get_provider_info()</code>。
+      <br><br>
+      <strong>预计减少：</strong>~400 行重复代码。但需要谨慎 &mdash; Anthropic stream 有独立的 AnthropicStreamParser，可能导致基类 stream() 仍需 hook point。
     </div>
   </div>
 
   <div class="issue medium pending">
     <div class="issue-header">
       <span class="severity medium">MEDIUM</span>
-      <span class="severity pending">待改进</span>
-      <span class="title">normalize_messages 合并时修改了原对象</span>
+      <span class="severity pending">v2 新发现</span>
+      <span class="title">流式超时/连接错误静默化，Circuit Breaker 不感知</span>
     </div>
-    <div class="location">transform.py:530-531</div>
+    <div class="location">anthropic_provider.py:326-330, openai_provider.py, deepseek_provider.py</div>
     <div class="desc">
-      <code>normalize_messages()</code> 在合并同角色消息时，直接修改了 <code>last.content</code>：<code>last.content = [*last.content, *msg.content]</code>。
-      <code>_pair_tool_results()</code> 中 <code>new_messages = list(messages)</code> 只做了浅拷贝 &mdash; 如果传入的 messages 对象在调用后被其他代码引用，可能产生意外的共享状态。
+      三家 Provider 的 <code>stream()</code> 方法中，<code>httpx.TimeoutException</code> 和 <code>httpx.ConnectError</code> 被捕获后 yield 一个 ERROR StreamEvent，而非 raise LLMAdapterError。
+      <br><br>
+      这意味着：
+      <ol style="margin: 0.5rem 0 0 1.2rem; font-size: 0.85rem; color: var(--charcoal);">
+        <li>消费者必须检查 ERROR 事件（容易遗漏）</li>
+        <li>ResilientLLMAdapter 的 stream() 会正常 yield ERROR 事件后 record_success()，Circuit Breaker 不会感知这次失败</li>
+        <li>重试机制不会被触发</li>
+      </ol>
     </div>
     <div class="fix">
-      <strong>改进方向：</strong>
-      在 <code>_pair_tool_results()</code> 中使用深拷贝，或在 <code>normalize_messages()</code> 入口处统一创建新消息对象。
+      <strong>推荐方案：</strong>在 Provider.stream() 中不捕获这些异常，让它们传播到 ResilientLLMAdapter.stream() 的 retry 循环中。或者，在 ResilientLLMAdapter.stream() 的事件 yield 循环中检测 ERROR 事件并 record_failure()。
     </div>
   </div>
 
   <div class="issue medium pending">
     <div class="issue-header">
       <span class="severity medium">MEDIUM</span>
-      <span class="severity pending">待改进</span>
-      <span class="title">Provider httpx 客户端未显式关闭</span>
+      <span class="severity pending">v2 新发现</span>
+      <span class="title">OpenAI 默认 base URL 疑似非标准地址</span>
     </div>
-    <div class="location">resilient.py:112-146</div>
+    <div class="location">openai_provider.py:49</div>
     <div class="desc">
-      <code>create_adapter()</code> 创建 Provider 实例时初始化了 <code>httpx.AsyncClient</code>，但没有提供关闭机制。各 Provider 实现了 <code>close()</code> 和 <code>__aenter__/__aexit__</code>，但 <code>ResilientLLMAdapter</code> 没有暴露这些方法。
+      <code>OPENAI_BASE_URL = "https://api.openseek.com/v1"</code> &mdash; 这不是标准 OpenAI API 地址（<code>api.openai.com</code>）。
+      <br><br>
+      可能是：代理/中转站（有意为之）、拼写错误、或测试用占位符。如果是有意为之，建议添加注释说明。
     </div>
     <div class="fix">
-      <strong>改进方向：</strong>
-      ResilientLLMAdapter 实现 <code>close()</code> 委托给 <code>self._provider.close()</code>，并实现 async context manager 协议。
+      <strong>改进方向：</strong>确认意图。如果是代理，添加注释。如果是默认值，改为标准地址或移除默认值（强制配置）。
     </div>
   </div>
 
-  <div class="issue medium pending">
-    <div class="issue-header">
-      <span class="severity medium">MEDIUM</span>
-      <span class="severity pending">待改进</span>
-      <span class="title">测试覆盖补全</span>
-    </div>
-    <div class="desc">
-      目前只有 test_resilient.py (320 行) 和 test_normalize_messages.py (119 行)。transform.py（586 行纯函数）和 streaming.py（293 行解析器）缺少专门的测试文件。Provider 层（923 行）无集成测试。
-    </div>
-  </div>
-
-  <!-- ===== 待改进：LOW ===== -->
+  <!-- ===== 新发现：LOW ===== -->
 
   <div class="issue low pending">
     <div class="issue-header">
       <span class="severity low">LOW</span>
-      <span class="severity pending">待改进</span>
-      <span class="title">CircuitBreaker.state 属性有副作用</span>
+      <span class="severity pending">v2 新发现</span>
+      <span class="title">messages_to_openai 参数缺少泛型类型</span>
     </div>
-    <div class="location">retry.py:193-202</div>
+    <div class="location">transform/_openai.py:19</div>
     <div class="desc">
-      <code>CircuitBreaker.state</code> 是一个 property，读取时会检查时间并可能修改 <code>self._state</code>（OPEN → HALF_OPEN 转换）。这违反了 property 不应有副作用的惯例，且在调试/监控场景中可能导致意外状态变化。
+      <code>messages_to_openai(messages: list)</code> 的参数类型应为 <code>list[Message]</code>，缺少泛型参数。其他转换函数（<code>messages_to_deepseek</code>、<code>messages_to_anthropic</code>）都有正确的类型注解。
     </div>
     <div class="fix">
-      <strong>改进方向：</strong>
-      将状态转换检查提取为显式的 <code>_check_state_transition()</code> 方法，property 只返回当前状态。
+      <strong>改进方向：</strong>改为 <code>messages: list[Message]</code>。
     </div>
   </div>
 
   <div class="issue low pending">
     <div class="issue-header">
       <span class="severity low">LOW</span>
-      <span class="severity pending">待改进</span>
-      <span class="title">transform.py 接近 600 行，职责略重</span>
+      <span class="severity pending">v2 新发现</span>
+      <span class="title">_calculate_delay 私有函数被外部模块导入</span>
     </div>
-    <div class="location">transform.py</div>
+    <div class="location">resilient.py:80</div>
     <div class="desc">
-      586 行是模块中最大的文件。虽然全是无状态纯函数，复杂度可控，但随着新增 Provider 会持续增长。当前可接受，若新增 Provider 可按目标拆分。
+      <code>from .retry import _calculate_delay</code> &mdash; 下划线前缀表示模块私有，但被 resilient.py 直接导入使用。这破坏了封装约定。
+      <br><br>
+      当前场景是合理的（stream() 手动重试需要计算延迟），但 API 设计上应考虑是否公开。
+    </div>
+    <div class="fix">
+      <strong>改进方向：</strong>方案 A — 将 _calculate_delay 重命名为 calculate_delay（公开）。方案 B — 在 retry.py 提供一个专用的 stream_retry_with_backoff() 工具函数。
     </div>
   </div>
 
   <div class="issue low pending">
     <div class="issue-header">
       <span class="severity low">LOW</span>
-      <span class="severity pending">待改进</span>
-      <span class="title">三家 Provider 的 _handle_error() 高度重复</span>
+      <span class="severity pending">v2 新发现</span>
+      <span class="title">importlib 在函数体内导入</span>
     </div>
-    <div class="location">openai_provider.py:95-119, deepseek_provider.py:133-159, anthropic_provider.py:114-139</div>
+    <div class="location">resilient.py:148</div>
     <div class="desc">
-      三个 Provider 的 <code>_handle_error()</code> 逻辑几乎相同：读取 response body → 按 status_code 抛出对应异常。唯一差异是 provider 名称字符串。
+      <code>import importlib</code> 出现在 <code>_import_provider_class()</code> 函数体内，而非模块顶部。Python 惯例是顶层导入。
+      <br><br>
+      功能上无影响（延迟导入，每次调用不会重复 import），但不遵循 PEP 8 风格。
     </div>
     <div class="fix">
-      <strong>改进方向：</strong>
-      提取为 <code>handle_http_error(response, provider_name)</code> 到 base.py 或新建 utils.py。
+      <strong>改进方向：</strong>将 <code>import importlib</code> 移到模块顶部。
     </div>
   </div>
 </div>
 
 <!-- ============================================================
-     SECTION 5: 依赖关系
+     SECTION 7: 依赖关系
      ============================================================ -->
 <div class="section">
-  <h2>5. 依赖关系</h2>
+  <h2>7. 依赖关系</h2>
 
   <div class="arch-diagram">
-    <svg viewBox="0 0 820 380" xmlns="http://www.w3.org/2000/svg" style="font-family: 'Inter', sans-serif;">
+    <svg viewBox="0 0 820 420" xmlns="http://www.w3.org/2000/svg" style="font-family: 'Inter', sans-serif;">
       <!-- 底层（高亮边框） -->
-      <rect x="120" y="10" width="250" height="40" rx="6" fill="#f0eee6" stroke="#c96442" stroke-width="1.5"/>
-      <text x="245" y="35" text-anchor="middle" font-size="12" font-weight="500" fill="#c96442">types.py</text>
+      <rect x="100" y="10" width="250" height="40" rx="6" fill="#f0eee6" stroke="#c96442" stroke-width="1.5"/>
+      <text x="225" y="35" text-anchor="middle" font-size="12" font-weight="500" fill="#c96442">types.py</text>
 
-      <rect x="420" y="10" width="250" height="40" rx="6" fill="#f0eee6" stroke="#c96442" stroke-width="1.5"/>
-      <text x="545" y="35" text-anchor="middle" font-size="12" font-weight="500" fill="#c96442">base.py</text>
+      <rect x="400" y="10" width="250" height="40" rx="6" fill="#f0eee6" stroke="#c96442" stroke-width="1.5"/>
+      <text x="525" y="35" text-anchor="middle" font-size="12" font-weight="500" fill="#c96442">base.py</text>
 
       <!-- 中间层 -->
-      <rect x="20" y="100" width="155" height="40" rx="6" fill="#faf9f5" stroke="#e8e6dc"/>
-      <text x="97" y="125" text-anchor="middle" font-size="11" fill="#4d4c48">transform.py</text>
+      <rect x="20" y="100" width="155" height="40" rx="6" fill="#faf9f5" stroke="#3d7a3d" stroke-width="1.2"/>
+      <text x="97" y="125" text-anchor="middle" font-size="11" font-weight="500" fill="#3d7a3d">transform/ (包)</text>
 
       <rect x="195" y="100" width="155" height="40" rx="6" fill="#faf9f5" stroke="#e8e6dc"/>
       <text x="272" y="125" text-anchor="middle" font-size="11" fill="#4d4c48">streaming.py</text>
@@ -930,84 +1144,90 @@
       <text x="632" y="125" text-anchor="middle" font-size="11" fill="#4d4c48">resilient.py</text>
 
       <!-- 上层 -->
-      <rect x="40" y="200" width="200" height="40" rx="6" fill="#faf9f5" stroke="#e8e6dc"/>
-      <text x="140" y="225" text-anchor="middle" font-size="11" fill="#4d4c48">openai_provider.py</text>
+      <rect x="40" y="210" width="200" height="40" rx="6" fill="#faf9f5" stroke="#e8e6dc"/>
+      <text x="140" y="235" text-anchor="middle" font-size="11" fill="#4d4c48">openai_provider.py</text>
 
-      <rect x="280" y="200" width="200" height="40" rx="6" fill="#faf9f5" stroke="#e8e6dc"/>
-      <text x="380" y="225" text-anchor="middle" font-size="11" fill="#4d4c48">deepseek_provider.py</text>
+      <rect x="280" y="210" width="200" height="40" rx="6" fill="#faf9f5" stroke="#e8e6dc"/>
+      <text x="380" y="235" text-anchor="middle" font-size="11" fill="#4d4c48">deepseek_provider.py</text>
 
-      <rect x="530" y="200" width="210" height="40" rx="6" fill="#faf9f5" stroke="#e8e6dc"/>
-      <text x="635" y="225" text-anchor="middle" font-size="11" fill="#4d4c48">anthropic_provider.py</text>
+      <rect x="530" y="210" width="210" height="40" rx="6" fill="#faf9f5" stroke="#e8e6dc"/>
+      <text x="635" y="235" text-anchor="middle" font-size="11" fill="#4d4c48">anthropic_provider.py</text>
 
       <!-- 门面层 -->
-      <rect x="250" y="290" width="300" height="40" rx="6" fill="#e8f5e8" stroke="#3d7a3d" stroke-width="1.2"/>
-      <text x="400" y="315" text-anchor="middle" font-size="11" font-weight="500" fill="#3d7a3d">create_adapter() — 上层代码唯一入口</text>
+      <rect x="250" y="310" width="300" height="40" rx="6" fill="#e8f5e8" stroke="#3d7a3d" stroke-width="1.2"/>
+      <text x="400" y="335" text-anchor="middle" font-size="11" font-weight="500" fill="#3d7a3d">create_adapter() — 上层代码唯一入口</text>
 
       <!-- 依赖连线 -->
-      <!-- types → 所有 -->
-      <line x1="245" y1="50" x2="97" y2="100" stroke="#87867f" stroke-width="1"/>
-      <line x1="245" y1="50" x2="272" y2="100" stroke="#87867f" stroke-width="1"/>
-      <line x1="545" y1="50" x2="452" y2="100" stroke="#87867f" stroke-width="1"/>
-      <line x1="545" y1="50" x2="632" y2="100" stroke="#87867f" stroke-width="1"/>
-
-      <!-- base → retry -->
-      <line x1="545" y1="50" x2="452" y2="100" stroke="#87867f" stroke-width="1"/>
+      <line x1="225" y1="50" x2="97" y2="100" stroke="#87867f" stroke-width="1"/>
+      <line x1="225" y1="50" x2="272" y2="100" stroke="#87867f" stroke-width="1"/>
+      <line x1="525" y1="50" x2="452" y2="100" stroke="#87867f" stroke-width="1"/>
+      <line x1="525" y1="50" x2="632" y2="100" stroke="#87867f" stroke-width="1"/>
 
       <!-- 中间层 → 上层 -->
-      <line x1="97" y1="140" x2="140" y2="200" stroke="#c96442" stroke-width="1"/>
-      <line x1="97" y1="140" x2="380" y2="200" stroke="#c96442" stroke-width="1"/>
-      <line x1="272" y1="140" x2="140" y2="200" stroke="#c96442" stroke-width="1"/>
-      <line x1="272" y1="140" x2="380" y2="200" stroke="#c96442" stroke-width="1"/>
-      <line x1="97" y1="140" x2="635" y2="200" stroke="#c96442" stroke-width="1" stroke-dasharray="4,3"/>
-      <line x1="272" y1="140" x2="635" y2="200" stroke="#c96442" stroke-width="1" stroke-dasharray="4,3"/>
+      <line x1="97" y1="140" x2="140" y2="210" stroke="#c96442" stroke-width="1"/>
+      <line x1="97" y1="140" x2="380" y2="210" stroke="#c96442" stroke-width="1"/>
+      <line x1="272" y1="140" x2="140" y2="210" stroke="#c96442" stroke-width="1"/>
+      <line x1="272" y1="140" x2="380" y2="210" stroke="#c96442" stroke-width="1"/>
+      <line x1="97" y1="140" x2="635" y2="210" stroke="#c96442" stroke-width="1" stroke-dasharray="4,3"/>
+      <line x1="272" y1="140" x2="635" y2="210" stroke="#c96442" stroke-width="1" stroke-dasharray="4,3"/>
+
+      <!-- base → providers (handle_http_error) -->
+      <line x1="525" y1="50" x2="140" y2="210" stroke="#c96442" stroke-width="1" stroke-dasharray="4,3"/>
 
       <!-- 上层 → 门面 -->
-      <line x1="140" y1="240" x2="350" y2="290" stroke="#3d7a3d" stroke-width="1" stroke-dasharray="4,3"/>
-      <line x1="380" y1="240" x2="400" y2="290" stroke="#3d7a3d" stroke-width="1" stroke-dasharray="4,3"/>
-      <line x1="635" y1="240" x2="450" y2="290" stroke="#3d7a3d" stroke-width="1" stroke-dasharray="4,3"/>
+      <line x1="140" y1="250" x2="350" y2="310" stroke="#3d7a3d" stroke-width="1" stroke-dasharray="4,3"/>
+      <line x1="380" y1="250" x2="400" y2="310" stroke="#3d7a3d" stroke-width="1" stroke-dasharray="4,3"/>
+      <line x1="635" y1="250" x2="450" y2="310" stroke="#3d7a3d" stroke-width="1" stroke-dasharray="4,3"/>
 
       <!-- resilient 连线 -->
-      <line x1="632" y1="140" x2="400" y2="290" stroke="#3d7a3d" stroke-width="1"/>
+      <line x1="632" y1="140" x2="400" y2="310" stroke="#3d7a3d" stroke-width="1"/>
+
+      <!-- _deepseek → _openai 复用 -->
+      <text x="290" y="160" font-size="9" fill="#3d7a3d">_deepseek 复用 _openai</text>
 
       <!-- 图例 -->
-      <circle cx="630" cy="350" r="4" fill="#c96442" opacity="0.6"/>
-      <text x="640" y="354" font-size="10" fill="#c96442">= 依赖 types/base</text>
-      <text x="630" y="370" font-size="10" fill="#3d7a3d">- - = 被门面委托 / 动态导入</text>
+      <circle cx="60" cy="380" r="4" fill="#c96442" opacity="0.6"/>
+      <text x="70" y="384" font-size="10" fill="#c96442">= 依赖 types/base</text>
+      <text x="220" y="384" font-size="10" fill="#3d7a3d">- - = 被门面委托 / 动态导入</text>
+      <rect x="470" y="372" width="50" height="14" rx="3" fill="none" stroke="#3d7a3d" stroke-width="1.2"/>
+      <text x="526" y="384" font-size="10" fill="#3d7a3d">= v2 新结构</text>
 
-      <text x="400" y="340" text-anchor="middle" font-size="11" fill="#87867f">依赖方向：上层 → 下层，无循环依赖</text>
+      <text x="400" y="410" text-anchor="middle" font-size="11" fill="#87867f">依赖方向：上层 → 下层，无循环依赖</text>
     </svg>
   </div>
 
   <div class="summary-box strengths">
     <h3>依赖分析结论</h3>
     <ul>
-      <li><strong>无循环依赖</strong> — 依赖严格单向：Provider → transform/streaming → types/base，resilient → providers + retry + base</li>
+      <li><strong>无循环依赖</strong> — 依赖严格单向：Provider &rarr; transform/streaming &rarr; types/base，resilient &rarr; providers + retry + base</li>
       <li><strong>types.py 是所有模块的根依赖</strong> — 257 行的类型定义被所有其他文件 import，变更时需注意影响面</li>
       <li><strong>Provider 之间零耦合</strong> — openai_provider 不 import deepseek_provider，各自只依赖核心层</li>
       <li><strong>resilient.py 是唯一知道所有 Provider 的模块</strong> — 通过 _PROVIDER_MAP 动态导入，上层代码不感知具体 Provider 类</li>
+      <li><strong>DeepSeek 复用 OpenAI 转换</strong> — _deepseek.py 委托给 _openai.py（code reuse），不引入重复逻辑</li>
+      <li><strong>v2 拆分未引入新依赖</strong> — transform/ 包对外接口不变，只改了内部组织</li>
     </ul>
   </div>
 </div>
 
 <!-- ============================================================
-     SECTION 6: 总结
+     SECTION 8: 总结
      ============================================================ -->
 <div class="section">
-  <h2>6. 总结</h2>
+  <h2>8. 总结</h2>
 
   <div style="background: var(--ivory); border: 1px solid var(--border-cream); border-radius: 8px; padding: 1.5rem; font-size: 0.92rem; line-height: 1.7; color: var(--charcoal);">
     <p style="margin-bottom: 0.75rem;">
-      LLM Adapter 模块是一个<strong>架构成熟度很高</strong>的基础设施层。核心抽象（types + ILLMAdapter）设计得当，Provider 隔离干净，装饰器模式让 retry/circuit breaker 可以独立组合。transform.py 的纯函数设计 &mdash; 586 行全是无状态转换，天然可测试，Provider 之间共享逻辑零重复。
+      LLM Adapter 模块经过 v1 review 后的系统化改进，<strong>架构成熟度显著提升</strong>。v1 指出的 7 个问题（3 MEDIUM + 2 LOW + 2 测试覆盖）全部解决，测试从 439 行增长到 2,400 行（+447%），transform.py 拆分为按 Provider 组织的包，生命周期管理完整实现。
     </p>
     <p style="margin-bottom: 0.75rem;">
-      <strong>架构亮点：</strong>统一类型系统消除了 OpenAI string|array 二义性；normalize_messages 在发送前自动修复消息格式；Anthropic Provider 完整覆盖了协议差异最大的 Provider；依赖关系严格单向、无循环依赖。
+      <strong>架构亮点：</strong>统一类型系统消除 OpenAI string|array 二义性；normalize_messages 保证不可变；Anthropic Provider 完整覆盖协议差异；handle_http_error 消除重复；依赖关系严格单向、无循环依赖；流式重试语义清晰明确。
     </p>
     <p style="margin-bottom: 0.75rem;">
-      <strong>待改进：</strong>流式重试语义需要明确；Provider httpx 客户端的生命周期管理需要暴露给上层；transform.py 和 streaming.py 的测试覆盖需要补全；_handle_error 可提取为公共函数消除重复。
+      <strong>v2 新发现：</strong>三家 Provider 约 80% 样板代码重复（可通过 BaseHTTPProvider 基类消除 ~400 行）；流式超时/连接错误 yield ERROR 事件而非 raise，Circuit Breaker 不感知；OpenAI 默认 base URL 疑似非标准地址。这些都是下一轮迭代的改进点。
     </p>
     <p>
-      总体评分：<strong>8.5/10</strong> &mdash;
-      成熟的 LLM 抽象层，Provider 隔离、类型系统和依赖管理设计优秀，测试覆盖和生命周期管理是主要提升空间。
+      总体评分：<strong>9.0/10</strong> &mdash;
+      v1: 8.5 &rarr; v2: 9.0。高质量的 LLM 抽象层，Provider 隔离、类型系统、测试覆盖和依赖管理均表现优秀。Provider 样板去重和流式错误传播是主要提升空间。
     </p>
   </div>
 </div>
