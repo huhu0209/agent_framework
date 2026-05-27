@@ -25,3 +25,11 @@ class ToolRegistry:
 
     def list_tools(self) -> list[str]:
         return list(self._tools.keys())
+
+    def subset(self, names: set[str]) -> ToolRegistry:
+        sub = ToolRegistry()
+        for name in names:
+            spec = self.get(name)
+            if spec:
+                sub.register(spec)
+        return sub
