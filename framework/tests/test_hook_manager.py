@@ -350,3 +350,26 @@ async def test_multiple_hooks_fire_in_order():
     assert len(results) == 2
     assert results[0].stdout == "first"
     assert results[1].stdout == "second"
+
+
+@pytest.mark.asyncio
+async def test_fire_subprocess_error_returns_blocked(monkeypatch):
+    """子进程启动失败时返回 blocked 而非抛异常。"""
+    async def _fail(*args, **kwargs):
+        raise OSError("bash not found")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", _fail)
+    mgr = HookManager(trusted=True)
+    mgr.register(HookConfig(
+        event=HookEvent.PRE_TOOL_USE,
+        matcher="*",
+        hook_type=HookType.COMMAND,
+        command="anything",
+    ))
+    results = await mgr.fire(
+        HookEvent.PRE_TOOL_USE,
+        HookContext(hook_event_name="PreToolUse"),
+    )
+    assert len(results) == 1
+    assert results[0].blocked is True
+    assert "bash not found" in results[0].stderr

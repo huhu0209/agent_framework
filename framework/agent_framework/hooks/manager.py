@@ -120,3 +120,5 @@ class HookManager:
             )
         except asyncio.TimeoutError:
             return HookResult(exit_code=1, blocked=True, stderr="Hook timeout")
+        except OSError as exc:
+            return HookResult(exit_code=1, blocked=True, stderr=f"Hook error: {exc}")
