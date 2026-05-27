@@ -43,6 +43,18 @@ class ToolRouter:
         """设置权限管道。"""
         self._permission_pipeline = pipeline
 
+    def derive(self, registry: ToolRegistry) -> ToolRouter:
+        """创建子路由 — 新 registry，继承所有内部基础设施。"""
+        sub = ToolRouter(
+            registry=registry,
+            mcp_manager=self._mcp_manager,
+            hook_manager=self._hook_manager,
+            degrader=self._degrader,
+        )
+        if self._permission_pipeline:
+            sub.set_permission_pipeline(self._permission_pipeline)
+        return sub
+
     async def dispatch(self, call: ToolCall, ctx: ToolUseContext) -> ToolResult:
         # lazy import — 避免循环依赖
         from agent_framework.hooks.types import HookContext, HookEvent
