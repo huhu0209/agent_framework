@@ -564,7 +564,7 @@ async def test_agent_loop_with_task_runner_drain(tmp_path):
     from agent_framework.tools.registry import ToolRegistry
 
     mgr = TaskManager(tmp_path / "tasks")
-    task = mgr.create(subject="后台完成")
+    task = await mgr.create(subject="后台完成")
 
     adapter = MockAdapter("收到通知")
     registry = ToolRegistry()
@@ -595,3 +595,35 @@ async def test_agent_loop_with_task_runner_drain(tmp_path):
     assert len(events) >= 2
     done_events = [e for e in events if e.type == "done"]
     assert len(done_events) == 1
+
+
+# --- SubAgent 集成测试 ---
+
+
+@pytest.mark.asyncio
+async def test_enable_subagent_registers_tool():
+    adapter = MockAdapter("回答")
+    registry = ToolRegistry()
+    router = ToolRouter(registry)
+    ctx = ToolUseContext()
+
+    loop = AgentLoop(
+        adapter=adapter, model="fake",
+        router=router, ctx=ctx,
+        enable_subagent=True,
+    )
+    assert "run_subagent" in loop.router.registry.list_tools()
+
+
+@pytest.mark.asyncio
+async def test_subagent_not_registered_by_default():
+    adapter = MockAdapter("回答")
+    registry = ToolRegistry()
+    router = ToolRouter(registry)
+    ctx = ToolUseContext()
+
+    loop = AgentLoop(
+        adapter=adapter, model="fake",
+        router=router, ctx=ctx,
+    )
+    assert "run_subagent" not in loop.router.registry.list_tools()

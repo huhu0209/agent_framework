@@ -49,7 +49,6 @@ if TYPE_CHECKING:
     from agent_framework.hooks.manager import HookManager
     from agent_framework.tasks.runner import TaskRunner
 
-
 @dataclass
 class LoopEvent:
     """Agent Loop 每一步产生的事件。"""
@@ -86,6 +85,7 @@ class AgentLoop:
         skill_dirs: list[Path] | None = None,
         hook_manager: HookManager | None = None,
         task_runner: TaskRunner | None = None,
+        enable_subagent: bool = False,
     ) -> None:
         self.adapter = adapter
         self.model = model
@@ -117,6 +117,11 @@ class AgentLoop:
         self._memory_flush_enabled = memory_flush_enabled
         # Integration hook: extract semantic memories from conversation.
         self._semantic_extractor = semantic_extractor
+
+        if enable_subagent:
+            from agent_framework.agents.sub_agent import create_run_subagent_spec
+            spec = create_run_subagent_spec(adapter, model, self.router, self.ctx)
+            self.router.registry.register(spec)
 
         if self.profile is not None:
             self._system_prompt_text = self._assembler.render(self.profile)
