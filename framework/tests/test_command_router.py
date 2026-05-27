@@ -64,6 +64,25 @@ class TestHelpBuiltin:
         assert result.is_command is True
         assert "/help" in result.content
 
+    def test_help_builtin_and_skill_alignment(self, tmp_path):
+        """builtins 和 skills 的描述列对齐一致。"""
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        create_skill(skills_dir, "deploy", "部署应用", "body")
+
+        registry = SkillRegistry([skills_dir])
+        router = CommandRouter(skill_registry=registry)
+        result = router.resolve("/help")
+
+        lines = result.content.split("\n")
+        help_line = next(l for l in lines if "/help" in l)
+        deploy_line = next(l for l in lines if "/deploy" in l)
+
+        help_desc_idx = help_line.index("显示所有可用命令")
+        deploy_desc_idx = deploy_line.index("部署应用")
+        assert help_desc_idx == deploy_desc_idx, \
+            f"help 描述在列 {help_desc_idx}, deploy 描述在列 {deploy_desc_idx}"
+
 
 class TestSkillLoading:
     def test_existing_skill(self, tmp_path):
@@ -133,6 +152,26 @@ class TestSkillLoading:
         result = router.resolve("/broken")
         assert result.is_command is False
         assert result.content == "/broken"
+
+    def test_load_error_logs_debug_message(self, caplog):
+        """skill 加载失败时记录 debug 日志。"""
+        import logging
+        from unittest.mock import MagicMock
+        from agent_framework.skills.registry import SkillLoadResult
+
+        registry = MagicMock(spec=SkillRegistry)
+        manifest = MagicMock()
+        manifest.user_invocable = True
+        registry.get_manifest.return_value = manifest
+        registry.load_full_text.return_value = SkillLoadResult(
+            content="磁盘读取失败", is_error=True
+        )
+
+        router = CommandRouter(skill_registry=registry)
+        with caplog.at_level(logging.DEBUG, logger="agent_framework.commands.router"):
+            router.resolve("/broken")
+
+        assert any("broken" in r.message and "加载失败" in r.message for r in caplog.records)
 
 
 class TestEdgeCases:

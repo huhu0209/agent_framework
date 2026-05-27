@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import logging
+
 from agent_framework.commands.types import CommandSource, ResolvedCommand, SlashCommand
 from agent_framework.skills.registry import SkillRegistry
+
+logger = logging.getLogger(__name__)
 
 
 class CommandRouter:
@@ -49,10 +53,12 @@ class CommandRouter:
     def _try_load_skill(self, registry: SkillRegistry, name: str, args: str) -> ResolvedCommand:
         manifest = registry.get_manifest(name)
         if manifest is None or not manifest.user_invocable:
+            logger.debug("Skill '%s' 不可调用 (manifest=%s)", name, manifest)
             return ResolvedCommand(is_command=False, content=f"/{name}")
 
         load_result = registry.load_full_text(name)
         if load_result.is_error:
+            logger.debug("Skill '%s' 加载失败: %s", name, load_result.content)
             return ResolvedCommand(is_command=False, content=f"/{name}")
 
         body = load_result.content.replace("$ARGUMENTS", args)
@@ -83,7 +89,8 @@ class CommandRouter:
             for name in self._skill_registry.get_names():
                 manifest = self._skill_registry.get_manifest(name)
                 if manifest and manifest.user_invocable:
-                    lines.append(f"  /{name:<22} {manifest.description}")
+                    label = f"/{name}"
+                    lines.append(f"  {label:<22} {manifest.description}")
 
         return ResolvedCommand(
             is_command=True,
