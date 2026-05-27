@@ -91,25 +91,8 @@ class TaskManager:
         self._write(updated)
         return updated
 
-    def list_all(self) -> str:
-        tasks = self._load_all()
-        if not tasks:
-            return "(无任务)"
-
-        status_mark = {
-            TaskStatus.PENDING: " ",
-            TaskStatus.IN_PROGRESS: ">",
-            TaskStatus.COMPLETED: "x",
-            TaskStatus.FAILED: "!",
-            TaskStatus.CANCELLED: "-",
-            TaskStatus.DELETED: "d",
-        }
-        lines = []
-        for t in sorted(tasks, key=lambda t: int(t.id)):
-            mark = status_mark.get(t.status, "?")
-            deps = f" (等待: {', '.join(t.blocked_by)})" if t.blocked_by else ""
-            lines.append(f"  [{mark}] {t.id}. {t.subject}{deps}")
-        return "\n".join(lines)
+    def list_all(self) -> list[Task]:
+        return sorted(self._load_all(), key=lambda t: int(t.id))
 
     # ---- 内部 ----
 

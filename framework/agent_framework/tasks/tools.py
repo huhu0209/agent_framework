@@ -11,6 +11,7 @@ from agent_framework.tasks.manager import (
     TaskNotFoundError,
     TaskStatusError,
 )
+from agent_framework.tasks.types import TaskStatus
 from agent_framework.tools.types import ToolResult, ToolSpec, ToolUseContext
 
 
@@ -53,7 +54,24 @@ def create_task_tools(task_manager: TaskManager) -> list[ToolSpec]:
             return ToolResult(content=str(e), is_error=True)
 
     async def handle_list(args: dict, ctx: ToolUseContext) -> ToolResult:
-        return ToolResult(content=task_manager.list_all())
+        tasks = task_manager.list_all()
+        if not tasks:
+            return ToolResult(content="(无任务)")
+
+        status_mark = {
+            TaskStatus.PENDING: " ",
+            TaskStatus.IN_PROGRESS: ">",
+            TaskStatus.COMPLETED: "x",
+            TaskStatus.FAILED: "!",
+            TaskStatus.CANCELLED: "-",
+            TaskStatus.DELETED: "d",
+        }
+        lines = []
+        for t in tasks:
+            mark = status_mark.get(t.status, "?")
+            deps = f" (等待: {', '.join(t.blocked_by)})" if t.blocked_by else ""
+            lines.append(f"  [{mark}] {t.id}. {t.subject}{deps}")
+        return ToolResult(content="\n".join(lines))
 
     async def handle_get(args: dict, ctx: ToolUseContext) -> ToolResult:
         task = task_manager.get(args["id"])

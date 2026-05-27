@@ -115,13 +115,14 @@ def test_complete_clears_downstream_dependency(mgr):
 
 
 def test_list_all_empty(mgr):
-    assert mgr.list_all() == "(无任务)"
+    assert mgr.list_all() == []
 
 
 def test_list_all_shows_tasks(mgr):
     mgr.create(subject="待办")
-    output = mgr.list_all()
-    assert "待办" in output
+    tasks = mgr.list_all()
+    assert len(tasks) == 1
+    assert tasks[0].subject == "待办"
 
 
 # --- 损坏文件 ---
