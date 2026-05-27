@@ -27,6 +27,7 @@ class TaskRunner:
         ctx: ToolUseContext,
         *,
         max_concurrent: int = 3,
+        timeout_seconds: float = 300.0,
     ):
         self._task_manager = task_manager
         self._adapter = adapter
@@ -34,16 +35,16 @@ class TaskRunner:
         self._router = router
         self._ctx = ctx
         self._semaphore = asyncio.Semaphore(max_concurrent)
+        self._timeout = timeout_seconds
         self._notifications: asyncio.Queue[RuntimeTask] = asyncio.Queue()
-        self._running: dict[str, RuntimeTask] = {}
+        self._running: dict[str, asyncio.Task] = {}
 
     async def run(self, task_id: str, prompt: str):
         """启动后台执行，立即返回。"""
         rt = RuntimeTask(task_id=task_id, prompt=prompt)
-        self._running[task_id] = rt
-
         self._task_manager.update(task_id, status=TaskStatus.IN_PROGRESS)
-        asyncio.create_task(self._execute(rt))
+        atask = asyncio.create_task(self._execute(rt))
+        self._running[task_id] = atask
 
     async def _execute(self, rt: RuntimeTask):
         async with self._semaphore:
@@ -55,23 +56,39 @@ class TaskRunner:
                     ctx=self._ctx,
                     max_steps=30,
                 )
-                async for event in loop.run(rt.prompt):
-                    if event.type == "done":
-                        rt.status = RuntimeTaskStatus.COMPLETED
-                        rt.output = event.data.get("content", "")
-                        self._task_manager.update(
-                            rt.task_id,
-                            status=TaskStatus.COMPLETED,
-                            description=f"输出: {rt.output[:500]}",
-                        )
-                    elif event.type == "error":
-                        rt.status = RuntimeTaskStatus.ERROR
-                        rt.error = event.data.get("error", "")
-                        self._task_manager.update(
-                            rt.task_id,
-                            status=TaskStatus.FAILED,
-                            description=f"错误: {rt.error[:500]}",
-                        )
+
+                async def _run_loop():
+                    async for event in loop.run(rt.prompt):
+                        if event.type == "done":
+                            rt.status = RuntimeTaskStatus.COMPLETED
+                            rt.output = event.data.get("content", "")
+                            self._task_manager.update(
+                                rt.task_id,
+                                status=TaskStatus.COMPLETED,
+                                description=f"输出: {rt.output[:500]}",
+                            )
+                        elif event.type == "error":
+                            rt.status = RuntimeTaskStatus.ERROR
+                            rt.error = event.data.get("error", "")
+                            self._task_manager.update(
+                                rt.task_id,
+                                status=TaskStatus.FAILED,
+                                description=f"错误: {rt.error[:500]}",
+                            )
+
+                await asyncio.wait_for(_run_loop(), timeout=self._timeout)
+
+            except asyncio.TimeoutError:
+                rt.status = RuntimeTaskStatus.TIMEOUT
+                rt.error = f"任务超时 ({self._timeout}s)"
+                try:
+                    self._task_manager.update(
+                        rt.task_id,
+                        status=TaskStatus.FAILED,
+                        description=f"超时: {rt.error}",
+                    )
+                except Exception:
+                    pass
             except Exception as exc:
                 rt.status = RuntimeTaskStatus.ERROR
                 rt.error = str(exc)
@@ -90,7 +107,7 @@ class TaskRunner:
     async def drain_notifications(self) -> list[RuntimeTask]:
         """主循环每轮调用：取出所有已完成的通知。"""
         results = []
-        while not self._notifications.empty():
+        while True:
             try:
                 results.append(self._notifications.get_nowait())
             except asyncio.QueueEmpty:

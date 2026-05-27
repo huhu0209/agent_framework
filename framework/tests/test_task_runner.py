@@ -36,6 +36,13 @@ class FakeAdapter:
     def get_max_context_tokens(self) -> int:
         return 128000
 
+    def get_provider_info(self):
+        from agent_framework.llm.types import ProviderInfo
+        return ProviderInfo(
+            name="fake", base_url="https://fake",
+            default_model="fake-model", max_context_tokens=128000,
+        )
+
 
 @pytest.fixture
 def task_mgr(tmp_path):
@@ -89,3 +96,52 @@ async def test_runner_updates_task_to_in_progress(runner, task_mgr):
 
     await asyncio.sleep(0.3)
     await runner.drain_notifications()
+
+
+class SlowAdapter:
+    """永不返回的假 adapter，用于测试超时。"""
+
+    async def complete(self, config: CompletionConfig) -> CompletionResult:
+        await asyncio.sleep(100)
+        return CompletionResult(
+            id="slow", model=config.model,
+            content=[TextBlock(text="不应到达")],
+            stop_reason=StopReason.END_TURN,
+            usage=UsageStats(input_tokens=0, output_tokens=0),
+        )
+
+    def get_max_context_tokens(self) -> int:
+        return 128000
+
+    def get_provider_info(self):
+        from agent_framework.llm.types import ProviderInfo
+        return ProviderInfo(
+            name="slow", base_url="https://slow",
+            default_model="slow-model", max_context_tokens=128000,
+        )
+
+
+@pytest.mark.asyncio
+async def test_run_timeout_sets_status(tmp_path):
+    mgr = TaskManager(tmp_path / "tasks")
+    task = mgr.create(subject="超时任务")
+    adapter = SlowAdapter()
+    registry = ToolRegistry()
+    router = ToolRouter(registry)
+    ctx = ToolUseContext()
+
+    runner = TaskRunner(
+        task_manager=mgr, adapter=adapter,
+        model="slow", router=router, ctx=ctx,
+        timeout_seconds=0.1,
+    )
+
+    await runner.run(task.id, prompt="慢慢来")
+    await asyncio.sleep(0.5)
+
+    notifications = await runner.drain_notifications()
+    assert len(notifications) == 1
+    assert notifications[0].status == RuntimeTaskStatus.TIMEOUT
+
+    updated = mgr.get(task.id)
+    assert updated.status == TaskStatus.FAILED
