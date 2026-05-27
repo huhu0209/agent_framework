@@ -153,6 +153,20 @@ class TestSkillLoading:
         assert result.is_command is False
         assert result.content == "/broken"
 
+    def test_multiple_arguments_placeholder(self, tmp_path):
+        """多个 $ARGUMENTS 占位符均被替换为相同值。"""
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        create_skill(skills_dir, "wrap", "包装", "前: $ARGUMENTS | 后: $ARGUMENTS")
+
+        registry = SkillRegistry([skills_dir])
+        router = CommandRouter(skill_registry=registry)
+        result = router.resolve("/wrap hello")
+
+        assert result.is_command is True
+        assert "前: hello | 后: hello" in result.content
+        assert "$ARGUMENTS" not in result.content
+
     def test_load_error_logs_debug_message(self, caplog):
         """skill 加载失败时记录 debug 日志。"""
         import logging

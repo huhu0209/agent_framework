@@ -23,6 +23,8 @@ class CommandRouter:
 
         返回的 content 可能包含未经净化的用户输入（skill 参数），
         调用方在将 content 注入 LLM prompt 时需自行处理。
+
+        不限制输入长度，调用方可按需截断。
         """
         if not user_input.startswith("/"):
             return ResolvedCommand(is_command=False, content=user_input)
