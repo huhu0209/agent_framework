@@ -148,3 +148,9 @@ def test_path_traversal_rejected(mgr):
 def test_update_rejects_non_numeric_id(mgr):
     with pytest.raises(TaskNotFoundError):
         mgr.update("../secret", status=TaskStatus.IN_PROGRESS)
+
+
+def test_update_rejects_unknown_fields(mgr):
+    task = mgr.create(subject="test")
+    with pytest.raises(TypeError, match="未知的更新字段"):
+        mgr.update(task.id, nonexistent_field="oops")

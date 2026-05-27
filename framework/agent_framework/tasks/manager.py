@@ -7,8 +7,18 @@ import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import TypedDict
 
 from agent_framework.tasks.types import Task, TaskStatus
+
+
+class TaskChanges(TypedDict, total=False):
+    subject: str
+    description: str
+    owner: str
+    status: str
+    add_blocked_by: list[str]
+    add_blocks: list[str]
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +38,13 @@ class TaskManager:
 
     # ---- CRUD ----
 
+    _VALID_CHANGE_KEYS = frozenset({
+        "subject", "description", "owner", "status",
+        "add_blocked_by", "add_blocks",
+    })
+
     def create(self, subject: str, description: str = "") -> Task:
-        active = self._count_active()
+        active = self.count_active()
         if active >= MAX_ACTIVE_TASKS:
             raise TaskLimitError(f"活跃任务已达上限 {MAX_ACTIVE_TASKS}")
 
@@ -52,6 +67,10 @@ class TaskManager:
         return self._read(path)
 
     def update(self, task_id: str, **changes) -> Task:
+        invalid = set(changes) - self._VALID_CHANGE_KEYS
+        if invalid:
+            raise TypeError(f"未知的更新字段: {invalid}")
+
         task = self.get(task_id)
         if task is None:
             raise TaskNotFoundError(f"任务 {task_id} 不存在")
@@ -149,7 +168,7 @@ class TaskManager:
                 pass
         return max_id
 
-    def _count_active(self) -> int:
+    def count_active(self) -> int:
         return sum(
             1 for t in self._load_all()
             if t.status in (TaskStatus.PENDING, TaskStatus.IN_PROGRESS)

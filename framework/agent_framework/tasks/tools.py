@@ -27,7 +27,7 @@ def create_task_tools(task_manager: TaskManager) -> list[ToolSpec]:
                 content=(
                     f"任务 #{task.id} 已创建: {task.subject}\n"
                     f"状态: {task.status.value}\n"
-                    f"活跃任务: {task_manager._count_active()}/{MAX_ACTIVE_TASKS}"
+                    f"活跃任务: {task_manager.count_active()}/{MAX_ACTIVE_TASKS}"
                 )
             )
         except TaskLimitError as e:
