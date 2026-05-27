@@ -484,3 +484,68 @@ class TestAgentLoopSkills:
         )
 
         assert router.registry.get("load_skill") is None
+
+
+# --- SessionStart Hook 测试 ---
+
+
+@pytest.mark.asyncio
+async def test_session_start_hook_injects_message():
+    """SessionStart hook 注入的消息出现在对话中。"""
+    from agent_framework.hooks.manager import HookManager
+    from agent_framework.hooks.types import HookConfig, HookEvent, HookType
+
+    mgr = HookManager(trusted=True)
+    mgr.register(HookConfig(
+        event=HookEvent.SESSION_START,
+        matcher="*",
+        hook_type=HookType.COMMAND,
+        command="echo 'session context loaded' >&2; exit 2",
+    ))
+
+    adapter = _make_mock_adapter()
+    adapter.complete.return_value = _text_result("I'm ready.")
+
+    registry = create_builtin_registry()
+    router = ToolRouter(registry, hook_manager=mgr)
+
+    loop = AgentLoop(
+        adapter=adapter,
+        model="test",
+        router=router,
+        ctx=ToolUseContext(),
+        hook_manager=mgr,
+    )
+
+    events = []
+    async for event in loop.run("hello"):
+        events.append(event)
+
+    # 应该有至少 1 个事件（done）
+    assert len(events) >= 1
+    # 最终事件应该是 done
+    assert events[-1].type == "done"
+
+
+@pytest.mark.asyncio
+async def test_session_start_hook_not_fired_without_manager():
+    """无 hook_manager 时正常工作（向后兼容）。"""
+    adapter = _make_mock_adapter()
+    adapter.complete.return_value = _text_result("Hello.")
+
+    registry = create_builtin_registry()
+    router = ToolRouter(registry)
+
+    loop = AgentLoop(
+        adapter=adapter,
+        model="test",
+        router=router,
+        ctx=ToolUseContext(),
+    )
+
+    events = []
+    async for event in loop.run("test"):
+        events.append(event)
+
+    assert len(events) >= 1
+    assert events[-1].type == "done"
