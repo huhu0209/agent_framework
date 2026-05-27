@@ -77,13 +77,13 @@ class CommandRouter:
         for cmd in self._builtins.values():
             label = f"/{cmd.name}"
             hint = f" {cmd.arg_hint}" if cmd.arg_hint else ""
-            lines.append(f"  {label}{hint:<20} {cmd.description}")
+            lines.append(f"  {label + hint:<22} {cmd.description}")
 
         if self._skill_registry:
             for name in self._skill_registry.get_names():
                 manifest = self._skill_registry.get_manifest(name)
                 if manifest and manifest.user_invocable:
-                    lines.append(f"  /{name:<21} {manifest.description}")
+                    lines.append(f"  /{name:<22} {manifest.description}")
 
         return ResolvedCommand(
             is_command=True,
