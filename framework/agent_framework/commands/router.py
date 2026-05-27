@@ -51,6 +51,11 @@ class CommandRouter:
         return ResolvedCommand(is_command=False, content=user_input)
 
     def _try_load_skill(self, registry: SkillRegistry, name: str, args: str) -> ResolvedCommand:
+        """加载 skill 并替换参数占位符。
+
+        使用 str.replace() 替换正文中所有出现的 ``$ARGUMENTS``。
+        skill 正文应只包含一个 ``$ARGUMENTS`` 占位符。
+        """
         manifest = registry.get_manifest(name)
         if manifest is None or not manifest.user_invocable:
             logger.debug("Skill '%s' 不可调用 (manifest=%s)", name, manifest)

@@ -1,5 +1,7 @@
 """commands/types.py 类型定义测试。"""
 
+import pytest
+
 from agent_framework.commands.types import CommandSource, ResolvedCommand, SlashCommand
 
 
@@ -19,7 +21,6 @@ class TestResolvedCommand:
 
     def test_frozen(self):
         cmd = ResolvedCommand(is_command=True, content="test", source=CommandSource.BUILTIN)
-        import pytest
         with pytest.raises(AttributeError):
             cmd.is_command = False
 

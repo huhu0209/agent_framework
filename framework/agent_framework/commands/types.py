@@ -8,6 +8,8 @@ from typing import Callable
 
 
 class CommandSource(str, Enum):
+    """命令来源。继承 str 实现值比较和序列化。"""
+
     BUILTIN = "builtin"
     SKILL = "skill"
 
