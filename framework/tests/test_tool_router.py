@@ -411,3 +411,98 @@ async def test_dispatch_post_tool_hook_blocked_ignored():
     # 工具结果正常返回，blocked 被忽略
     assert result.is_error is False
     assert result.content == "echo: ran"
+
+
+# --- 错误恢复与降级测试 ---
+
+
+async def _crash_handler(args, ctx):
+    raise RuntimeError("工具内部崩溃")
+
+
+async def _slow_handler(args, ctx):
+    import asyncio
+    await asyncio.sleep(10)
+    return ToolResult(content="不应该到这里")
+
+
+def _make_registry_with_crash() -> ToolRegistry:
+    registry = ToolRegistry()
+    registry.register(ToolSpec(
+        name="crash_tool",
+        description="会崩溃的工具",
+        parameters=ToolParameterSchema(properties={}, required=[]),
+        handler=_crash_handler,
+        timeout_ms=100,
+    ))
+    registry.register(ToolSpec(
+        name="slow_tool",
+        description="会超时的工具",
+        parameters=ToolParameterSchema(properties={}, required=[]),
+        handler=_slow_handler,
+        timeout_ms=50,
+    ))
+    return registry
+
+
+@pytest.mark.asyncio
+async def test_dispatch_tool_crash_returns_error():
+    """工具 handler 抛异常 → 返回 is_error=True，不崩溃。"""
+    registry = _make_registry_with_crash()
+    router = ToolRouter(registry)
+    result = await router.dispatch(
+        ToolCall(id="e1", name="crash_tool", arguments={}),
+        ctx,
+    )
+    assert result.is_error is True
+    assert "崩溃" in result.content or "crash" in result.content.lower() or "失败" in result.content
+
+
+@pytest.mark.asyncio
+async def test_dispatch_tool_timeout_returns_error():
+    """工具超时 → 返回 is_error=True。"""
+    registry = _make_registry_with_crash()
+    router = ToolRouter(registry)
+    result = await router.dispatch(
+        ToolCall(id="e2", name="slow_tool", arguments={}),
+        ctx,
+    )
+    assert result.is_error is True
+    assert "超时" in result.content
+
+
+@pytest.mark.asyncio
+async def test_dispatch_with_degrader_fallback():
+    """工具失败 + 有降级映射 → 自动使用降级工具。"""
+    from agent_framework.tools.degrader import ToolDegrader
+
+    registry = _make_registry_with_echo()
+    registry.register(ToolSpec(
+        name="crash_tool",
+        description="会崩溃",
+        parameters=ToolParameterSchema(properties={}, required=[]),
+        handler=_crash_handler,
+    ))
+
+    degrader = ToolDegrader()
+    degrader.register("crash_tool", "echo")
+
+    router = ToolRouter(registry, degrader=degrader)
+    result = await router.dispatch(
+        ToolCall(id="e3", name="crash_tool", arguments={"msg": "fallback"}),
+        ctx,
+    )
+    assert result.is_error is False
+    assert "echo: fallback" in result.content
+
+
+@pytest.mark.asyncio
+async def test_dispatch_degrader_no_fallback_returns_error():
+    """工具失败 + 无降级映射 → 返回错误。"""
+    registry = _make_registry_with_crash()
+    router = ToolRouter(registry)
+    result = await router.dispatch(
+        ToolCall(id="e4", name="crash_tool", arguments={}),
+        ctx,
+    )
+    assert result.is_error is True

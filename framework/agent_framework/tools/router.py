@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from typing import TYPE_CHECKING
 
 from agent_framework.safety.permissions import PermissionDecision, PermissionPipeline
+from agent_framework.tools.degrader import ToolDegrader
 from agent_framework.tools.executor import ToolExecutor
 from agent_framework.tools.mcp.config import McpManager
 from agent_framework.tools.registry import ToolRegistry
 from agent_framework.tools.types import ToolCall, ToolResult, ToolUseContext
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from agent_framework.hooks.manager import HookManager
@@ -25,11 +30,13 @@ class ToolRouter:
         registry: ToolRegistry,
         mcp_manager: McpManager | None = None,
         hook_manager: HookManager | None = None,
+        degrader: ToolDegrader | None = None,
     ) -> None:
         self.registry = registry
         self._executor = ToolExecutor()
         self._mcp_manager = mcp_manager
         self._hook_manager = hook_manager
+        self._degrader = degrader or ToolDegrader()
         self._permission_pipeline: PermissionPipeline | None = None
 
     def set_permission_pipeline(self, pipeline: PermissionPipeline) -> None:
@@ -78,13 +85,42 @@ class ToolRouter:
                         arguments=hr.updated_input,
                     )
 
-        # 3. 执行
-        if name.startswith("mcp__"):
-            tool_result = await self._dispatch_mcp(name, active_call.arguments, ctx)
-        elif name.startswith("agent__"):
-            tool_result = self._dispatch_agent(name, active_call.arguments, ctx)
-        else:
-            tool_result = await self._dispatch_builtin(active_call, ctx)
+        # 3. 执行（含错误恢复和降级）
+        try:
+            if name.startswith("mcp__"):
+                tool_result = await self._dispatch_mcp(name, active_call.arguments, ctx)
+            elif name.startswith("agent__"):
+                tool_result = self._dispatch_agent(name, active_call.arguments, ctx)
+            else:
+                tool_result = await self._dispatch_builtin(active_call, ctx)
+
+            # 内置执行器已捕获异常 → 检查 is_error 触发降级
+            if tool_result.is_error:
+                fallback = self._degrader.get_fallback(name)
+                if fallback:
+                    logger.warning("工具 '%s' 失败，降级到 '%s': %s", name, fallback, tool_result.content)
+                    tool_result = await self._dispatch_builtin(
+                        ToolCall(id=active_call.id, name=fallback, arguments=active_call.arguments),
+                        ctx,
+                    )
+        except asyncio.TimeoutError:
+            tool_result = ToolResult(
+                content=f"工具 '{name}' 执行超时",
+                is_error=True,
+            )
+        except Exception as exc:
+            fallback = self._degrader.get_fallback(name)
+            if fallback:
+                logger.warning("工具 '%s' 失败，降级到 '%s': %s", name, fallback, exc)
+                tool_result = await self._dispatch_builtin(
+                    ToolCall(id=active_call.id, name=fallback, arguments=active_call.arguments),
+                    ctx,
+                )
+            else:
+                tool_result = ToolResult(
+                    content=f"工具 '{name}' 执行失败: {exc}",
+                    is_error=True,
+                )
 
         # 4. PostToolUse hooks
         if self._hook_manager is not None:
