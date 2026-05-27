@@ -15,7 +15,10 @@ MAX_ACTIVE_TASKS = 12
 
 
 class TaskManager:
-    """每个 task 一个 JSON 文件，存储在指定目录下。"""
+    """每个 task 一个 JSON 文件，存储在指定目录下。
+
+    注意：此类非线程安全，仅适用于 asyncio 单线程环境。
+    """
 
     def __init__(self, tasks_dir: Path):
         self._dir = tasks_dir
@@ -91,6 +94,8 @@ class TaskManager:
     # ---- 内部 ----
 
     def _path(self, task_id: str) -> Path:
+        if not task_id.isdigit():
+            raise TaskNotFoundError(f"无效任务 ID: {task_id}")
         return self._dir / f"task_{task_id}.json"
 
     def _now(self) -> str:

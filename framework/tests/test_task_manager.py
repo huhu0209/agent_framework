@@ -134,3 +134,17 @@ def test_corrupted_json_skipped(mgr):
     tasks = mgr._load_all()
     assert len(tasks) == 1
     assert tasks[0].subject == "good task"
+
+
+# --- 路径遍历防御 ---
+
+
+def test_path_traversal_rejected(mgr):
+    """task_id 含非数字字符时拒绝访问。"""
+    with pytest.raises(TaskNotFoundError):
+        mgr.get("../../etc/passwd")
+
+
+def test_update_rejects_non_numeric_id(mgr):
+    with pytest.raises(TaskNotFoundError):
+        mgr.update("../secret", status=TaskStatus.IN_PROGRESS)
