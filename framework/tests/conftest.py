@@ -24,6 +24,15 @@ class MockAdapter:
             usage=UsageStats(input_tokens=100, output_tokens=50),
         )
 
+    def get_provider_info(self) -> "ProviderInfo":
+        from agent_framework.llm.types import ProviderInfo
+        return ProviderInfo(
+            name="mock",
+            base_url="https://mock",
+            default_model="mock-model",
+            max_context_tokens=100_000,
+        )
+
 
 @pytest.fixture
 def memory_dir(tmp_path):

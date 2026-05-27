@@ -47,6 +47,7 @@ from agent_framework.tools.types import ToolCall, ToolUseContext
 
 if TYPE_CHECKING:
     from agent_framework.hooks.manager import HookManager
+    from agent_framework.tasks.runner import TaskRunner
 
 
 @dataclass
@@ -84,6 +85,7 @@ class AgentLoop:
         semantic_extractor: SemanticExtractor | None = None,
         skill_dirs: list[Path] | None = None,
         hook_manager: HookManager | None = None,
+        task_runner: TaskRunner | None = None,
     ) -> None:
         self.adapter = adapter
         self.model = model
@@ -104,6 +106,7 @@ class AgentLoop:
         self._skill_registry = SkillRegistry(skill_dirs) if skill_dirs else None
         self._assembler = PromptAssembler(skill_registry=self._skill_registry)
         self._hook_manager = hook_manager
+        self._task_runner = task_runner
 
         if self._skill_registry is not None:
             spec = create_load_skill_spec()
@@ -263,6 +266,24 @@ class AgentLoop:
         plan_checked = False
 
         for step in range(1, self.max_steps + 1):
+            # Drain 后台任务通知
+            if self._task_runner is not None:
+                notifications = await self._task_runner.drain_notifications()
+                for note in notifications:
+                    from agent_framework.tasks.types import RuntimeTaskStatus
+                    status_text = {
+                        RuntimeTaskStatus.COMPLETED: "已完成",
+                        RuntimeTaskStatus.ERROR: "失败",
+                        RuntimeTaskStatus.TIMEOUT: "超时",
+                    }.get(note.status, note.status.value)
+                    msg = (
+                        f"<task-notification>\n"
+                        f"任务 #{note.task_id} {status_text}\n"
+                        f"{note.output or note.error}\n"
+                        f"</task-notification>"
+                    )
+                    messages.append(UserMessage(content=[TextBlock(text=msg)]))
+
             if planning_state is not None:
                 # Remove previous plan context message (always at index 1 if it exists)
                 if len(messages) > 1 and self._is_plan_context_message(messages[1]):

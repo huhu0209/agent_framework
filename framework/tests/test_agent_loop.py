@@ -1,7 +1,14 @@
 """AgentLoop 测试 — 集成 Tool System。"""
 
+import sys
+from pathlib import Path
+
 import pytest
 from unittest.mock import AsyncMock
+
+# conftest.py 中的 MockAdapter 需要显式导入
+sys.path.insert(0, str(Path(__file__).parent))
+from conftest import MockAdapter  # noqa: E402
 
 from agent_framework.agents.agent_loop import AgentLoop, LoopEvent
 from agent_framework.prompts.profiles import AgentProfile
@@ -549,3 +556,48 @@ async def test_session_start_hook_not_fired_without_manager():
 
     assert len(events) >= 1
     assert events[-1].type == "done"
+
+
+# --- TaskRunner 集成测试 ---
+
+
+@pytest.mark.asyncio
+async def test_agent_loop_with_task_runner_drain(tmp_path):
+    """AgentLoop 每轮 drain 后台任务通知，注入到 messages。"""
+    from agent_framework.tasks.manager import TaskManager
+    from agent_framework.tasks.runner import TaskRunner
+    from agent_framework.tasks.types import RuntimeTask, RuntimeTaskStatus
+    from agent_framework.tools.registry import ToolRegistry
+
+    mgr = TaskManager(tmp_path / "tasks")
+    task = mgr.create(subject="后台完成")
+
+    adapter = MockAdapter("收到通知")
+    registry = ToolRegistry()
+    router = ToolRouter(registry)
+    ctx = ToolUseContext()
+
+    runner = TaskRunner(
+        task_manager=mgr, adapter=adapter,
+        model="test", router=router, ctx=ctx,
+    )
+
+    loop = AgentLoop(
+        adapter=adapter, model="test",
+        router=router, ctx=ctx,
+        task_runner=runner,
+    )
+
+    # 手动往 runner 的 notification queue 放一个完成通知
+    rt = RuntimeTask(task_id=task.id, prompt="done")
+    rt.status = RuntimeTaskStatus.COMPLETED
+    rt.output = "后台任务输出"
+    await runner._notifications.put(rt)
+
+    events = []
+    async for event in loop.run("检查后台任务"):
+        events.append(event)
+
+    assert len(events) >= 2
+    done_events = [e for e in events if e.type == "done"]
+    assert len(done_events) == 1
