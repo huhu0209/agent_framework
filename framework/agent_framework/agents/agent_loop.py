@@ -100,6 +100,7 @@ class AgentLoop:
         self._compact_failures = 0
         self._last_usage: UsageStats | None = None
         self._messages_at_last_call = 0
+        self._messages: list[Message] = []
         self.profile = profile
 
         # Skills 集成
@@ -239,15 +240,22 @@ class AgentLoop:
         self,
         user_message: str,
         plan: list[PlanItem] | None = None,
+        *,
+        resume: bool = False,
     ) -> AsyncGenerator[LoopEvent, None]:
         """核心异步生成器：执行 ReAct 循环，支持 Session Planning。"""
         from agent_framework.tasks.types import RuntimeTaskStatus
 
-        # 0. 初始化消息列表，
-        messages: list[Message] = [
-            SystemMessage(content=self._system_prompt_text),
-            UserMessage(content=[TextBlock(text=user_message)]),
-        ]
+        # 0. 初始化消息列表
+        if resume and self._messages:
+            self._messages.append(
+                UserMessage(content=[TextBlock(text=user_message)])
+            )
+        else:
+            self._messages = [
+                SystemMessage(content=self._system_prompt_text),
+                UserMessage(content=[TextBlock(text=user_message)]),
+            ]
 
         # SessionStart hook
         if self._hook_manager is not None:
@@ -256,7 +264,7 @@ class AgentLoop:
             ss_ctx = HookContext(hook_event_name=HookEvent.SESSION_START.value)
             for result in await self._hook_manager.fire(HookEvent.SESSION_START, ss_ctx):
                 if result.inject_message:
-                    messages.append(UserMessage(content=[
+                    self._messages.append(UserMessage(content=[
                         TextBlock(text=f"[Hook] {result.inject_message}")
                     ]))
 
@@ -288,23 +296,23 @@ class AgentLoop:
                         f"{note.output or note.error}\n"
                         f"</task-notification>"
                     )
-                    messages.append(UserMessage(content=[TextBlock(text=msg)]))
+                    self._messages.append(UserMessage(content=[TextBlock(text=msg)]))
 
             if planning_state is not None:
                 # Remove previous plan context message (always at index 1 if it exists)
-                if len(messages) > 1 and self._is_plan_context_message(messages[1]):
-                    messages.pop(1)
-                self._inject_plan_context(messages, planning_state)
+                if len(self._messages) > 1 and self._is_plan_context_message(self._messages[1]):
+                    self._messages.pop(1)
+                self._inject_plan_context(self._messages, planning_state)
 
             try:
                 # Context management
-                messages = await self._maybe_compact(messages, step)
+                self._messages = await self._maybe_compact(self._messages, step)
 
-                result = await self.adapter.complete(self._build_config(messages))
+                result = await self.adapter.complete(self._build_config(self._messages))
 
                 # Track usage for hybrid estimation
                 self._last_usage = result.usage
-                self._messages_at_last_call = len(messages)
+                self._messages_at_last_call = len(self._messages)
             except Exception as exc:
                 yield LoopEvent(type="error", step=step, data={"error": str(exc)}, plan=self._make_plan_snapshot(planning_state))
                 return
@@ -320,6 +328,7 @@ class AgentLoop:
             if result.stop_reason == StopReason.END_TURN:
                 planning_state = self._try_parse_plan(result, planning_state)
                 plan_checked = True
+                self._messages.append(AssistantMessage(content=result.content))
                 yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)}, plan=self._make_plan_snapshot(planning_state))
                 return
 
@@ -330,6 +339,7 @@ class AgentLoop:
             if result.stop_reason == StopReason.STOP_SEQUENCE:
                 planning_state = self._try_parse_plan(result, planning_state)
                 plan_checked = True
+                self._messages.append(AssistantMessage(content=result.content))
                 yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)}, plan=self._make_plan_snapshot(planning_state))
                 return
 
@@ -340,13 +350,13 @@ class AgentLoop:
                     return
 
                 cleaned_content = self._strip_plan_from_content(result.content)
-                messages.append(AssistantMessage(content=cleaned_content))
+                self._messages.append(AssistantMessage(content=cleaned_content))
 
                 tool_results: list[str] = []
                 for tc in tool_calls:
                     call = ToolCall(id=tc.id, name=tc.name, arguments=tc.input)
                     tool_result = await self.router.dispatch(call, self.ctx)
-                    messages.append(ToolMessage(tool_call_id=tc.id, content=tool_result.content))
+                    self._messages.append(ToolMessage(tool_call_id=tc.id, content=tool_result.content))
                     tool_results.append(tool_result.content)
 
                 if planning_state is not None and not plan_checked:
@@ -374,6 +384,7 @@ class AgentLoop:
                 )
                 continue
 
+            self._messages.append(AssistantMessage(content=result.content))
             yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)}, plan=plan_snapshot)
             return
 
