@@ -356,3 +356,58 @@ async def test_dispatch_permission_then_hook_order():
     )
     assert result.is_error is True
     assert "拒绝" in result.content
+
+
+@pytest.mark.asyncio
+async def test_dispatch_multiple_pre_tool_hooks_first_blocks():
+    """第一个 PreToolUse hook block 后，第二个 hook 的 updated_input 不生效。"""
+    from agent_framework.hooks.manager import HookManager
+    from agent_framework.hooks.types import HookConfig, HookEvent, HookType
+
+    mgr = HookManager(trusted=True)
+    mgr.register(HookConfig(
+        event=HookEvent.PRE_TOOL_USE,
+        matcher="*",
+        hook_type=HookType.COMMAND,
+        command="echo 'blocked' >&2; exit 1",
+    ))
+    mgr.register(HookConfig(
+        event=HookEvent.PRE_TOOL_USE,
+        matcher="*",
+        hook_type=HookType.COMMAND,
+        command='echo \'{"updatedInput": {"msg": "should not apply"}}\'',
+    ))
+
+    registry = _make_registry_with_echo()
+    router = ToolRouter(registry, hook_manager=mgr)
+    result = await router.dispatch(
+        ToolCall(id="h6", name="echo", arguments={"msg": "original"}),
+        ctx,
+    )
+    assert result.is_error is True
+    assert "Hook blocked" in result.content
+
+
+@pytest.mark.asyncio
+async def test_dispatch_post_tool_hook_blocked_ignored():
+    """PostToolUse hook 返回 exit 1 (blocked) 被忽略——工具已执行无法撤回。"""
+    from agent_framework.hooks.manager import HookManager
+    from agent_framework.hooks.types import HookConfig, HookEvent, HookType
+
+    mgr = HookManager(trusted=True)
+    mgr.register(HookConfig(
+        event=HookEvent.POST_TOOL_USE,
+        matcher="*",
+        hook_type=HookType.COMMAND,
+        command="echo 'should block' >&2; exit 1",
+    ))
+
+    registry = _make_registry_with_echo()
+    router = ToolRouter(registry, hook_manager=mgr)
+    result = await router.dispatch(
+        ToolCall(id="h7", name="echo", arguments={"msg": "ran"}),
+        ctx,
+    )
+    # 工具结果正常返回，blocked 被忽略
+    assert result.is_error is False
+    assert result.content == "echo: ran"

@@ -5,12 +5,16 @@ from __future__ import annotations
 import asyncio
 import fnmatch
 import json
+import logging
 import uuid
 from collections import defaultdict
 from dataclasses import replace
 from pathlib import Path
+from typing import Any
 
 from agent_framework.hooks.types import HookConfig, HookContext, HookEvent, HookResult, HookType
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_exit(code: int, stdout: str, stderr: str) -> HookResult:
@@ -47,19 +51,36 @@ class HookManager:
         self._hooks[config.event].append(config)
 
     def load_from_json(self, path: Path) -> None:
-        """从 JSON 文件批量加载 Hook 配置。"""
+        """从 JSON 文件批量加载 Hook 配置。跳过无效条目，不崩溃。"""
         if not path.exists():
             return
-        data = json.loads(path.read_text())
+        try:
+            data = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Hook 配置文件读取失败 %s: %s", path, exc)
+            return
+
         for event_name, entries in data.get("hooks", {}).items():
+            try:
+                event = HookEvent(event_name)
+            except ValueError:
+                logger.warning("Hook 配置跳过未知事件: %s", event_name)
+                continue
+            if not isinstance(entries, list):
+                logger.warning("Hook 配置跳过非列表条目: %s", event_name)
+                continue
             for entry in entries:
                 matcher = entry.get("matcher", "*")
                 for h in entry.get("hooks", []):
+                    command = h.get("command", "")
+                    if not command or not command.strip():
+                        logger.warning("Hook 配置跳过空 command: %s/%s", event_name, matcher)
+                        continue
                     self.register(HookConfig(
-                        event=HookEvent(event_name),
+                        event=event,
                         matcher=matcher,
                         hook_type=HookType(h.get("type", "command")),
-                        command=h.get("command", ""),
+                        command=command,
                         timeout=h.get("timeout", 30),
                         once=h.get("once", False),
                     ))
@@ -102,7 +123,7 @@ class HookManager:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdin_data = json.dumps({
+            stdin_data: str = json.dumps({
                 "session_id": context.session_id,
                 "hook_event_name": context.hook_event_name,
                 "tool_name": context.tool_name or "",

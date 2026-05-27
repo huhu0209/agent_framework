@@ -373,3 +373,71 @@ async def test_fire_subprocess_error_returns_blocked(monkeypatch):
     assert len(results) == 1
     assert results[0].blocked is True
     assert "bash not found" in results[0].stderr
+
+
+# --- load_from_json 错误处理测试 ---
+
+
+def test_load_from_json_malformed_json(tmp_path):
+    """格式错误的 JSON 不崩溃，跳过加载。"""
+    hooks_json = tmp_path / "hooks.json"
+    hooks_json.write_text("{invalid json!!!")
+
+    mgr = HookManager(trusted=True)
+    mgr.load_from_json(hooks_json)
+    assert len(mgr._hooks) == 0
+
+
+def test_load_from_json_invalid_event_name(tmp_path):
+    """无效的事件名不崩溃，跳过该条目。"""
+    hooks_json = tmp_path / "hooks.json"
+    hooks_json.write_text("""{
+        "hooks": {
+            "InvalidEvent": [
+                {"matcher": "*", "hooks": [{"command": "echo ok"}]}
+            ],
+            "PreToolUse": [
+                {"matcher": "*", "hooks": [{"command": "echo valid"}]}
+            ]
+        }
+    }""")
+
+    mgr = HookManager(trusted=True)
+    mgr.load_from_json(hooks_json)
+    assert len(mgr._hooks[HookEvent.PRE_TOOL_USE]) == 1
+    assert len(mgr._hooks[HookEvent.SESSION_START]) == 0
+
+
+def test_load_from_json_empty_command_skipped(tmp_path):
+    """空 command 字符串被跳过。"""
+    hooks_json = tmp_path / "hooks.json"
+    hooks_json.write_text("""{
+        "hooks": {
+            "PreToolUse": [
+                {"matcher": "*", "hooks": [
+                    {"command": ""},
+                    {"command": "  "},
+                    {"command": "echo valid"}
+                ]}
+            ]
+        }
+    }""")
+
+    mgr = HookManager(trusted=True)
+    mgr.load_from_json(hooks_json)
+    assert len(mgr._hooks[HookEvent.PRE_TOOL_USE]) == 1
+    assert mgr._hooks[HookEvent.PRE_TOOL_USE][0].command == "echo valid"
+
+
+def test_load_from_json_non_list_entries_skipped(tmp_path):
+    """非列表类型的 entries 被跳过。"""
+    hooks_json = tmp_path / "hooks.json"
+    hooks_json.write_text("""{
+        "hooks": {
+            "PreToolUse": "not a list"
+        }
+    }""")
+
+    mgr = HookManager(trusted=True)
+    mgr.load_from_json(hooks_json)
+    assert len(mgr._hooks) == 0

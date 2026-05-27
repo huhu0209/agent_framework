@@ -243,7 +243,7 @@ class AgentLoop:
         if self._hook_manager is not None:
             from agent_framework.hooks.types import HookContext, HookEvent
 
-            ss_ctx = HookContext(hook_event_name="SessionStart")
+            ss_ctx = HookContext(hook_event_name=HookEvent.SESSION_START.value)
             for result in await self._hook_manager.fire(HookEvent.SESSION_START, ss_ctx):
                 if result.inject_message:
                     messages.append(UserMessage(content=[

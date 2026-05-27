@@ -13,6 +13,9 @@ from agent_framework.tools.types import ToolCall, ToolResult, ToolUseContext
 if TYPE_CHECKING:
     from agent_framework.hooks.manager import HookManager
 
+# PostToolUse hooks 只能看到截断后的结果，防止 stdin 数据过大
+_POST_HOOK_RESULT_LIMIT = 5000
+
 
 class ToolRouter:
     """按工具来源路由：builtin / mcp / agent。"""
@@ -85,8 +88,7 @@ class ToolRouter:
 
         # 4. PostToolUse hooks
         if self._hook_manager is not None:
-            # 截断 tool_result 到 5000 字符
-            truncated = tool_result.content[:5000]
+            truncated = tool_result.content[:_POST_HOOK_RESULT_LIMIT]
             post_ctx = HookContext(
                 hook_event_name=HookEvent.POST_TOOL_USE.value,
                 tool_name=name,
@@ -95,6 +97,7 @@ class ToolRouter:
             )
             post_results = await self._hook_manager.fire(HookEvent.POST_TOOL_USE, post_ctx)
             for hr in post_results:
+                # PostToolUse 已在工具执行后触发，blocked 无法撤回结果，只处理 inject
                 if hr.inject_message:
                     tool_result = ToolResult(
                         content=f"{tool_result.content}\n\n[Hook supplement]\n{hr.inject_message}",

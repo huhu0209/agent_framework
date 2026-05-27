@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
 
 
 class HookType(str, Enum):
@@ -33,7 +34,7 @@ class HookContext:
     hook_event_name: str = ""
     session_id: str = ""
     tool_name: str | None = None
-    tool_input: dict | None = None
+    tool_input: dict[str, Any] | None = None
     tool_result: str | None = None
 
 
@@ -45,4 +46,4 @@ class HookResult:
     stderr: str = ""
     blocked: bool = False
     inject_message: str = ""
-    updated_input: dict | None = None
+    updated_input: dict[str, Any] | None = None
