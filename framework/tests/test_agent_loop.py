@@ -627,3 +627,45 @@ async def test_subagent_not_registered_by_default():
         router=router, ctx=ctx,
     )
     assert "run_subagent" not in loop.router.registry.list_tools()
+
+
+# --- TeamManager 集成测试 ---
+
+
+@pytest.mark.asyncio
+async def test_team_manager_drains_notifications():
+    import asyncio
+    from agent_framework.teams.manager import TeamManager, TeamNotification
+
+    adapter = MockAdapter("回答")
+    registry = ToolRegistry()
+    router = ToolRouter(registry)
+    ctx = ToolUseContext()
+
+    # Create a minimal TeamManager (bypass __init__)
+    mgr = TeamManager.__new__(TeamManager)
+    mgr.notifications = asyncio.Queue()
+    mgr._configs = {}
+    mgr._statuses = {}
+    mgr._tasks = {}
+
+    mgr.notifications.put_nowait(TeamNotification(name="alice", status="shutdown"))
+
+    loop = AgentLoop(
+        adapter=adapter, model="fake",
+        router=router, ctx=ctx,
+        team_manager=mgr,
+    )
+
+    async for event in loop.run("测试"):
+        pass
+
+    # Verify alice notification was injected into messages
+    found = any(
+        "alice" in block.text
+        for msg in loop._messages
+        if hasattr(msg, 'content')
+        for block in msg.content
+        if hasattr(block, 'text')
+    )
+    assert found, "Team notification for alice should appear in messages"

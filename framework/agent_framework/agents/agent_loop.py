@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass, field
 from typing import Any, AsyncGenerator, TYPE_CHECKING
 
@@ -48,6 +49,7 @@ from agent_framework.tools.types import ToolCall, ToolUseContext
 if TYPE_CHECKING:
     from agent_framework.hooks.manager import HookManager
     from agent_framework.tasks.runner import TaskRunner
+    from agent_framework.teams.manager import TeamManager
 
 @dataclass
 class LoopEvent:
@@ -86,6 +88,7 @@ class AgentLoop:
         hook_manager: HookManager | None = None,
         task_runner: TaskRunner | None = None,
         enable_subagent: bool = False,
+        team_manager: TeamManager | None = None,
     ) -> None:
         self.adapter = adapter
         self.model = model
@@ -108,6 +111,7 @@ class AgentLoop:
         self._assembler = PromptAssembler(skill_registry=self._skill_registry)
         self._hook_manager = hook_manager
         self._task_runner = task_runner
+        self._team_manager = team_manager
 
         if self._skill_registry is not None:
             spec = create_load_skill_spec()
@@ -297,6 +301,17 @@ class AgentLoop:
                         f"</task-notification>"
                     )
                     self._messages.append(UserMessage(content=[TextBlock(text=msg)]))
+
+            # Drain 队友通知
+            if self._team_manager is not None:
+                while True:
+                    try:
+                        note = self._team_manager.notifications.get_nowait()
+                        self._messages.append(UserMessage(content=[TextBlock(
+                            text=f"<team-notification>{note.name} 已关闭</team-notification>"
+                        )]))
+                    except asyncio.QueueEmpty:
+                        break
 
             if planning_state is not None:
                 # Remove previous plan context message (always at index 1 if it exists)
