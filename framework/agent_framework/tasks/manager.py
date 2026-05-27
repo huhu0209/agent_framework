@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import logging
 from datetime import datetime, timezone
@@ -176,59 +177,52 @@ class TaskManager:
             raise TaskStatusError(f"不允许从 {old.value} 转换到 {new.value}")
 
     def _apply_changes(self, task: Task, changes: dict) -> Task:
-        kwargs = {
-            "id": task.id,
-            "subject": changes.get("subject", task.subject),
-            "description": changes.get("description", task.description),
-            "status": TaskStatus(changes["status"]) if "status" in changes else task.status,
-            "owner": changes.get("owner", task.owner),
-            "blocked_by": task.blocked_by.copy(),
-            "blocks": task.blocks.copy(),
-            "created_at": task.created_at,
-            "updated_at": self._now(),
-        }
+        field_updates: dict = {"updated_at": self._now()}
+
+        for key in ("subject", "description", "owner"):
+            if key in changes:
+                field_updates[key] = changes[key]
+
+        if "status" in changes:
+            field_updates["status"] = TaskStatus(changes["status"])
+
+        updated = dataclasses.replace(task, **field_updates)
+
+        new_blocked_by = list(updated.blocked_by)
+        new_blocks = list(updated.blocks)
 
         for dep_id in changes.get("add_blocked_by", []):
-            if dep_id not in kwargs["blocked_by"]:
-                kwargs["blocked_by"].append(dep_id)
+            if dep_id not in new_blocked_by:
+                new_blocked_by.append(dep_id)
             dep_task = self.get(dep_id)
             if dep_task and task.id not in dep_task.blocks:
-                self._write(Task(
-                    id=dep_task.id, subject=dep_task.subject,
-                    description=dep_task.description, status=dep_task.status,
-                    owner=dep_task.owner,
-                    blocked_by=dep_task.blocked_by,
+                self._write(dataclasses.replace(
+                    dep_task,
                     blocks=dep_task.blocks + [task.id],
-                    created_at=dep_task.created_at, updated_at=self._now(),
+                    updated_at=self._now(),
                 ))
 
         for dep_id in changes.get("add_blocks", []):
-            if dep_id not in kwargs["blocks"]:
-                kwargs["blocks"].append(dep_id)
+            if dep_id not in new_blocks:
+                new_blocks.append(dep_id)
             dep_task = self.get(dep_id)
             if dep_task and task.id not in dep_task.blocked_by:
-                self._write(Task(
-                    id=dep_task.id, subject=dep_task.subject,
-                    description=dep_task.description, status=dep_task.status,
-                    owner=dep_task.owner,
+                self._write(dataclasses.replace(
+                    dep_task,
                     blocked_by=dep_task.blocked_by + [task.id],
-                    blocks=dep_task.blocks,
-                    created_at=dep_task.created_at, updated_at=self._now(),
+                    updated_at=self._now(),
                 ))
 
-        return Task(**kwargs)
+        return dataclasses.replace(updated, blocked_by=new_blocked_by, blocks=new_blocks)
 
     def _clear_dependency(self, completed_id: str):
         for task in self._load_all():
             if completed_id in task.blocked_by:
                 new_blocked = [x for x in task.blocked_by if x != completed_id]
-                self._write(Task(
-                    id=task.id, subject=task.subject,
-                    description=task.description, status=task.status,
-                    owner=task.owner,
+                self._write(dataclasses.replace(
+                    task,
                     blocked_by=new_blocked,
-                    blocks=task.blocks,
-                    created_at=task.created_at, updated_at=self._now(),
+                    updated_at=self._now(),
                 ))
 
 
