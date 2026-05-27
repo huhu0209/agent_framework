@@ -31,20 +31,20 @@ async def test_task_create(tools, task_mgr):
 
 @pytest.mark.asyncio
 async def test_task_update_status(tools, task_mgr):
-    task_mgr.create(subject="工作")
+    created = task_mgr.create(subject="工作")
     handler = tools["task_update"].handler
-    result = await handler({"id": "1", "status": "in_progress"}, ctx)
+    result = await handler({"id": created.id, "status": "in_progress"}, ctx)
     assert result.is_error is False
     assert "in_progress" in result.content
 
 
 @pytest.mark.asyncio
 async def test_task_update_invalid_status(tools, task_mgr):
-    task_mgr.create(subject="已完成")
-    task_mgr.update("1", status="in_progress")
-    task_mgr.update("1", status="completed")
+    created = task_mgr.create(subject="已完成")
+    task_mgr.update(created.id, status="in_progress")
+    task_mgr.update(created.id, status="completed")
     handler = tools["task_update"].handler
-    result = await handler({"id": "1", "status": "in_progress"}, ctx)
+    result = await handler({"id": created.id, "status": "in_progress"}, ctx)
     assert result.is_error is True
 
 
@@ -61,9 +61,9 @@ async def test_task_list(tools, task_mgr):
 
 @pytest.mark.asyncio
 async def test_task_get(tools, task_mgr):
-    task_mgr.create(subject="查找我", description="详细描述")
+    created = task_mgr.create(subject="查找我", description="详细描述")
     handler = tools["task_get"].handler
-    result = await handler({"id": "1"}, ctx)
+    result = await handler({"id": created.id}, ctx)
     assert result.is_error is False
     assert "查找我" in result.content
     assert "详细描述" in result.content

@@ -1,14 +1,9 @@
 """AgentLoop 测试 — 集成 Tool System。"""
 
-import sys
-from pathlib import Path
-
 import pytest
 from unittest.mock import AsyncMock
 
-# conftest.py 中的 MockAdapter 需要显式导入
-sys.path.insert(0, str(Path(__file__).parent))
-from conftest import MockAdapter  # noqa: E402
+from conftest import MockAdapter
 
 from agent_framework.agents.agent_loop import AgentLoop, LoopEvent
 from agent_framework.prompts.profiles import AgentProfile
@@ -445,7 +440,6 @@ async def test_semantic_extractor_param_accepted():
 # === Skills 集成测试 ===
 
 
-from pathlib import Path
 from agent_framework.tools.registry import ToolRegistry
 from agent_framework.skills.tool import create_load_skill_spec
 
