@@ -236,6 +236,8 @@ class AgentLoop:
         plan: list[PlanItem] | None = None,
     ) -> AsyncGenerator[LoopEvent, None]:
         """核心异步生成器：执行 ReAct 循环，支持 Session Planning。"""
+        from agent_framework.tasks.types import RuntimeTaskStatus
+
         # 0. 初始化消息列表，
         messages: list[Message] = [
             SystemMessage(content=self._system_prompt_text),
@@ -270,7 +272,6 @@ class AgentLoop:
             if self._task_runner is not None:
                 notifications = await self._task_runner.drain_notifications()
                 for note in notifications:
-                    from agent_framework.tasks.types import RuntimeTaskStatus
                     status_text = {
                         RuntimeTaskStatus.COMPLETED: "已完成",
                         RuntimeTaskStatus.ERROR: "失败",
