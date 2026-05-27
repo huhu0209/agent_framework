@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from agent_framework.safety.permissions import PermissionDecision, PermissionPipeline
 from agent_framework.tools.executor import ToolExecutor
 from agent_framework.tools.mcp.config import McpManager
 from agent_framework.tools.registry import ToolRegistry
 from agent_framework.tools.types import ToolCall, ToolResult, ToolUseContext
+
+if TYPE_CHECKING:
+    from agent_framework.hooks.manager import HookManager
 
 
 class ToolRouter:
@@ -16,10 +21,12 @@ class ToolRouter:
         self,
         registry: ToolRegistry,
         mcp_manager: McpManager | None = None,
+        hook_manager: HookManager | None = None,
     ) -> None:
         self.registry = registry
         self._executor = ToolExecutor()
         self._mcp_manager = mcp_manager
+        self._hook_manager = hook_manager
         self._permission_pipeline: PermissionPipeline | None = None
 
     def set_permission_pipeline(self, pipeline: PermissionPipeline) -> None:
@@ -27,9 +34,12 @@ class ToolRouter:
         self._permission_pipeline = pipeline
 
     async def dispatch(self, call: ToolCall, ctx: ToolUseContext) -> ToolResult:
+        # lazy import — 避免循环依赖
+        from agent_framework.hooks.types import HookContext, HookEvent
+
         name = call.name
 
-        # 权限检查
+        # 1. 权限检查
         if self._permission_pipeline is not None:
             decision = self._permission_pipeline.check(name, call.arguments)
             if decision.action == PermissionDecision.DENY:
@@ -43,13 +53,56 @@ class ToolRouter:
                     is_error=True,
                 )
 
+        # 2. PreToolUse hooks
+        active_call = call
+        if self._hook_manager is not None:
+            pre_ctx = HookContext(
+                hook_event_name=HookEvent.PRE_TOOL_USE.value,
+                tool_name=name,
+                tool_input=call.arguments,
+            )
+            pre_results = await self._hook_manager.fire(HookEvent.PRE_TOOL_USE, pre_ctx)
+            for hr in pre_results:
+                if hr.blocked:
+                    return ToolResult(
+                        content=f"[Hook blocked] {hr.stderr}",
+                        is_error=True,
+                    )
+                if hr.updated_input is not None:
+                    active_call = ToolCall(
+                        id=call.id,
+                        name=call.name,
+                        arguments=hr.updated_input,
+                    )
+
+        # 3. 执行
         if name.startswith("mcp__"):
-            return await self._dispatch_mcp(name, call.arguments, ctx)
+            tool_result = await self._dispatch_mcp(name, active_call.arguments, ctx)
+        elif name.startswith("agent__"):
+            tool_result = self._dispatch_agent(name, active_call.arguments, ctx)
+        else:
+            tool_result = await self._dispatch_builtin(active_call, ctx)
 
-        if name.startswith("agent__"):
-            return self._dispatch_agent(name, call.arguments, ctx)
+        # 4. PostToolUse hooks
+        if self._hook_manager is not None:
+            # 截断 tool_result 到 5000 字符
+            truncated = tool_result.content[:5000]
+            post_ctx = HookContext(
+                hook_event_name=HookEvent.POST_TOOL_USE.value,
+                tool_name=name,
+                tool_input=active_call.arguments,
+                tool_result=truncated,
+            )
+            post_results = await self._hook_manager.fire(HookEvent.POST_TOOL_USE, post_ctx)
+            for hr in post_results:
+                if hr.inject_message:
+                    tool_result = ToolResult(
+                        content=f"{tool_result.content}\n\n[Hook supplement]\n{hr.inject_message}",
+                        is_error=tool_result.is_error,
+                        metadata=tool_result.metadata,
+                    )
 
-        return await self._dispatch_builtin(call, ctx)
+        return tool_result
 
     async def _dispatch_builtin(self, call: ToolCall, ctx: ToolUseContext) -> ToolResult:
         spec = self.registry.get(call.name)

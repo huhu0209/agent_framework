@@ -234,3 +234,125 @@ async def test_dispatch_no_pipeline_passes_all():
     call = ToolCall(id="1", name="echo", arguments={"msg": "free"})
     result = await router.dispatch(call, ToolUseContext(working_dir="."))
     assert not result.is_error
+
+
+# --- Hooks 集成测试 ---
+
+
+@pytest.mark.asyncio
+async def test_dispatch_with_pre_tool_hook_blocked():
+    """PreToolUse hook 阻止工具执行。"""
+    from agent_framework.hooks.manager import HookManager
+    from agent_framework.hooks.types import HookConfig, HookEvent, HookType
+
+    mgr = HookManager(trusted=True)
+    mgr.register(HookConfig(
+        event=HookEvent.PRE_TOOL_USE,
+        matcher="*",
+        hook_type=HookType.COMMAND,
+        command="echo 'blocked by policy' >&2; exit 1",
+    ))
+    registry = _make_registry_with_echo()
+    router = ToolRouter(registry, hook_manager=mgr)
+    result = await router.dispatch(
+        ToolCall(id="h1", name="echo", arguments={"msg": "hi"}),
+        ctx,
+    )
+    assert result.is_error is True
+    assert "Hook blocked" in result.content
+
+
+@pytest.mark.asyncio
+async def test_dispatch_with_pre_tool_hook_modify_input():
+    """PreToolUse hook 修改工具参数。"""
+    from agent_framework.hooks.manager import HookManager
+    from agent_framework.hooks.types import HookConfig, HookEvent, HookType
+
+    mgr = HookManager(trusted=True)
+    mgr.register(HookConfig(
+        event=HookEvent.PRE_TOOL_USE,
+        matcher="*",
+        hook_type=HookType.COMMAND,
+        command='echo \'{"updatedInput": {"msg": "modified"}}\'',
+    ))
+    registry = _make_registry_with_echo()
+    router = ToolRouter(registry, hook_manager=mgr)
+    result = await router.dispatch(
+        ToolCall(id="h2", name="echo", arguments={"msg": "original"}),
+        ctx,
+    )
+    assert result.is_error is False
+    assert result.content == "echo: modified"
+
+
+@pytest.mark.asyncio
+async def test_dispatch_with_post_tool_hook_inject():
+    """PostToolUse hook 注入补充信息。"""
+    from agent_framework.hooks.manager import HookManager
+    from agent_framework.hooks.types import HookConfig, HookEvent, HookType
+
+    mgr = HookManager(trusted=True)
+    mgr.register(HookConfig(
+        event=HookEvent.POST_TOOL_USE,
+        matcher="*",
+        hook_type=HookType.COMMAND,
+        command="echo 'extra info' >&2; exit 2",
+    ))
+    registry = _make_registry_with_echo()
+    router = ToolRouter(registry, hook_manager=mgr)
+    result = await router.dispatch(
+        ToolCall(id="h3", name="echo", arguments={"msg": "hi"}),
+        ctx,
+    )
+    assert result.is_error is False
+    assert "echo: hi" in result.content
+    assert "extra info" in result.content
+
+
+@pytest.mark.asyncio
+async def test_dispatch_with_no_hook_manager():
+    """无 HookManager 时正常执行（向后兼容）。"""
+    registry = _make_registry_with_echo()
+    router = ToolRouter(registry)
+    result = await router.dispatch(
+        ToolCall(id="h4", name="echo", arguments={"msg": "clean"}),
+        ctx,
+    )
+    assert result.content == "echo: clean"
+    assert result.is_error is False
+
+
+@pytest.mark.asyncio
+async def test_dispatch_permission_then_hook_order():
+    """Permission deny → Hook 不执行。"""
+    from agent_framework.hooks.manager import HookManager
+    from agent_framework.hooks.types import HookConfig, HookEvent, HookType
+    from agent_framework.prompts.profiles import AgentProfile
+    from agent_framework.safety.permissions import PermissionPipeline
+
+    mgr = HookManager(trusted=True)
+    mgr.register(HookConfig(
+        event=HookEvent.PRE_TOOL_USE,
+        matcher="*",
+        hook_type=HookType.COMMAND,
+        command="echo 'should not run'",
+    ))
+
+    profile = AgentProfile(
+        name="strict",
+        description="no echo",
+        soul="", agents_rules="", identity="",
+        disallowed_tools=["echo"],
+    )
+    pipeline = PermissionPipeline(profile=profile)
+
+    registry = _make_registry_with_echo()
+    router = ToolRouter(registry, hook_manager=mgr)
+    router.set_permission_pipeline(pipeline)
+
+    result = await router.dispatch(
+        ToolCall(id="h5", name="echo", arguments={"msg": "test"}),
+        ctx,
+    )
+    assert result.is_error is True
+    assert "拒绝" in result.content

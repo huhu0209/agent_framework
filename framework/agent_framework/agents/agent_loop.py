@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, AsyncGenerator
+from typing import Any, AsyncGenerator, TYPE_CHECKING
 
 from agent_framework.llm import (
     AssistantMessage,
@@ -45,6 +45,9 @@ from agent_framework.skills.tool import create_load_skill_spec
 from agent_framework.tools.router import ToolRouter
 from agent_framework.tools.types import ToolCall, ToolUseContext
 
+if TYPE_CHECKING:
+    from agent_framework.hooks.manager import HookManager
+
 
 @dataclass
 class LoopEvent:
@@ -80,6 +83,7 @@ class AgentLoop:
         memory_flush_enabled: bool = False,
         semantic_extractor: SemanticExtractor | None = None,
         skill_dirs: list[Path] | None = None,
+        hook_manager: HookManager | None = None,
     ) -> None:
         self.adapter = adapter
         self.model = model
@@ -99,6 +103,7 @@ class AgentLoop:
         # Skills 集成
         self._skill_registry = SkillRegistry(skill_dirs) if skill_dirs else None
         self._assembler = PromptAssembler(skill_registry=self._skill_registry)
+        self._hook_manager = hook_manager
 
         if self._skill_registry is not None:
             spec = create_load_skill_spec()
@@ -233,6 +238,17 @@ class AgentLoop:
             SystemMessage(content=self._system_prompt_text),
             UserMessage(content=[TextBlock(text=user_message)]),
         ]
+
+        # SessionStart hook
+        if self._hook_manager is not None:
+            from agent_framework.hooks.types import HookContext, HookEvent
+
+            ss_ctx = HookContext(hook_event_name="SessionStart")
+            for result in await self._hook_manager.fire(HookEvent.SESSION_START, ss_ctx):
+                if result.inject_message:
+                    messages.append(UserMessage(content=[
+                        TextBlock(text=f"[Hook] {result.inject_message}")
+                    ]))
 
         planning_state: PlanningState | None = None
         # 1. 如果提供了计划，初始化计划状态
