@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Callable
 
@@ -22,7 +22,7 @@ class ResolvedCommand:
     skill_loaded: bool = False
 
 
-@dataclass
+@dataclass(frozen=True)
 class SlashCommand:
     """注册的 slash 命令。"""
 
@@ -30,4 +30,4 @@ class SlashCommand:
     description: str
     source: CommandSource
     arg_hint: str = ""
-    handler: Callable[..., ResolvedCommand] | None = None
+    handler: Callable[..., ResolvedCommand] | None = field(default=None, hash=False)

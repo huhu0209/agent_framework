@@ -75,8 +75,9 @@ class CommandRouter:
     def _cmd_help(self, _args: str) -> ResolvedCommand:
         lines = ["可用命令：", ""]
         for cmd in self._builtins.values():
+            label = f"/{cmd.name}"
             hint = f" {cmd.arg_hint}" if cmd.arg_hint else ""
-            lines.append(f"  /{cmd.name}{hint:<20} {cmd.description}")
+            lines.append(f"  {label}{hint:<20} {cmd.description}")
 
         if self._skill_registry:
             for name in self._skill_registry.get_names():

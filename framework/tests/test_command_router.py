@@ -1,16 +1,12 @@
 """CommandRouter 测试。"""
 
-from pathlib import Path
-import sys
-
 import pytest
 
 from agent_framework.commands.router import CommandRouter
 from agent_framework.commands.types import CommandSource
 from agent_framework.skills.registry import SkillRegistry
 
-sys.path.insert(0, str(Path(__file__).parent))
-from conftest import create_skill
+from tests.helpers import create_skill
 
 
 class TestNonCommandInput:
@@ -119,6 +115,24 @@ class TestSkillLoading:
 
         assert result.is_command is False
         assert result.content == "/internal"
+
+    def test_skill_load_error_falls_through(self):
+        """skill manifest 存在但 load_full_text 返回错误时降级。"""
+        from unittest.mock import MagicMock
+        from agent_framework.skills.registry import SkillLoadResult
+
+        registry = MagicMock(spec=SkillRegistry)
+        manifest = MagicMock()
+        manifest.user_invocable = True
+        registry.get_manifest.return_value = manifest
+        registry.load_full_text.return_value = SkillLoadResult(
+            content="加载失败", is_error=True
+        )
+
+        router = CommandRouter(skill_registry=registry)
+        result = router.resolve("/broken")
+        assert result.is_command is False
+        assert result.content == "/broken"
 
 
 class TestEdgeCases:

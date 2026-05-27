@@ -2,16 +2,13 @@
 
 import os
 import shutil
-import sys
 from pathlib import Path
 
 import pytest
 
 from agent_framework.skills.registry import SkillRegistry
 
-# conftest.py 同目录，加入 path 以便 import
-sys.path.insert(0, str(Path(__file__).parent))
-from conftest import create_skill  # noqa: E402
+from tests.helpers import create_skill
 
 
 class TestSkillRegistryScan:
