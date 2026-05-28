@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import json
 import logging
@@ -35,6 +36,7 @@ class TaskManager:
         self._dir = tasks_dir
         self._dir.mkdir(parents=True, exist_ok=True)
         self._next_id = self._load_max_id() + 1
+        self._lock = asyncio.Lock()
 
     # ---- CRUD ----
 
@@ -43,22 +45,23 @@ class TaskManager:
         "add_blocked_by", "add_blocks",
     })
 
-    def create(self, subject: str, description: str = "") -> Task:
-        active = self.count_active()
-        if active >= MAX_ACTIVE_TASKS:
-            raise TaskLimitError(f"活跃任务已达上限 {MAX_ACTIVE_TASKS}")
+    async def create(self, subject: str, description: str = "") -> Task:
+        async with self._lock:
+            active = self.count_active()
+            if active >= MAX_ACTIVE_TASKS:
+                raise TaskLimitError(f"活跃任务已达上限 {MAX_ACTIVE_TASKS}")
 
-        now = self._now()
-        task = Task(
-            id=str(self._next_id),
-            subject=subject,
-            description=description,
-            created_at=now,
-            updated_at=now,
-        )
-        self._next_id += 1
-        self._write(task)
-        return task
+            now = self._now()
+            task = Task(
+                id=str(self._next_id),
+                subject=subject,
+                description=description,
+                created_at=now,
+                updated_at=now,
+            )
+            self._next_id += 1
+            self._write(task)
+            return task
 
     def get(self, task_id: str) -> Task | None:
         path = self._path(task_id)
@@ -66,30 +69,31 @@ class TaskManager:
             return None
         return self._read(path)
 
-    def update(self, task_id: str, **changes) -> Task:
-        invalid = set(changes) - self._VALID_CHANGE_KEYS
-        if invalid:
-            raise TypeError(f"未知的更新字段: {invalid}")
+    async def update(self, task_id: str, **changes) -> Task:
+        async with self._lock:
+            invalid = set(changes) - self._VALID_CHANGE_KEYS
+            if invalid:
+                raise TypeError(f"未知的更新字段: {invalid}")
 
-        task = self.get(task_id)
-        if task is None:
-            raise TaskNotFoundError(f"任务 {task_id} 不存在")
+            task = self.get(task_id)
+            if task is None:
+                raise TaskNotFoundError(f"任务 {task_id} 不存在")
 
-        new_status = changes.get("status")
-        if new_status is not None:
-            self._validate_transition(task.status, TaskStatus(new_status))
+            new_status = changes.get("status")
+            if new_status is not None:
+                self._validate_transition(task.status, TaskStatus(new_status))
 
-        if new_status == TaskStatus.IN_PROGRESS:
-            if self._find_in_progress():
-                raise TaskConflictError("已有任务正在执行中")
+            if new_status == TaskStatus.IN_PROGRESS:
+                if self._find_in_progress():
+                    raise TaskConflictError("已有任务正在执行中")
 
-        updated = self._apply_changes(task, changes)
+            updated = self._apply_changes(task, changes)
 
-        if updated.status == TaskStatus.COMPLETED:
-            self._clear_dependency(updated.id)
+            if updated.status == TaskStatus.COMPLETED:
+                self._clear_dependency(updated.id)
 
-        self._write(updated)
-        return updated
+            self._write(updated)
+            return updated
 
     def list_all(self) -> list[Task]:
         return sorted(self._load_all(), key=lambda t: int(t.id))
@@ -192,13 +196,14 @@ class TaskManager:
 
         new_blocked_by = list(updated.blocked_by)
         new_blocks = list(updated.blocks)
+        pending_writes: list[tuple[Task]] = []
 
         for dep_id in changes.get("add_blocked_by", []):
             if dep_id not in new_blocked_by:
                 new_blocked_by.append(dep_id)
             dep_task = self.get(dep_id)
             if dep_task and task.id not in dep_task.blocks:
-                self._write(dataclasses.replace(
+                pending_writes.append(dataclasses.replace(
                     dep_task,
                     blocks=dep_task.blocks + [task.id],
                     updated_at=self._now(),
@@ -209,11 +214,14 @@ class TaskManager:
                 new_blocks.append(dep_id)
             dep_task = self.get(dep_id)
             if dep_task and task.id not in dep_task.blocked_by:
-                self._write(dataclasses.replace(
+                pending_writes.append(dataclasses.replace(
                     dep_task,
                     blocked_by=dep_task.blocked_by + [task.id],
                     updated_at=self._now(),
                 ))
+
+        for dep_task in pending_writes:
+            self._write(dep_task)
 
         return dataclasses.replace(updated, blocked_by=new_blocked_by, blocks=new_blocks)
 

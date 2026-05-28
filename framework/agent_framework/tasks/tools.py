@@ -20,7 +20,7 @@ def create_task_tools(task_manager: TaskManager) -> list[ToolSpec]:
 
     async def handle_create(args: dict, ctx: ToolUseContext) -> ToolResult:
         try:
-            task = task_manager.create(
+            task = await task_manager.create(
                 subject=args["subject"],
                 description=args.get("description", ""),
             )
@@ -46,7 +46,7 @@ def create_task_tools(task_manager: TaskManager) -> list[ToolSpec]:
             if "add_blocks" in args:
                 changes["add_blocks"] = args["add_blocks"]
 
-            task = task_manager.update(args["id"], **changes)
+            task = await task_manager.update(args["id"], **changes)
             return ToolResult(
                 content=f"任务 #{task.id} 已更新: {task.subject} → {task.status.value}"
             )

@@ -41,8 +41,11 @@ class TaskRunner:
 
     async def run(self, task_id: str, prompt: str):
         """启动后台执行，立即返回。"""
+        if task_id in self._running:
+            logger.warning("任务 %s 已在运行中，跳过重复启动", task_id)
+            return
         rt = RuntimeTask(task_id=task_id, prompt=prompt)
-        self._task_manager.update(task_id, status=TaskStatus.IN_PROGRESS)
+        await self._task_manager.update(task_id, status=TaskStatus.IN_PROGRESS)
         atask = asyncio.create_task(self._execute(rt))
         self._running[task_id] = atask
 
@@ -62,7 +65,7 @@ class TaskRunner:
                         if event.type == "done":
                             rt.status = RuntimeTaskStatus.COMPLETED
                             rt.output = event.data.get("content", "")
-                            self._task_manager.update(
+                            await self._task_manager.update(
                                 rt.task_id,
                                 status=TaskStatus.COMPLETED,
                                 description=f"输出: {rt.output[:500]}",
@@ -70,7 +73,7 @@ class TaskRunner:
                         elif event.type == "error":
                             rt.status = RuntimeTaskStatus.ERROR
                             rt.error = event.data.get("error", "")
-                            self._task_manager.update(
+                            await self._task_manager.update(
                                 rt.task_id,
                                 status=TaskStatus.FAILED,
                                 description=f"错误: {rt.error[:500]}",
@@ -82,7 +85,7 @@ class TaskRunner:
                 rt.status = RuntimeTaskStatus.TIMEOUT
                 rt.error = f"任务超时 ({self._timeout}s)"
                 try:
-                    self._task_manager.update(
+                    await self._task_manager.update(
                         rt.task_id,
                         status=TaskStatus.FAILED,
                         description=f"超时: {rt.error}",
@@ -93,7 +96,7 @@ class TaskRunner:
                 rt.status = RuntimeTaskStatus.ERROR
                 rt.error = str(exc)
                 try:
-                    self._task_manager.update(
+                    await self._task_manager.update(
                         rt.task_id,
                         status=TaskStatus.FAILED,
                         description=f"异常: {str(exc)[:500]}",

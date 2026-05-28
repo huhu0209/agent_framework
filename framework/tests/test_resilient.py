@@ -328,17 +328,16 @@ async def test_health_check_records_failure():
 
 
 class TestCircuitBreakerState:
-    """验证 CircuitBreaker.state 是只读的，副作用在显式方法中。"""
+    """验证 CircuitBreaker.state 包含自动转换。"""
 
-    def test_state_property_no_side_effects(self):
+    def test_state_property_triggers_transition(self):
         from agent_framework.llm.retry import CircuitBreaker, CircuitBreakerConfig, CircuitState
 
         cb = CircuitBreaker(name="test", config=CircuitBreakerConfig(recovery_timeout=0.0))
         cb._state = CircuitState.OPEN
         cb._last_failure_time = time.monotonic() - 10  # 已过 recovery_timeout
 
-        for _ in range(5):
-            assert cb.state == CircuitState.OPEN
+        assert cb.state == CircuitState.HALF_OPEN
 
     def test_allow_request_triggers_transition(self):
         from agent_framework.llm.retry import CircuitBreaker, CircuitBreakerConfig, CircuitState

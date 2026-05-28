@@ -31,7 +31,7 @@ async def test_task_create(tools, task_mgr):
 
 @pytest.mark.asyncio
 async def test_task_update_status(tools, task_mgr):
-    created = task_mgr.create(subject="工作")
+    created = await task_mgr.create(subject="工作")
     handler = tools["task_update"].handler
     result = await handler({"id": created.id, "status": "in_progress"}, ctx)
     assert result.is_error is False
@@ -40,9 +40,9 @@ async def test_task_update_status(tools, task_mgr):
 
 @pytest.mark.asyncio
 async def test_task_update_invalid_status(tools, task_mgr):
-    created = task_mgr.create(subject="已完成")
-    task_mgr.update(created.id, status="in_progress")
-    task_mgr.update(created.id, status="completed")
+    created = await task_mgr.create(subject="已完成")
+    await task_mgr.update(created.id, status="in_progress")
+    await task_mgr.update(created.id, status="completed")
     handler = tools["task_update"].handler
     result = await handler({"id": created.id, "status": "in_progress"}, ctx)
     assert result.is_error is True
@@ -50,8 +50,8 @@ async def test_task_update_invalid_status(tools, task_mgr):
 
 @pytest.mark.asyncio
 async def test_task_list(tools, task_mgr):
-    task_mgr.create(subject="任务A")
-    task_mgr.create(subject="任务B")
+    await task_mgr.create(subject="任务A")
+    await task_mgr.create(subject="任务B")
     handler = tools["task_list"].handler
     result = await handler({}, ctx)
     assert result.is_error is False
@@ -61,7 +61,7 @@ async def test_task_list(tools, task_mgr):
 
 @pytest.mark.asyncio
 async def test_task_get(tools, task_mgr):
-    created = task_mgr.create(subject="查找我", description="详细描述")
+    created = await task_mgr.create(subject="查找我", description="详细描述")
     handler = tools["task_get"].handler
     result = await handler({"id": created.id}, ctx)
     assert result.is_error is False
@@ -81,7 +81,7 @@ async def test_task_get_missing(tools):
 async def test_task_create_over_limit(tools, task_mgr):
     from agent_framework.tasks.manager import MAX_ACTIVE_TASKS
     for i in range(MAX_ACTIVE_TASKS):
-        task_mgr.create(subject=f"t-{i}")
+        await task_mgr.create(subject=f"t-{i}")
     handler = tools["task_create"].handler
     result = await handler({"subject": "overflow"}, ctx)
     assert result.is_error is True

@@ -202,8 +202,8 @@ class CircuitBreaker:
 
     @property
     def state(self) -> CircuitState:
-        """当前状态（只读，无副作用）。"""
-        return self._state
+        """当前状态（含 OPEN→HALF_OPEN 自动转换）。"""
+        return self._check_and_transition()
 
     def allow_request(self) -> bool:
         """是否允许发起请求。"""

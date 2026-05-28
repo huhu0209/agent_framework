@@ -66,7 +66,7 @@ def runner(task_mgr):
 
 @pytest.mark.asyncio
 async def test_run_completes_and_notifies(runner, task_mgr):
-    task = task_mgr.create(subject="后台任务")
+    task = await task_mgr.create(subject="后台任务")
 
     await runner.run(task.id, prompt="做点什么")
     await asyncio.sleep(0.3)
@@ -88,7 +88,7 @@ async def test_drain_empty_when_no_notifications(runner, task_mgr):
 
 @pytest.mark.asyncio
 async def test_runner_updates_task_to_in_progress(runner, task_mgr):
-    task = task_mgr.create(subject="立即检查")
+    task = await task_mgr.create(subject="立即检查")
     await runner.run(task.id, prompt="开始")
 
     found = task_mgr.get(task.id)
@@ -124,7 +124,7 @@ class SlowAdapter:
 @pytest.mark.asyncio
 async def test_run_timeout_sets_status(tmp_path):
     mgr = TaskManager(tmp_path / "tasks")
-    task = mgr.create(subject="超时任务")
+    task = await mgr.create(subject="超时任务")
     adapter = SlowAdapter()
     registry = ToolRegistry()
     router = ToolRouter(registry)
@@ -145,3 +145,14 @@ async def test_run_timeout_sets_status(tmp_path):
 
     updated = mgr.get(task.id)
     assert updated.status == TaskStatus.FAILED
+
+
+@pytest.mark.asyncio
+async def test_run_idempotent_same_task_id(runner, task_mgr):
+    task = await task_mgr.create(subject="幂等测试")
+    await runner.run(task.id, prompt="第一次")
+    await runner.run(task.id, prompt="第二次")  # 应被跳过
+
+    await asyncio.sleep(0.3)
+    notifications = await runner.drain_notifications()
+    assert len(notifications) == 1
