@@ -196,7 +196,7 @@ class TaskManager:
 
         new_blocked_by = list(updated.blocked_by)
         new_blocks = list(updated.blocks)
-        pending_writes: list[tuple[Task]] = []
+        pending_writes: list[Task] = []
 
         for dep_id in changes.get("add_blocked_by", []):
             if dep_id not in new_blocked_by:
@@ -226,14 +226,20 @@ class TaskManager:
         return dataclasses.replace(updated, blocked_by=new_blocked_by, blocks=new_blocks)
 
     def _clear_dependency(self, completed_id: str):
+        pending_clears: list[Task] = []
         for task in self._load_all():
             if completed_id in task.blocked_by:
                 new_blocked = [x for x in task.blocked_by if x != completed_id]
-                self._write(dataclasses.replace(
+                pending_clears.append(dataclasses.replace(
                     task,
                     blocked_by=new_blocked,
                     updated_at=self._now(),
                 ))
+        for dep_task in pending_clears:
+            try:
+                self._write(dep_task)
+            except Exception as e:
+                logger.warning("无法清理任务 %s 的依赖关系: %s", dep_task.id, e)
 
 
 class TaskLimitError(Exception): ...
