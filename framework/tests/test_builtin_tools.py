@@ -67,6 +67,53 @@ class TestWriteFile:
         assert (tmp_path / "sub" / "dir" / "file.txt").read_text() == "nested"
 
 
+class TestPathSandbox:
+    """路径沙箱测试 — 防止路径遍历和绝对路径攻击。"""
+
+    @pytest.mark.asyncio
+    async def test_read_file_rejects_traversal(self, registry, ctx):
+        spec = registry.get("read_file")
+        result = await spec.handler({"path": "../../../etc/passwd"}, ctx)
+        assert result.is_error is True
+        assert "拒绝" in result.content
+
+    @pytest.mark.asyncio
+    async def test_read_file_rejects_absolute_path(self, registry, ctx):
+        spec = registry.get("read_file")
+        result = await spec.handler({"path": "/etc/shadow"}, ctx)
+        assert result.is_error is True
+        assert "拒绝" in result.content
+
+    @pytest.mark.asyncio
+    async def test_write_file_rejects_traversal(self, registry, ctx):
+        spec = registry.get("write_file")
+        result = await spec.handler(
+            {"path": "../../tmp/evil.txt", "content": "hack"}, ctx,
+        )
+        assert result.is_error is True
+        assert "拒绝" in result.content
+
+    @pytest.mark.asyncio
+    async def test_write_file_rejects_absolute_path(self, registry, ctx):
+        spec = registry.get("write_file")
+        result = await spec.handler(
+            {"path": "/tmp/evil.txt", "content": "hack"}, ctx,
+        )
+        assert result.is_error is True
+        assert "拒绝" in result.content
+
+    @pytest.mark.asyncio
+    async def test_error_no_path_leak(self, registry, ctx):
+        spec = registry.get("read_file")
+        result = await spec.handler({"path": "../../../etc/passwd"}, ctx)
+        assert result.is_error is True
+        # 错误消息不得泄露实际路径信息
+        assert "etc" not in result.content
+        assert "passwd" not in result.content
+        # 也不应包含解析后的绝对路径
+        assert "/" not in result.content or "拒绝" in result.content
+
+
 class TestWebSearch:
     @pytest.mark.asyncio
     async def test_mock_search(self, registry, ctx):
