@@ -6,7 +6,7 @@ import asyncio
 import logging
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from agent_framework.llm.types import ToolParameterSchema
 from agent_framework.tools.mcp.client import McpClient, McpToolError
@@ -15,6 +15,16 @@ from agent_framework.tools.registry import ToolRegistry
 from agent_framework.tools.types import ToolResult, ToolSpec
 
 logger = logging.getLogger(__name__)
+
+_BLOCKED_ENV_PATTERNS: tuple[str, ...] = (
+    "api_key",
+    "token",
+    "secret",
+    "password",
+    "credential",
+    "private_key",
+    "access_key",
+)
 
 
 class McpServerConfig(BaseModel):
@@ -29,6 +39,17 @@ class McpServerConfig(BaseModel):
 
     url: str = ""
     headers: dict[str, str] = {}
+
+    @field_validator("env")
+    @classmethod
+    def _reject_sensitive_env_keys(cls, v: dict[str, str]) -> dict[str, str]:
+        for key in v:
+            lowered = key.lower()
+            if any(pattern in lowered for pattern in _BLOCKED_ENV_PATTERNS):
+                raise ValueError(
+                    f"MCP 配置不允许覆盖敏感环境变量: '{key}'"
+                )
+        return v
 
 
 class McpManager:
