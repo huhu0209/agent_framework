@@ -180,3 +180,35 @@ class TestImmutability:
         assert result[0] is not msg2
         assert msg1.content == original_content_1
         assert msg2.content == original_content_2
+
+    def test_system_message_not_shared_reference(self):
+        """SystemMessage 在 normalize_messages 后与输入无共享引用。"""
+        sys_msg = SystemMessage(content="system prompt")
+        user_msg = UserMessage(content=[TextBlock(text="hello")])
+
+        result = normalize_messages([sys_msg, user_msg])
+
+        assert len(result) == 2
+        assert result[0] is not sys_msg
+        # 修改原始消息不应影响 result
+        original_content = sys_msg.content
+        sys_msg.content = "modified"
+        assert result[0].content == original_content
+
+    def test_tool_message_not_shared_reference(self):
+        """ToolMessage 在 normalize_messages 后与输入无共享引用。"""
+        user_msg = UserMessage(content=[TextBlock(text="hello")])
+        assistant_msg = AssistantMessage(
+            content=[ToolUseBlock(id="t1", name="read", input={"p": "f"})]
+        )
+        tool_msg = ToolMessage(tool_call_id="t1", content="file content")
+
+        result = normalize_messages([user_msg, assistant_msg, tool_msg])
+
+        assert len(result) == 3
+        result_tool = next(m for m in result if isinstance(m, ToolMessage))
+        assert result_tool is not tool_msg
+        # 修改原始消息不应影响 result
+        original_content = tool_msg.content
+        tool_msg.content = "modified"
+        assert result_tool.content == original_content
