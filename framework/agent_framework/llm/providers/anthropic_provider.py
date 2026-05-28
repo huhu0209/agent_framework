@@ -22,6 +22,7 @@ import os
 from collections.abc import AsyncIterator
 
 import httpx
+from pydantic import SecretStr
 
 from ..base import (
     ILLMAdapter,
@@ -256,19 +257,20 @@ class AnthropicProvider(ILLMAdapter):
         default_model: str = ANTHROPIC_DEFAULT_MODEL,
         timeout: float = 120.0,
     ) -> None:
-        self._api_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
-        if not self._api_key:
+        raw_key = api_key or os.environ.get("ANTHROPIC_API_KEY", "")
+        if not raw_key:
             raise ValueError(
                 "Anthropic API key required. "
                 "Set ANTHROPIC_API_KEY env var or pass api_key parameter."
             )
 
+        self._api_key = SecretStr(raw_key)
         self._base_url = base_url.rstrip("/")
         self._default_model = default_model
         self._client = httpx.AsyncClient(
             base_url=self._base_url,
             headers={
-                "x-api-key": self._api_key,
+                "x-api-key": self._api_key.get_secret_value(),
                 "anthropic-version": "2023-06-01",
                 "Content-Type": "application/json",
             },

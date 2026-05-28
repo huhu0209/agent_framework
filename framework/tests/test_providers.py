@@ -191,7 +191,7 @@ def _make_provider(cls, api_key: str = "test-key"):
     """创建 provider 实例，绕过 httpx.AsyncClient 真实初始化。"""
     with patch.object(cls, "__init__", lambda self, **kw: None):
         provider = object.__new__(cls)
-    provider._api_key = api_key
+    provider._api_key = SecretStr(api_key)
     provider._base_url = "https://mock.test"
     provider._default_model = "mock-model"
     provider._client = AsyncMock()
