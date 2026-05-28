@@ -3,6 +3,8 @@
 import pytest
 from unittest.mock import AsyncMock
 
+from pathlib import Path
+
 from conftest import MockAdapter
 
 from agent_framework.agents.agent_loop import AgentLoop, LoopEvent
@@ -669,3 +671,25 @@ async def test_team_manager_drains_notifications():
         if hasattr(block, 'text')
     )
     assert found, "Team notification for alice should appear in messages"
+
+
+# --- Path import 修复验证 ---
+
+
+def test_skill_dirs_accepted_without_name_error():
+    """传入 skill_dirs=[Path("/tmp")] 不触发 NameError，且 _skill_dirs 相关属性正确。"""
+    from agent_framework.tools.registry import ToolRegistry
+
+    adapter = _make_mock_adapter()
+    router = ToolRouter(registry=ToolRegistry())
+    ctx = ToolUseContext()
+
+    loop = AgentLoop(
+        adapter=adapter,
+        model="test",
+        router=router,
+        ctx=ctx,
+        skill_dirs=[Path("/tmp")],
+    )
+
+    assert loop._skill_registry is not None
