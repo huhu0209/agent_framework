@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+from pydantic import SecretStr
 
 from agent_framework.llm.base import (
     InvalidRequestError,
@@ -190,11 +191,44 @@ def _make_provider(cls, api_key: str = "test-key"):
     """创建 provider 实例，绕过 httpx.AsyncClient 真实初始化。"""
     with patch.object(cls, "__init__", lambda self, **kw: None):
         provider = object.__new__(cls)
-    provider._api_key = api_key
+    provider._api_key = SecretStr(api_key)
     provider._base_url = "https://mock.test"
     provider._default_model = "mock-model"
     provider._client = AsyncMock()
     return provider
+
+
+# ============================================================
+# 0. SecretStr API key tests
+# ============================================================
+
+
+class TestApiKeyIsSecretStr:
+    """API key 必须以 SecretStr 存储，防止 repr/logging 泄露。"""
+
+    @pytest.mark.parametrize(
+        "provider_cls",
+        [OpenAIProvider, AnthropicProvider, DeepSeekProvider],
+    )
+    def test_api_key_is_secret_str(self, provider_cls: type) -> None:
+        provider = _make_provider(provider_cls)
+        assert isinstance(provider._api_key, SecretStr)
+
+    @pytest.mark.parametrize(
+        "provider_cls",
+        [OpenAIProvider, AnthropicProvider, DeepSeekProvider],
+    )
+    def test_api_key_repr_masks(self, provider_cls: type) -> None:
+        provider = _make_provider(provider_cls, api_key="sk-super-secret-key-12345")
+        assert str(provider._api_key) == "**********"
+
+    @pytest.mark.parametrize(
+        "provider_cls",
+        [OpenAIProvider, AnthropicProvider, DeepSeekProvider],
+    )
+    def test_api_key_get_secret_value_returns_actual(self, provider_cls: type) -> None:
+        provider = _make_provider(provider_cls, api_key="sk-super-secret-key-12345")
+        assert provider._api_key.get_secret_value() == "sk-super-secret-key-12345"
 
 
 # ============================================================

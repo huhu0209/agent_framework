@@ -22,6 +22,7 @@ import os
 from collections.abc import AsyncIterator
 
 import httpx
+from pydantic import SecretStr
 
 from ..base import (
     ILLMAdapter,
@@ -146,19 +147,20 @@ class DeepSeekProvider(ILLMAdapter):
         default_model: str = DEEPSEEK_DEFAULT_MODEL,
         timeout: float = 120.0,
     ) -> None:
-        self._api_key = api_key or os.environ.get("DEEPSEEK_API_KEY", "")
-        if not self._api_key:
+        raw_key = api_key or os.environ.get("DEEPSEEK_API_KEY", "")
+        if not raw_key:
             raise ValueError(
                 "DeepSeek API key required. "
                 "Set DEEPSEEK_API_KEY env var or pass api_key parameter."
             )
 
+        self._api_key = SecretStr(raw_key)
         self._base_url = base_url.rstrip("/")  # 确保没有尾随斜杠
         self._default_model = default_model
         self._client = httpx.AsyncClient(  # 初始化异步客户端
             base_url=self._base_url,
             headers={
-                "Authorization": f"Bearer {self._api_key}",
+                "Authorization": f"Bearer {self._api_key.get_secret_value()}",
                 "Content-Type": "application/json",
             },
             timeout=httpx.Timeout(
