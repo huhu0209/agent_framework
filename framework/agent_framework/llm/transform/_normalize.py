@@ -30,14 +30,14 @@ def normalize_messages(messages: list[Message]) -> list[Message]:
             if isinstance(msg, (UserMessage, AssistantMessage)):
                 result.append(msg.model_copy(update={"content": list(msg.content)}))
             else:
-                result.append(msg)
+                result.append(msg.model_copy())
             continue
 
         last = result[-1]
 
         # SystemMessage / ToolMessage 不合并
         if isinstance(msg, (SystemMessage, ToolMessage)):
-            result.append(msg)
+            result.append(msg.model_copy())
             continue
 
         # 同角色合并（UserMessage + UserMessage / AssistantMessage + AssistantMessage）
@@ -49,7 +49,7 @@ def normalize_messages(messages: list[Message]) -> list[Message]:
         if isinstance(msg, (UserMessage, AssistantMessage)):
             result.append(msg.model_copy(update={"content": list(msg.content)}))
         else:
-            result.append(msg)
+            result.append(msg.model_copy())
 
     result = _pair_tool_results(result)
     return result
