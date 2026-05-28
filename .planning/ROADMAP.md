@@ -38,11 +38,11 @@ Plans:
 
 **依赖：** Phase 1
 
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 03-01-PLAN.md — 产出 ARCH-REVIEW.md（12+ 架构发现，HIGH/MEDIUM/LOW 分级）
-- [ ] 03-02-PLAN.md — 3 个空文件添加 scaffold docstring
+- [x] 03-01-PLAN.md — 产出 ARCH-REVIEW.md（12+ 架构发现，HIGH/MEDIUM/LOW 分级）
+- [x] 03-02-PLAN.md — 3 个空文件添加 scaffold docstring
 
 **验证：** ARCH-REVIEW.md 已生成，包含具体改进建议和优先级。
 
