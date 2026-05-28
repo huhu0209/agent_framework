@@ -61,3 +61,10 @@ None - plan executed exactly as written.
 |--------|------|---------|
 | 62f2616 | test | Add failing immutability tests for SystemMessage/ToolMessage |
 | 41f1c8f | fix | Add model_copy() to SystemMessage/ToolMessage in normalize_messages |
+| 9d6b0e5 | docs | Complete normalize_messages immutability fix plan SUMMARY |
+
+## Self-Check: PASSED
+
+- All source files exist: _normalize.py, test_normalize_messages.py
+- All commits found: 62f2616 (RED), 41f1c8f (GREEN), 9d6b0e5 (DOCS)
+- No untracked files remaining
