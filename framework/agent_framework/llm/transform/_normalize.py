@@ -42,7 +42,8 @@ def normalize_messages(messages: list[Message]) -> list[Message]:
 
         # 同角色合并（UserMessage + UserMessage / AssistantMessage + AssistantMessage）
         if type(msg) is type(last) and isinstance(msg, (UserMessage, AssistantMessage)):
-            last.content = [*last.content, *msg.content]
+            merged = last.model_copy(update={"content": [*last.content, *msg.content]})
+            result[-1] = merged
             continue
 
         if isinstance(msg, (UserMessage, AssistantMessage)):
