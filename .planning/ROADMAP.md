@@ -38,13 +38,11 @@ Plans:
 
 **依赖：** Phase 1
 
-**任务：**
-1. 审查 AgentLoop 参数膨胀问题
-2. 审查 ToolRouter.dispatch 职责划分
-3. 审查 TaskManager._apply_changes 复杂度
-4. 审查 ToolUseContext.extra 类型安全
-5. 清理空文件（base.py）或明确标记为 scaffold
-6. 产出 ARCH-REVIEW.md
+**Plans:** 2 plans
+
+Plans:
+- [ ] 03-01-PLAN.md — 产出 ARCH-REVIEW.md（12+ 架构发现，HIGH/MEDIUM/LOW 分级）
+- [ ] 03-02-PLAN.md — 3 个空文件添加 scaffold docstring
 
 **验证：** ARCH-REVIEW.md 已生成，包含具体改进建议和优先级。
 
