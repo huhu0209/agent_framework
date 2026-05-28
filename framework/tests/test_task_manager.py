@@ -155,3 +155,73 @@ async def test_update_rejects_unknown_fields(mgr):
     task = await mgr.create(subject="test")
     with pytest.raises(TypeError, match="未知的更新字段"):
         await mgr.update(task.id, nonexistent_field="oops")
+
+
+# --- Bug #2: pending_writes type annotation ---
+
+
+async def test_apply_changes_pending_writes_type(mgr):
+    """Verify pending_writes holds Task objects (not tuple[Task]) by exercising
+    add_blocked_by / add_blocks dependency writing end-to-end."""
+    t1 = await mgr.create(subject="A")
+    t2 = await mgr.create(subject="B")
+    t3 = await mgr.create(subject="C")
+
+    # t2 blocked by t1 → t1.blocks gets t2.id appended
+    await mgr.update(t2.id, add_blocked_by=[t1.id])
+    t1_loaded = mgr.get(t1.id)
+    assert t2.id in t1_loaded.blocks
+
+    # t3 blocks t2 → t2.blocked_by gets t3.id appended
+    await mgr.update(t3.id, add_blocks=[t2.id])
+    t2_loaded = mgr.get(t2.id)
+    assert t3.id in t2_loaded.blocked_by
+
+
+# --- Bug #5: _clear_dependency atomicity ---
+
+
+async def test_clear_dependency_batch_writes_all(mgr):
+    """Completing t1 should clear t1 from blocked_by of BOTH t2 and t3."""
+    t1 = await mgr.create(subject="A")
+    t2 = await mgr.create(subject="B")
+    t3 = await mgr.create(subject="C")
+    await mgr.update(t2.id, add_blocked_by=[t1.id])
+    await mgr.update(t3.id, add_blocked_by=[t1.id])
+
+    await mgr.update(t1.id, status=TaskStatus.IN_PROGRESS)
+    await mgr.update(t1.id, status=TaskStatus.COMPLETED)
+
+    t2_loaded = mgr.get(t2.id)
+    t3_loaded = mgr.get(t3.id)
+    assert t1.id not in t2_loaded.blocked_by
+    assert t1.id not in t3_loaded.blocked_by
+
+
+async def test_clear_dependency_partial_failure_continues(mgr):
+    """If the second _write in _clear_dependency fails, the first write
+    should still succeed and no exception should propagate to the caller."""
+    import unittest.mock
+
+    t1 = await mgr.create(subject="A")
+    t2 = await mgr.create(subject="B")
+    t3 = await mgr.create(subject="C")
+    await mgr.update(t2.id, add_blocked_by=[t1.id])
+    await mgr.update(t3.id, add_blocked_by=[t1.id])
+
+    original_write = mgr._write
+
+    def flaky_write(task):
+        if task.id == t3.id:
+            raise OSError("disk full")
+        original_write(task)
+
+    with unittest.mock.patch.object(mgr, "_write", side_effect=flaky_write):
+        await mgr.update(t1.id, status=TaskStatus.IN_PROGRESS)
+        await mgr.update(t1.id, status=TaskStatus.COMPLETED)
+
+    # t2's blocked_by should be cleared; t3's should NOT (write failed)
+    t2_loaded = mgr.get(t2.id)
+    t3_loaded = mgr.get(t3.id)
+    assert t1.id not in t2_loaded.blocked_by
+    assert t1.id in t3_loaded.blocked_by
