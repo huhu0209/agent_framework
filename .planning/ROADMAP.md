@@ -6,7 +6,7 @@
 
 **依赖：** 无
 
-**Plans:** 2/2 plans complete
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 01-01-PLAN.md — 修复 3 个独立单文件 Bug（Path import / deprecated API / normalize 变异）
