@@ -6,11 +6,11 @@
 
 **依赖：** 无
 
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 01-01-PLAN.md — 修复 3 个独立单文件 Bug（Path import / deprecated API / normalize 变异）
-- [ ] 01-02-PLAN.md — 修复 TaskManager 类型注解 + 非原子性依赖清理
+- [x] 01-01-PLAN.md — 修复 3 个独立单文件 Bug（Path import / deprecated API / normalize 变异）
+- [x] 01-02-PLAN.md — 修复 TaskManager 类型注解 + 非原子性依赖清理
 
 **验证：** 全部 630 测试通过，无 `NameError`、类型错误或数据不一致。
 
