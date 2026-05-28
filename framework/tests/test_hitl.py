@@ -94,3 +94,29 @@ class TestHITLManager:
             assert future.cancelled()
 
         asyncio.run(_test())
+
+    def test_create_pending_uses_running_loop(self):
+        """create_pending 在 async 上下文中使用 get_running_loop，返回可 resolve 的 Future。"""
+        from unittest.mock import patch
+
+        async def _test():
+            manager = HITLManager()
+            req = PermissionRequest(
+                request_id="req-rl",
+                tool_name="write_file",
+                tool_input={"path": "test.txt"},
+                reason="test",
+                risk_level=RiskLevel.LOW,
+                options=[],
+            )
+
+            with patch("agent_framework.safety.hitl.asyncio.get_event_loop") as mock_deprecated:
+                future = manager.create_pending(req)
+                mock_deprecated.assert_not_called()
+
+            assert not future.done()
+            manager.resolve("req-rl", PermissionResponse(request_id="req-rl", action="approve"))
+            assert future.done()
+            assert future.result().action == "approve"
+
+        asyncio.run(_test())

@@ -44,7 +44,7 @@ class HITLManager:
 
     def create_pending(self, request: PermissionRequest) -> asyncio.Future[PermissionResponse]:
         """创建一个待处理的权限请求，返回 Future。"""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         future: asyncio.Future[PermissionResponse] = loop.create_future()
         self._pending[request.request_id] = future
         return future

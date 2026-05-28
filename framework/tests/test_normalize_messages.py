@@ -136,3 +136,47 @@ class TestImmutability:
 
         assert id(msg1.content) == original_id_1
         assert msg1.content == original_content_1
+
+    def test_merged_message_is_new_object(self):
+        """合并后的消息是全新对象（model_copy），非原地变异。"""
+        original_content_1 = [TextBlock(text="alpha")]
+        original_content_2 = [TextBlock(text="beta")]
+
+        msg1 = UserMessage(content=list(original_content_1))
+        msg2 = UserMessage(content=list(original_content_2))
+
+        # 捕获 result 中第一个对象合并前的 content id
+        # normalize_messages 先把 msg1 做 model_copy 放入 result，然后合并 msg2
+        # 如果用原地变异，result[0] 对象不变但 content 被替换
+        # 如果用 model_copy，result[0] 是全新对象
+        messages = [msg1, msg2]
+        result = normalize_messages(messages)
+
+        assert len(result) == 1
+        # 合并结果是不同对象（非 msg1/msg2）
+        assert result[0] is not msg1
+        assert result[0] is not msg2
+        # 原始消息 content 未被修改
+        assert msg1.content == original_content_1
+        assert msg2.content == original_content_2
+        # 合并后 content 包含所有 blocks
+        texts = [b.text for b in result[0].content if isinstance(b, TextBlock)]
+        assert "alpha" in texts
+        assert "beta" in texts
+
+    def test_merged_assistant_not_mutated(self):
+        """合并 AssistantMessage 时原始消息 content 不变。"""
+        original_content_1 = [TextBlock(text="reply-a")]
+        original_content_2 = [TextBlock(text="reply-b")]
+
+        msg1 = AssistantMessage(content=list(original_content_1))
+        msg2 = AssistantMessage(content=list(original_content_2))
+
+        messages = [msg1, msg2]
+        result = normalize_messages(messages)
+
+        assert len(result) == 1
+        assert result[0] is not msg1
+        assert result[0] is not msg2
+        assert msg1.content == original_content_1
+        assert msg2.content == original_content_2
