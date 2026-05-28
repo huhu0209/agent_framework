@@ -22,13 +22,11 @@ Plans:
 
 **依赖：** Phase 1（Bug 修复完成后进行安全审查）
 
-**任务：**
-1. 审查文件工具路径沙箱（CRITICAL）
-2. 审查 MCP 环境变量注入（HIGH）
-3. 审查 API Key 明文存储（MEDIUM）
-4. 审查 Hook 命令执行（MEDIUM）
-5. 审查 Permission ASK 未接入 HITL（MEDIUM）
-6. 产出 SECURITY-REVIEW.md
+**Plans:** 2 plans
+
+Plans:
+- [ ] 02-01-PLAN.md — 修复路径沙箱（CRITICAL）+ MCP 环境注入（HIGH）
+- [ ] 02-02-PLAN.md — SecretStr 迁移（MEDIUM）+ 产出 SECURITY-REVIEW.md
 
 **验证：** 所有 CRITICAL 安全问题已修复，SECURITY-REVIEW.md 已生成。
 
