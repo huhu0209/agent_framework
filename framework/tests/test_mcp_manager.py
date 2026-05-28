@@ -2,6 +2,8 @@
 
 import sys
 import pytest
+from pydantic import ValidationError
+
 from agent_framework.tools.mcp.config import McpManager, McpServerConfig
 from agent_framework.tools.registry import ToolRegistry
 
@@ -147,3 +149,45 @@ async def test_manager_shutdown_closes_all(server_script):
 
     await manager.shutdown()
     assert len(manager._clients) == 0
+
+
+class TestMcpEnvBlacklist:
+    """McpServerConfig 敏感环境变量黑名单测试。"""
+
+    def test_rejects_api_key(self):
+        with pytest.raises(ValidationError, match="敏感"):
+            McpServerConfig(name="test", command="echo", env={"OPENAI_API_KEY": "sk-xxx"})
+
+    def test_rejects_token(self):
+        with pytest.raises(ValidationError, match="敏感"):
+            McpServerConfig(name="test", command="echo", env={"GITHUB_TOKEN": "ghp_xxx"})
+
+    def test_rejects_secret_case_insensitive(self):
+        with pytest.raises(ValidationError, match="敏感"):
+            McpServerConfig(name="test", command="echo", env={"My_Secret_Key": "xxx"})
+
+    def test_rejects_password(self):
+        with pytest.raises(ValidationError, match="敏感"):
+            McpServerConfig(name="test", command="echo", env={"DATABASE_PASSWORD": "xxx"})
+
+    def test_rejects_credential(self):
+        with pytest.raises(ValidationError, match="敏感"):
+            McpServerConfig(name="test", command="echo", env={"MY_CREDENTIAL_FILE": "xxx"})
+
+    def test_rejects_access_key(self):
+        with pytest.raises(ValidationError, match="敏感"):
+            McpServerConfig(name="test", command="echo", env={"AWS_ACCESS_KEY_ID": "xxx"})
+
+    def test_rejects_private_key(self):
+        with pytest.raises(ValidationError, match="敏感"):
+            McpServerConfig(name="test", command="echo", env={"SSH_PRIVATE_KEY": "xxx"})
+
+    def test_allows_normal_env(self):
+        cfg = McpServerConfig(name="test", command="echo", env={"PATH": "/usr/bin", "HOME": "/root"})
+        assert cfg.env["PATH"] == "/usr/bin"
+        assert cfg.env["HOME"] == "/root"
+
+    def test_allows_debug_env(self):
+        cfg = McpServerConfig(name="test", command="echo", env={"DEBUG": "true", "VERBOSE": "1"})
+        assert cfg.env["DEBUG"] == "true"
+        assert cfg.env["VERBOSE"] == "1"
