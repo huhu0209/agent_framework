@@ -22,11 +22,11 @@ Plans:
 
 **依赖：** Phase 1（Bug 修复完成后进行安全审查）
 
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 02-01-PLAN.md — 修复路径沙箱（CRITICAL）+ MCP 环境注入（HIGH）
-- [ ] 02-02-PLAN.md — SecretStr 迁移（MEDIUM）+ 产出 SECURITY-REVIEW.md
+- [x] 02-01-PLAN.md — 修复路径沙箱（CRITICAL）+ MCP 环境注入（HIGH）
+- [x] 02-02-PLAN.md — SecretStr 迁移（MEDIUM）+ 产出 SECURITY-REVIEW.md
 
 **验证：** 所有 CRITICAL 安全问题已修复，SECURITY-REVIEW.md 已生成。
 
