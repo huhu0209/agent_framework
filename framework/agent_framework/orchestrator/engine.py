@@ -9,9 +9,7 @@ from __future__ import annotations
 
 from typing import AsyncGenerator, Literal
 
-from agent_framework.agents.agent_loop import AgentLoop
 from agent_framework.agents.base import Agent, AgentEvent
-from agent_framework.agents.plan_and_solve import PlanAndSolveAgent
 from agent_framework.llm.base import ILLMAdapter
 from agent_framework.tools.router import ToolRouter
 from agent_framework.tools.types import ToolUseContext
@@ -46,6 +44,9 @@ class OrchestratorEngine(Agent):
 
     def _create_agent(self, task: str) -> Agent | None:
         """工厂方法：根据复杂度创建 Agent 实例。超过上限返回 None。"""
+        from agent_framework.agents.agent_loop import AgentLoop
+        from agent_framework.agents.plan_and_solve import PlanAndSolveAgent
+
         if self._agent_count >= 3:
             return None
 
