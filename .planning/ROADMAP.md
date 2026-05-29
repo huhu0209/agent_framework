@@ -50,16 +50,14 @@ Plans:
 
 ## Phase 4: 性能与数据安全审查
 
-**目标：** 修复影响数据安全的性能问题，记录其他性能优化建议。
+**目标：** 修复影响数据安全的性能问题，记录其他性能优化建议，产出 PERF-REVIEW.md。
 
 **依赖：** Phase 1
 
-**任务：**
-1. 修复 MessageBus inbox 非原子读写（数据丢失风险）
-2. 修复 _read_until_header_end 逐字节读取性能
-3. 记录同步 I/O 阻塞问题及改进方案
-4. 记录 TaskManager 全量扫描问题及改进方案
-5. 产出 PERF-REVIEW.md
+**Plans:** 1 plan
+
+Plans:
+- [ ] 04-01-PLAN.md — 修复 MessageBus 原子读写 + MCP header 高效读取 + 产出 PERF-REVIEW.md
 
 **验证：** 数据安全项已修复，PERF-REVIEW.md 已生成。
 
