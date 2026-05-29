@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.0.2
-milestone_name: Agent 扩展与编排
-status: executing
-last_updated: "2026-05-29T08:41:58.609Z"
-last_activity: 2026-05-29 -- Phase 08 execution started
+milestone: v0.0.3
+milestone_name: Agent 可视化平台 MVP
+status: planning
+last_updated: "2026-05-29T12:00:00.000Z"
+last_activity: 2026-05-29 -- Milestone v0.0.3 started
 progress:
-  total_phases: 3
-  completed_phases: 2
-  total_plans: 7
-  completed_plans: 6
-  percent: 67
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # STATE.md
@@ -20,38 +20,33 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-29)
 
 **Core value:** 可靠的 Agent 编排框架，提供安全、可测试、可扩展的基础设施
-**Current focus:** Phase 08 — a2a-protocol
+**Current focus:** v0.0.3 — Agent 可视化平台 MVP
 
 ## Current Milestone
 
-**Milestone:** v0.0.2 — Agent 扩展与编排
-**Status:** Executing Phase 08
+**Milestone:** v0.0.3 — Agent 可视化平台 MVP
+**Status:** Defining requirements
 **Archive:** —
 
 ## Phase Progress
 
-| Phase | Status | Plans | Verification |
-|-------|--------|-------|-------------|
-| 6. Agent 类型扩展 | Not started | 0/3 | — |
-| 7. 编排引擎 + 配置化 + 搜索 | Not started | 0/3 | — |
-| 8. A2A 协议 | Not started | 0/3 | — |
+No phases defined yet.
 
 ## Active Context
 
 - v0.0.1 milestone 已归档，687 测试全部通过
-- Phase 6 是最高风险阶段：Agent ABC 提取不能破坏现有测试
-- Phase 6 内部构建顺序：06-01 (ABC) → 06-02 (PlanSolve) / 06-03 (Reflection) 可并行
-- Phase 7 的搜索工具 (07-03) 独立于编排引擎和配置化，可并行
-- Phase 8 A2A 协议依赖 Phase 6（Agent 接口），不依赖 Phase 7
-- 关键约束：replan 硬上限 2 次，reflection 轮次硬上限 2，Agent 链最多 3 个
+- v0.0.2 milestone 已归档，812 测试全部通过
+- v0.0.3 目标：端到端链路跑通（config → spawn → event → WebSocket → canvas render）
+- 技术选型：PixiJS v8（非 Phaser），React 拥有数据 + PixiJS 只管渲染
+- 第一期用单个 AgentLoop 验证链路，架构预留 TeamManager
+- 精灵用 placeholder 几何图形
 
 ## Current Position
 
-Phase: 08 (a2a-protocol) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 08
-Last activity: 2026-05-29 -- Phase 08 execution started
-Resume: .planning/phases/07-orchestrator-config-search/07-CONTEXT.md
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-05-29 — Milestone v0.0.3 started
 
 ## Deferred Items
 

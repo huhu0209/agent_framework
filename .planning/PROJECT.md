@@ -19,6 +19,19 @@ v0.0.2 新增：多类型 Agent（Plan-and-Solve、Reflection）、编排引擎�
 - **Search:** Tavily API (AsyncTavilyClient)
 - **A2A:** 纯 ASGI (httpx + asyncio), 无额外 Web 框架依赖
 
+## Current Milestone: v0.0.3 Agent 可视化平台 MVP
+
+**Goal:** 端到端链路跑通 — config → spawn → event → WebSocket → canvas render。一条链路、一个场景、一只猫。
+
+**Target features:**
+- EventBus 事件总线 (asyncio.Queue pub-sub)
+- WebSocket 实时推送服务
+- AgentRunner 包装层 (AgentLoop → EventBus 事件映射)
+- PixiJS v8 办公室场景 (1种动物：猫, 3个状态帧)
+- React 配置面板 (创建 agent + 启动 team)
+- 事件日志列表 + WebSocket 客户端
+- React ↔ PixiJS 桥接 (ref 单向数据流)
+
 ## Requirements
 
 ### Validated
@@ -38,15 +51,15 @@ v0.0.2 新增：多类型 Agent（Plan-and-Solve、Reflection）、编排引擎�
 
 ### Active
 
-(None — ready for next milestone)
+(None — defining requirements for v0.0.3)
 
 ### Out of Scope
 
 | Feature | Reason |
 |---------|--------|
 | LangGraph / CrewAI / AutoGen 集成 | 竞争架构，与现有 Tool System 冲突 |
-| Backend API 功能开发 | 脚手架阶段，非框架核心 |
-| Frontend 功能开发 | 脚手架阶段，非框架核心 |
+| Backend API 功能开发 | 脚手架阶段，v0.0.3 只加最小 HTTP 接口 |
+| Frontend 功能开发 | v0.0.3 仅 MVP 范围（配置面板 + 事件日志） |
 | A2A 流式模式（SSE） | Phase 8 只做同步 HTTP，流式留后续 |
 | A2A 异步模式（Webhook） | 需要外部回调基础设施 |
 | pyyaml 依赖 | flat frontmatter 足够 |
@@ -58,6 +71,10 @@ v0.0.2 新增：多类型 Agent（Plan-and-Solve、Reflection）、编排引擎�
 **Shipped v0.0.2** — Agent 扩展与编排 milestone（2026-05-29）。812 测试通过。
 框架层 ~12,500 行源码 + ~9,000 行测试。新增 125 个测试。
 9 个 plan 全部通过验证（5/5 must-haves per plan）。
+
+**Starting v0.0.3** — Agent 可视化平台 MVP（2026-05-29）。
+新增前端 Canvas 渲染层（PixiJS v8）+ 事件透传链路（EventBus + WebSocket）。
+核心价值：让 Agent 的内部状态（thinking / tool_call / idle）可视化。
 
 **Architecture Evolution (v0.0.2):**
 ```
@@ -111,7 +128,8 @@ framework/agent_framework/
 
 ## Constraints
 
-- 框架层优先，backend/frontend 暂不涉及
+- 框架层优先，v0.0.3 开始引入前端可视化
+- 第一期 MVP 只用 1 种动物（猫），验证端到端链路
 - 每个 milestone 有明确范围，不膨胀
 - 测试必须全部通过才能关闭 milestone
 - 硬上限防止无限循环：replan ≤ 2, reflection ≤ 2, agent chain ≤ 3
@@ -121,4 +139,4 @@ framework/agent_framework/
 This document evolves at phase transitions and milestone boundaries.
 
 ---
-*Last updated: 2026-05-29 after v0.0.2 milestone completion*
+*Last updated: 2026-05-29 — v0.0.3 milestone started*
