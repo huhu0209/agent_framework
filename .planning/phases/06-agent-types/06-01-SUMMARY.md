@@ -102,6 +102,10 @@ None - no external service configuration required.
 - 两种新 Agent 类型只需继承 Agent 并实现 run() 方法
 - LoopEvent 继承关系确保现有消费者代码零改动
 
+## Self-Check: PASSED
+
+All 8 files verified present. All 3 commits verified in git log (48ca06e, 8867a37, 9b9340c).
+
 ---
 *Phase: 06-agent-types*
 *Completed: 2026-05-29*
