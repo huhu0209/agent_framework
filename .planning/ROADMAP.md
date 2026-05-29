@@ -48,7 +48,7 @@
   3. AgentRunner 运行 AgentLoop 时，LoopEvent（thinking/tool_call/tool_result/done/error/max_steps）被正确映射为 VizEvent 并广播到 EventBus
   4. WebSocket 客户端连接后可实时收到 VizEvent JSON 推送；连接断开后 EventBus 订阅自动清理
   5. WebSocket 客户端可发送 start_team / stop_team 控制命令，服务端正确接收
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
 - [ ] 09-01: EventBus + VizEvent 模型 + 订阅管理
@@ -65,7 +65,7 @@ Plans:
   3. 猫精灵在 idle/thinking/tool_call 三种状态下播放对应帧动画（站立/打字/喝水）
   4. Agent 状态变化时猫精灵平滑移动到对应点位，到达后播放对应动画
   5. Agent shutdown 时猫精灵移动到门口并消失
-**Plans**: TBD
+**Plans**: 3 plans
 **UI hint**: yes
 
 Plans:
@@ -83,7 +83,7 @@ Plans:
   3. Agent 列表中每个 agent 显示名称和当前状态灯（idle/thinking/tool_call/shutdown）
   4. WebSocket 连接状态指示器正确显示连接状态（绿/黄/红），断开后自动重连
   5. 事件日志列表实时展示接收到的 VizEvent，按时间排序；Canvas 中猫精灵同步更新状态
-**Plans**: TBD
+**Plans**: 3 plans
 **UI hint**: yes
 
 Plans:
