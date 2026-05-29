@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, AsyncGenerator, TYPE_CHECKING
 
+from agent_framework.agents.base import Agent, AgentEvent
 from agent_framework.llm import (
     AssistantMessage,
     CompletionConfig,
@@ -53,19 +54,17 @@ if TYPE_CHECKING:
     from agent_framework.teams.manager import TeamManager
 
 @dataclass
-class LoopEvent:
+class LoopEvent(AgentEvent):
     """Agent Loop 每一步产生的事件。"""
-    type: str  # "step" | "tool_result" | "done" | "max_steps" | "error"
-    step: int
-    data: dict[str, Any] = field(default_factory=dict)
-    plan: PlanSnapshot | None = None  # 新增
+
+    plan: PlanSnapshot | None = None
 
 
 def _serialize_content(result: CompletionResult) -> list[dict[str, Any]]:
     return [b.model_dump() for b in result.content]
 
 
-class AgentLoop:
+class AgentLoop(Agent):
     """最小 ReAct 循环，驱动 LLM 多轮 tool calling。"""
 
     def __init__(
