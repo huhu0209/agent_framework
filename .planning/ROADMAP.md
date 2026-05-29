@@ -23,7 +23,7 @@
 **Milestone Goal:** 从单一 ReAct Agent 扩展为多类型 Agent 体系，新增编排引擎和 A2A 协议支持
 
 - [x] **Phase 6: Agent 类型扩展** — Agent ABC 抽象 + Plan-and-Solve + Reflection 三种 Agent (completed 2026-05-29)
-- [ ] **Phase 7: 编排引擎 + 配置化 + 搜索** — OrchestratorEngine + Agent 配置化 + 真实搜索
+- [x] **Phase 7: 编排引擎 + 配置化 + 搜索** — OrchestratorEngine + Agent 配置化 + 真实搜索 (completed 2026-05-29)
 - [ ] **Phase 8: A2A 协议** — AgentCard + Client/Server 同步模式 + API-key 认证
 
 ## Phase Details
@@ -55,12 +55,12 @@ Plans:
   3. Agent 配置可以通过 .md 文件声明式定义，agent_from_config() 能创建完整可运行的 Agent 实例
   4. 搜索工具调用 Tavily API 返回真实结果，并发受 Semaphore 控制，API key 通过环境变量管理
   5. agent_factory 模式允许编排引擎按需创建新 Agent 实例
-**Plans:** 3 plans
+**Plans:** 3/1 plans complete
 
 Plans:
-- [ ] 07-01: OrchestratorEngine 编排引擎（ORCH-01~05）
-- [ ] 07-02: Agent 配置化（CONF-01~04）
-- [ ] 07-03: 真实搜索工具（SRCH-01~03）
+- [x] 07-01: OrchestratorEngine 编排引擎（ORCH-01~05）
+- [x] 07-02: Agent 配置化（CONF-01~04）
+- [x] 07-03: 真实搜索工具（SRCH-01~03）
 
 ### Phase 8: A2A 协议
 **Goal**: 框架支持 A2A 协议，本地 Agent 可暴露为 HTTP 端点，远程 Agent 可作为工具调用
@@ -92,5 +92,5 @@ Phases execute in numeric order: 6 → 7 → 8
 | 4. 性能与数据安全审查 | v0.0.1 | 1/1 | Complete | 2026-05-29 |
 | 5. 测试覆盖补充 | v0.0.1 | 4/4 | Complete | 2026-05-29 |
 | 6. Agent 类型扩展 | v0.0.2 | 3/3 | Complete   | 2026-05-29 |
-| 7. 编排引擎 + 配置化 + 搜索 | v0.0.2 | 0/3 | Not started | - |
+| 7. 编排引擎 + 配置化 + 搜索 | v0.0.2 | 3/1 | Complete   | 2026-05-29 |
 | 8. A2A 协议 | v0.0.2 | 0/3 | Not started | - |
