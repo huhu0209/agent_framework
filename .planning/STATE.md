@@ -4,11 +4,11 @@ milestone: v0.0.3
 milestone_name: Agent 可视化平台 MVP
 status: planning
 last_updated: "2026-05-29T12:00:00.000Z"
-last_activity: 2026-05-29 -- Milestone v0.0.3 started
+last_activity: 2026-05-29 -- Roadmap created for v0.0.3
 progress:
-  total_phases: 0
+  total_phases: 3
   completed_phases: 0
-  total_plans: 0
+  total_plans: 9
   completed_plans: 0
   percent: 0
 ---
@@ -20,47 +20,53 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-29)
 
 **Core value:** 可靠的 Agent 编排框架，提供安全、可测试、可扩展的基础设施
-**Current focus:** v0.0.3 — Agent 可视化平台 MVP
+**Current focus:** v0.0.3 — Phase 9: Backend 事件系统
 
 ## Current Milestone
 
 **Milestone:** v0.0.3 — Agent 可视化平台 MVP
-**Status:** Defining requirements
-**Archive:** —
+**Status:** Roadmap created, ready to plan
+**Phases:** 3 (Phase 9-11)
 
 ## Phase Progress
 
-No phases defined yet.
-
-## Active Context
-
-- v0.0.1 milestone 已归档，687 测试全部通过
-- v0.0.2 milestone 已归档，812 测试全部通过
-- v0.0.3 目标：端到端链路跑通（config → spawn → event → WebSocket → canvas render）
-- 技术选型：PixiJS v8（非 Phaser），React 拥有数据 + PixiJS 只管渲染
-- 第一期用单个 AgentLoop 验证链路，架构预留 TeamManager
-- 精灵用 placeholder 几何图形
+| Phase | Plans | Status |
+|-------|-------|--------|
+| 9. Backend 事件系统 | 0/3 | Not started |
+| 10. Frontend Canvas 渲染 | 0/3 | Not started |
+| 11. Frontend React 集成 | 0/3 | Not started |
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-05-29 — Milestone v0.0.3 started
+Phase: 9 (Backend 事件系统)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-05-29 — Roadmap created
+
+Progress: [░░░░░░░░░░] 0%
+
+## Performance Metrics
+
+**Velocity:**
+- Total plans completed (v0.0.3): 0
+- v0.0.1+2 total: 24 plans completed across 8 phases
+
+**Recent Trend:** Starting new milestone
+
+## Active Context
+
+- v0.0.2 已归档，812 测试全部通过
+- Phase 9 和 Phase 10 可并行执行
+- Phase 11 依赖 Phase 9 + Phase 10 都完成
+- PixiJS v8 (非 Phaser)，React 拥有数据状态 + PixiJS 只管渲染
+- 第一期单个 AgentLoop 验证链路，架构预留 TeamManager
+- 精灵用 placeholder 几何图形（圆形+三角耳朵）
+- WebSocket 用 websockets 库，非 FastAPI WebSocket
 
 ## Deferred Items
 
-Items acknowledged and deferred at v0.0.1 milestone close on 2026-05-29:
-
 | Category | Item | Status |
 |----------|------|--------|
-| tech_debt | SEC-04 Hooks bash -c execution | documented-only (LOW) |
-| tech_debt | SEC-05 Permission ASK not connected to HITL | documented-only (LOW) |
-| tech_debt | SEC-06 MessageBus predictable file paths | documented-only (LOW) |
-| tech_debt | PERF-03 sync file I/O blocking | documented-only (LOW) |
-| tech_debt | PERF-04 TaskManager full directory scan | documented-only (LOW) |
-| tech_debt | PERF-05 Context compaction extra LLM call | documented-only (LOW) |
-| tech_debt | ARCH-01~12 improvement suggestions | documented (future refactoring) |
-| test_warning | WR-01/02 asyncio.sleep timing tests | pre-existing |
-| test_warning | WR-03 missing task cleanup teardown | pre-existing |
-| code_fragility | CR-01 _PATH_REJECTED shared mutable singleton | design note |
+| tech_debt | SEC-04~06, PERF-03~05, ARCH-01~12 | documented-only (LOW) |
+| test_warning | WR-01/02/03 asyncio timing/cleanup | pre-existing |
+| code_fragility | CR-01 shared mutable singleton | design note |

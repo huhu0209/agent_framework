@@ -79,11 +79,34 @@
 
 | REQ-ID | Phase | Plan | Status |
 |--------|-------|------|--------|
-| EVNT-01~07 | — | — | — |
-| WSRV-01~05 | — | — | — |
-| RNDR-01~07 | — | — | — |
-| CNFG-01~04 | — | — | — |
-| CONC-01~05 | — | — | — |
+| EVNT-01 | 9 | — | Pending |
+| EVNT-02 | 9 | — | Pending |
+| EVNT-03 | 9 | — | Pending |
+| EVNT-04 | 9 | — | Pending |
+| EVNT-05 | 9 | — | Pending |
+| EVNT-06 | 9 | — | Pending |
+| EVNT-07 | 9 | — | Pending |
+| WSRV-01 | 9 | — | Pending |
+| WSRV-02 | 9 | — | Pending |
+| WSRV-03 | 9 | — | Pending |
+| WSRV-04 | 9 | — | Pending |
+| WSRV-05 | 9 | — | Pending |
+| RNDR-01 | 10 | — | Pending |
+| RNDR-02 | 10 | — | Pending |
+| RNDR-03 | 10 | — | Pending |
+| RNDR-04 | 10 | — | Pending |
+| RNDR-05 | 10 | — | Pending |
+| RNDR-06 | 10 | — | Pending |
+| RNDR-07 | 10 | — | Pending |
+| CNFG-01 | 11 | — | Pending |
+| CNFG-02 | 11 | — | Pending |
+| CNFG-03 | 11 | — | Pending |
+| CNFG-04 | 11 | — | Pending |
+| CONC-01 | 11 | — | Pending |
+| CONC-02 | 11 | — | Pending |
+| CONC-03 | 11 | — | Pending |
+| CONC-04 | 11 | — | Pending |
+| CONC-05 | 11 | — | Pending |
 
 ---
-*Last updated: 2026-05-29 — v0.0.3 requirements defined*
+*Last updated: 2026-05-29 — v0.0.3 roadmap created, traceability updated*
