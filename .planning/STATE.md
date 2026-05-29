@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.0.2
 milestone_name: Agent 扩展与编排
-status: planning
-last_updated: "2026-05-29T12:00:00.000Z"
-last_activity: 2026-05-29 — Milestone v0.0.2 started
+status: roadmap_created
+last_updated: "2026-05-29T14:00:00.000Z"
+last_activity: 2026-05-29 — Roadmap created for v0.0.2 (3 phases, 32 requirements)
 progress:
   total_phases: 3
   completed_phases: 0
-  total_plans: 0
+  total_plans: 9
   completed_plans: 0
   percent: 0
 ---
@@ -20,35 +20,37 @@ progress:
 See: .planning/PROJECT.md (updated 2026-05-29)
 
 **Core value:** 可靠的 Agent 编排框架，提供安全、可测试、可扩展的基础设施
-**Current focus:** v0.0.2 Agent 扩展与编排
+**Current focus:** Phase 6 — Agent 类型扩展
 
 ## Current Milestone
 
 **Milestone:** v0.0.2 — Agent 扩展与编排
-**Status:** Planning
+**Status:** Roadmap created, ready for planning
 **Archive:** —
 
 ## Phase Progress
 
 | Phase | Status | Plans | Verification |
 |-------|--------|-------|-------------|
-| 6 | pending | 0/0 | — |
-| 7 | pending | 0/0 | — |
-| 8 | pending | 0/0 | — |
+| 6. Agent 类型扩展 | Not started | 0/3 | — |
+| 7. 编排引擎 + 配置化 + 搜索 | Not started | 0/3 | — |
+| 8. A2A 协议 | Not started | 0/3 | — |
 
 ## Active Context
 
-- v0.0.1 milestone 已归档
-- 687 测试全部通过
-- 14 项 Tech Debt 已记录 (all LOW)
-- v0.0.2 开始：Agent 类型扩展 + 编排引擎 + A2A 协议
+- v0.0.1 milestone 已归档，687 测试全部通过
+- Phase 6 是最高风险阶段：Agent ABC 提取不能破坏现有测试
+- Phase 6 内部构建顺序：06-01 (ABC) → 06-02 (PlanSolve) / 06-03 (Reflection) 可并行
+- Phase 7 的搜索工具 (07-03) 独立于编排引擎和配置化，可并行
+- Phase 8 A2A 协议依赖 Phase 6（Agent 接口），不依赖 Phase 7
+- 关键约束：replan 硬上限 2 次，reflection 轮次硬上限 2，Agent 链最多 3 个
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-05-29 — Milestone v0.0.2 started
+Phase: 6 (Agent 类型扩展) — Not started
+Plan: 0 of 3
+Status: Ready to plan
+Last activity: 2026-05-29 — Roadmap created
 
 ## Deferred Items
 
