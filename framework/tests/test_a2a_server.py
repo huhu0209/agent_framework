@@ -1,4 +1,4 @@
-"""Tests for A2AServer — pure ASGI app with 4 routes + background agent execution."""
+"""Tests for A2AServer — pure ASGI app with 4 routes + background agent execution + API-key auth."""
 
 from __future__ import annotations
 
@@ -37,12 +37,14 @@ class FakeAgent(Agent):
             yield AgentEvent(type="done", step=1, data={"text": f"echo: {user_message}"})
 
 
-def mock_scope(method: str, path: str) -> dict[str, Any]:
+def mock_scope(
+    method: str, path: str, *, headers: list[tuple[bytes, bytes]] | None = None,
+) -> dict[str, Any]:
     return {
         "type": "http",
         "method": method,
         "path": path,
-        "headers": [],
+        "headers": headers or [],
         "query_string": b"",
     }
 
@@ -96,8 +98,14 @@ SAMPLE_CARD: dict[str, Any] = {
 }
 
 
-def make_server(agent: Agent | None = None) -> A2AServer:
-    return A2AServer(agent=agent or FakeAgent(), agent_card_data=SAMPLE_CARD)
+def make_server(
+    agent: Agent | None = None, *, api_key: str | None = None,
+) -> A2AServer:
+    return A2AServer(
+        agent=agent or FakeAgent(),
+        agent_card_data=SAMPLE_CARD,
+        api_key=api_key,
+    )
 
 
 # ── Agent Card Route ─────────────────────────────────────────────────────────
@@ -337,3 +345,169 @@ class TestBackgroundExecution:
         # After execution completes, should be COMPLETED
         await asyncio.sleep(0.1)
         assert server._tasks[task_id].status == A2ATaskStatus.COMPLETED
+
+
+# ── API-Key Authentication ────────────────────────────────────────────────────
+
+
+class TestApiKeyAuth:
+    """Tests for A2AServer API-key authentication middleware."""
+
+    @pytest.mark.asyncio
+    async def test_auth_missing_key_returns_401(self) -> None:
+        """Request without X-API-Key header returns 401 when api_key is configured."""
+        server = make_server(api_key="secret123")
+        send = MockSend()
+        await server(
+            mock_scope("GET", "/.well-known/agent-card"),
+            mock_receive(),
+            send,
+        )
+        status, body = send.get_response()
+        assert status == 401
+        assert body["error"] == "Missing API key"
+
+    @pytest.mark.asyncio
+    async def test_auth_invalid_key_returns_403(self) -> None:
+        """Request with wrong X-API-Key header returns 403."""
+        server = make_server(api_key="secret123")
+        send = MockSend()
+        await server(
+            mock_scope(
+                "GET",
+                "/.well-known/agent-card",
+                headers=[(b"x-api-key", b"wrong-key")],
+            ),
+            mock_receive(),
+            send,
+        )
+        status, body = send.get_response()
+        assert status == 403
+        assert body["error"] == "Invalid API key"
+
+    @pytest.mark.asyncio
+    async def test_auth_valid_key_passes(self) -> None:
+        """Request with correct X-API-Key processes normally."""
+        server = make_server(api_key="secret123")
+        send = MockSend()
+        await server(
+            mock_scope(
+                "GET",
+                "/.well-known/agent-card",
+                headers=[(b"x-api-key", b"secret123")],
+            ),
+            mock_receive(),
+            send,
+        )
+        status, body = send.get_response()
+        assert status == 200
+        assert body["name"] == "test-agent"
+
+    @pytest.mark.asyncio
+    async def test_no_key_configured_all_requests_pass(self) -> None:
+        """When api_key is None, requests without X-API-Key work normally."""
+        server = make_server()  # no api_key
+        send = MockSend()
+        await server(
+            mock_scope("GET", "/.well-known/agent-card"),
+            mock_receive(),
+            send,
+        )
+        status, body = send.get_response()
+        assert status == 200
+        assert body["name"] == "test-agent"
+
+    @pytest.mark.asyncio
+    async def test_auth_valid_key_create_task(self) -> None:
+        """Create task endpoint works with valid API key."""
+        server = make_server(api_key="secret123")
+        send = MockSend()
+        body = json.dumps({"message": "hello"}).encode()
+        await server(
+            mock_scope(
+                "POST",
+                "/tasks",
+                headers=[(b"x-api-key", b"secret123")],
+            ),
+            mock_receive(body),
+            send,
+        )
+        status, resp = send.get_response()
+        assert status == 201
+        assert resp["status"] == "pending"
+
+    @pytest.mark.asyncio
+    async def test_auth_valid_key_get_task(self) -> None:
+        """Get task endpoint works with valid API key."""
+        server = make_server(api_key="secret123")
+        # Create task first (with auth)
+        send = MockSend()
+        body = json.dumps({"message": "hello"}).encode()
+        await server(
+            mock_scope(
+                "POST",
+                "/tasks",
+                headers=[(b"x-api-key", b"secret123")],
+            ),
+            mock_receive(body),
+            send,
+        )
+        _, resp = send.get_response()
+        task_id = resp["id"]
+
+        # Get task (with auth)
+        send2 = MockSend()
+        await server(
+            mock_scope(
+                "GET",
+                f"/tasks/{task_id}",
+                headers=[(b"x-api-key", b"secret123")],
+            ),
+            mock_receive(),
+            send2,
+        )
+        status, resp2 = send2.get_response()
+        assert status == 200
+        assert resp2["id"] == task_id
+
+    @pytest.mark.asyncio
+    async def test_auth_valid_key_cancel_task(self) -> None:
+        """Cancel task endpoint works with valid API key."""
+        server = make_server(api_key="secret123")
+        # Create task first (with auth)
+        send = MockSend()
+        body = json.dumps({"message": "hello"}).encode()
+        await server(
+            mock_scope(
+                "POST",
+                "/tasks",
+                headers=[(b"x-api-key", b"secret123")],
+            ),
+            mock_receive(body),
+            send,
+        )
+        _, resp = send.get_response()
+        task_id = resp["id"]
+
+        # Cancel task (with auth)
+        send2 = MockSend()
+        await server(
+            mock_scope(
+                "POST",
+                f"/tasks/{task_id}/cancel",
+                headers=[(b"x-api-key", b"secret123")],
+            ),
+            mock_receive(),
+            send2,
+        )
+        status, resp2 = send2.get_response()
+        assert status == 200
+        assert resp2["status"] == "canceled"
+
+    @pytest.mark.asyncio
+    async def test_api_key_stored_as_secretstr(self) -> None:
+        """API key is stored as SecretStr, not plain string."""
+        server = make_server(api_key="secret123")
+        assert server._api_key is not None
+        # SecretStr hides value in repr
+        assert "secret123" not in repr(server._api_key)
