@@ -310,3 +310,64 @@ class TestHandleToolCall:
         result = await spec.handler({"message": "hello"}, ctx)
         assert isinstance(result, ToolResult)
         assert result.is_error
+
+
+# ── API-Key Authentication ────────────────────────────────────────────────────
+
+
+class TestClientApiKey:
+    """Tests for A2AClient API-key authentication header."""
+
+    @pytest.mark.asyncio
+    async def test_client_sends_api_key_header(self) -> None:
+        """Client with api_key sends X-API-Key header in requests."""
+        captured_headers: dict[str, str] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured_headers.update(
+                {k.decode().lower() if isinstance(k, bytes) else k.lower(): v.decode() if isinstance(v, bytes) else v
+                 for k, v in request.headers.multi_items()},
+            )
+            return json_response(COMPLETED_TASK_DICT)
+
+        client = A2AClient(agent_card=SAMPLE_CARD, api_key="test-key")
+        client._client = httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            base_url=SAMPLE_CARD.url,
+            headers=client._build_headers(),
+        )
+        await client.get_task("task-123")
+        assert "x-api-key" in captured_headers
+        assert captured_headers["x-api-key"] == "test-key"
+
+    @pytest.mark.asyncio
+    async def test_client_no_api_key_no_header(self) -> None:
+        """Client without api_key does not send X-API-Key header."""
+        captured_headers: dict[str, str] = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured_headers.update(
+                {k.decode().lower() if isinstance(k, bytes) else k.lower(): v.decode() if isinstance(v, bytes) else v
+                 for k, v in request.headers.multi_items()},
+            )
+            return json_response(COMPLETED_TASK_DICT)
+
+        client = A2AClient(agent_card=SAMPLE_CARD)
+        client._client = httpx.AsyncClient(
+            transport=httpx.MockTransport(handler),
+            base_url=SAMPLE_CARD.url,
+            headers=client._build_headers(),
+        )
+        await client.get_task("task-123")
+        assert "x-api-key" not in captured_headers
+
+    def test_api_key_stored_as_secretstr(self) -> None:
+        """API key is stored as SecretStr, not plain string."""
+        client = A2AClient(agent_card=SAMPLE_CARD, api_key="my-secret")
+        assert client._api_key is not None
+        assert "my-secret" not in repr(client._api_key)
+
+    def test_no_api_key_stored_as_none(self) -> None:
+        """No API key means _api_key is None."""
+        client = A2AClient(agent_card=SAMPLE_CARD)
+        assert client._api_key is None

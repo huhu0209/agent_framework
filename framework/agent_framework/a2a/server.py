@@ -15,6 +15,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 
+from pydantic import SecretStr
+
 from agent_framework.a2a.models import A2ATask, A2ATaskStatus
 from agent_framework.agents.base import Agent
 
@@ -34,12 +36,19 @@ class A2AServer:
     ) -> None:
         self._agent = agent
         self._agent_card_data = agent_card_data
-        self._api_key = api_key
+        self._api_key: SecretStr | None = SecretStr(api_key) if api_key else None
         self._tasks: dict[str, A2ATask] = {}
         self._lock = asyncio.Lock()
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
+            return
+
+        # Auth gate — check before routing
+        auth_ok, error_status = self._verify_auth(scope)
+        if not auth_ok:
+            message = "Missing API key" if error_status == 401 else "Invalid API key"
+            await self._send_json(send, error_status, {"error": message})
             return
 
         method: str = scope["method"]
@@ -63,6 +72,27 @@ class A2AServer:
                 await self._send_json(send, 404, {"error": "not found"})
         else:
             await self._send_json(send, 404, {"error": "not found"})
+
+    # ── Authentication ────────────────────────────────────────────────────
+
+    def _verify_auth(self, scope: Scope) -> tuple[bool, int]:
+        """Check X-API-Key header against configured key.
+
+        Returns (is_ok, status_code_if_not_ok).
+        When no api_key is configured, always returns (True, 200).
+        """
+        if self._api_key is None:
+            return True, 200
+
+        expected = self._api_key.get_secret_value()
+        headers = scope.get("headers", [])
+        for key, value in headers:
+            if key == b"x-api-key":
+                if value.decode() == expected:
+                    return True, 200
+                return False, 403
+
+        return False, 401
 
     # ── Route Handlers ───────────────────────────────────────────────────
 
