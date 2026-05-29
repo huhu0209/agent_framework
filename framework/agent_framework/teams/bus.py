@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import json
+import logging
+import os
+import tempfile
 import time
 from pathlib import Path
 
 from agent_framework.teams.types import TeamMessage
+
+logger = logging.getLogger(__name__)
 
 
 class MessageBus:
@@ -35,7 +40,6 @@ class MessageBus:
         if not path.exists():
             return []
         raw = path.read_text().strip()
-        path.write_text("")
         if not raw:
             return []
         msgs = []
@@ -45,6 +49,22 @@ class MessageBus:
                 msgs.append(TeamMessage(**data))
             except Exception:
                 continue
+
+        # 原子清零：write-to-temp + os.replace，防止崩溃时丢失
+        fd, tmp_path = tempfile.mkstemp(
+            dir=self._dir, suffix=".tmp", prefix=".inbox_",
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write("")
+            os.replace(tmp_path, path)
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            logger.warning("原子清零收件箱失败: %s", path)
+
         return msgs
 
     def broadcast(self, sender: str, teammates: list[str], content: str) -> None:
