@@ -69,10 +69,12 @@ Plans:
 
 **依赖：** Phase 1, Phase 2
 
-**任务：**
-1. 补充 TeamManager loop 行为测试
-2. 补充安全边界与工具执行集成测试
-3. 补充 PermissionPipeline 完整流程测试
-4. 运行全量测试确认无回归
+**Plans:** 4 plans
 
-**验证：** 新增测试全部通过，覆盖 HIGH 优先级缺口。
+Plans:
+- [ ] 05-01-PLAN.md — TeamManager _loop 深度行为测试（5 个测试，monkeypatch + AsyncMock）
+- [ ] 05-02-PLAN.md — 安全边界集成测试（3 个 AgentLoop→ToolRouter→safe_path 全链路测试）
+- [ ] 05-03-PLAN.md — PermissionPipeline 边界情况测试（4 个同步单元测试）
+- [ ] 05-04-PLAN.md — 全量测试回归验证（675+ 测试通过）
+
+**验证：** 新增 12 个测试全部通过，全量 675+ 测试无回归。
