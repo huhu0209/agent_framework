@@ -7,6 +7,16 @@ import pytest
 from agent_framework.tools.mcp.transport import McpTransport, StdioTransport
 
 
+def _make_transport_with_reader(data: bytes) -> StdioTransport:
+    """创建一个 StdioTransport 实例，其 _process.stdout 被替换为含指定数据的 StreamReader。"""
+    reader = asyncio.StreamReader()
+    reader.feed_data(data)
+    reader.feed_eof()
+    transport = StdioTransport(command="true")
+    transport._process = type("FakeProc", (), {"stdout": reader})()
+    return transport
+
+
 # --- ABC 测试 ---
 
 def test_mcp_transport_is_abstract():
@@ -142,3 +152,34 @@ async def test_stdio_close_cleanup(fake_server_script):
     process = transport._process
     await transport.close()
     assert process.returncode is not None
+
+
+# --- readline header 解析测试 ---
+
+
+@pytest.mark.asyncio
+async def test_read_until_header_end_single_header():
+    """单行 header：Content-Length 后立即结束。"""
+    transport = _make_transport_with_reader(b"Content-Length: 10\r\n\r\n")
+    result = await transport._read_until_header_end()
+    assert result == b"Content-Length: 10\r\n\r\n"
+
+
+@pytest.mark.asyncio
+async def test_read_until_header_end_multi_header():
+    """多行 header：Content-Length + Custom 后结束。"""
+    transport = _make_transport_with_reader(
+        b"Content-Length: 10\r\nCustom: value\r\n\r\n"
+    )
+    result = await transport._read_until_header_end()
+    assert b"Content-Length: 10" in result
+    assert b"Custom: value" in result
+    assert result.endswith(b"\r\n\r\n")
+
+
+@pytest.mark.asyncio
+async def test_read_until_header_end_eof():
+    """连接关闭（空数据）应抛出 EOFError。"""
+    transport = _make_transport_with_reader(b"")
+    with pytest.raises(EOFError):
+        await transport._read_until_header_end()
