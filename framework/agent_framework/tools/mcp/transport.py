@@ -121,12 +121,13 @@ class StdioTransport(McpTransport):
 
     async def _read_until_header_end(self) -> bytes:
         buf = b""
-        while not buf.endswith(b"\r\n\r\n"):
-            chunk = await self._process.stdout.read(1)
-            if not chunk:
+        while True:
+            line = await self._process.stdout.readline()
+            if not line:
                 raise EOFError("MCP server 关闭了连接")
-            buf += chunk
-        return buf
+            buf += line
+            if buf.endswith(b"\r\n\r\n"):
+                return buf
 
     @staticmethod
     def _parse_content_length(header: bytes) -> int:
