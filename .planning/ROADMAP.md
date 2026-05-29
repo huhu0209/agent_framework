@@ -38,7 +38,7 @@
   3. PlanAndSolveAgent 可以接收任务、生成计划、逐步执行，偏离时重新规划（最多 2 次），空计划时 fallback 到 ReAct
   4. ReflectionAgent 可以执行任务、自我评估输出质量、改进不满意的结果（最多 2 轮）
   5. 所有新增 Agent 类型通过各自的测试套件验证
-**Plans**: TBD
+**Plans:** 3 plans
 
 Plans:
 - [ ] 06-01: Agent ABC + AgentEvent 基础设施（AGENT-01~05）
@@ -55,7 +55,7 @@ Plans:
   3. Agent 配置可以通过 .md 文件声明式定义，agent_from_config() 能创建完整可运行的 Agent 实例
   4. 搜索工具调用 Tavily API 返回真实结果，并发受 Semaphore 控制，API key 通过环境变量管理
   5. agent_factory 模式允许编排引擎按需创建新 Agent 实例
-**Plans**: TBD
+**Plans:** 3 plans
 
 Plans:
 - [ ] 07-01: OrchestratorEngine 编排引擎（ORCH-01~05）
@@ -72,7 +72,7 @@ Plans:
   3. A2AClient 可向远程 Agent 提交任务、轮询状态、取消任务
   4. 同步模式（POST + 轮询）完整可用，不做流式和异步
   5. 所有 A2A 通信受 API-key 认证保护
-**Plans**: TBD
+**Plans:** 3 plans
 
 Plans:
 - [ ] 08-01: A2A 数据模型 + AgentCard（A2A-01, A2A-02）
