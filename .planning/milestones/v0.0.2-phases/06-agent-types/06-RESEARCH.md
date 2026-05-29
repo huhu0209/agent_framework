@@ -495,17 +495,13 @@ async def _call_llm_for_evaluation(
 | A3 | 截取最后 2000 字符足够作为步骤摘要（Claude's Discretion） | Common Pitfalls | MEDIUM — 如果单步输出超过 2000 字符会丢失信息 |
 | A4 | LLM 评估偏离和三维度评估的 prompt 可以用简单模板实现 | Claude's Discretion | LOW — prompt 工程是迭代过程，初始版本可简单 |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **PlanAndSolve 每步的 step 计数器如何全局管理？**
-   - What we know: AgentEvent 需要 `step: int`，PlanAndSolve 内部有多步，每步又用 AgentLoop 执行多轮
-   - What's unclear: `step` 是全局递增计数器（跨所有子步骤），还是每个 PlanAndSolve 步骤重置
-   - Recommendation: 全局递增（每步执行或每个子 AgentLoop 事件都递增），便于消费者追踪总进度
+   - RESOLVED: 全局递增（每步执行或每个子 AgentLoop 事件都递增），便于消费者追踪总进度。已在 06-02-PLAN.md Task 1 中通过 `global_step` 计数器实现。
 
 2. **PlanAndSolve 执行步骤时是否转发子 AgentLoop 的事件？**
-   - What we know: PlanAndSolve.run() 返回 AsyncGenerator[AgentEvent, None]
-   - What's unclear: 步骤执行过程中 AgentLoop 产生的 LoopEvent 是否 yield 给调用者（作为 AgentEvent），还是只返回每步摘要
-   - Recommendation: 转发子事件（LoopEvent 是 AgentEvent 子类），让消费者实时追踪进度
+   - RESOLVED: 转发子事件（LoopEvent 是 AgentEvent 子类），让消费者实时追踪进度。已在 06-02-PLAN.md Task 1 中实现事件转发。
 
 ## Environment Availability
 
