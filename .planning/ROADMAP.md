@@ -69,12 +69,15 @@ Plans:
 
 **依赖：** Phase 1, Phase 2
 
-**Plans:** 4 plans
+**Plans:** 3/4 plans executed
 
 Plans:
-- [ ] 05-01-PLAN.md — TeamManager _loop 深度行为测试（5 个测试，monkeypatch + AsyncMock）
-- [ ] 05-02-PLAN.md — 安全边界集成测试（3 个 AgentLoop→ToolRouter→safe_path 全链路测试）
-- [ ] 05-03-PLAN.md — PermissionPipeline 边界情况测试（4 个同步单元测试）
+- [x] 05-01-PLAN.md — TeamManager _loop 深度行为测试（5 个测试，monkeypatch + AsyncMock）
+- [x] 05-02-PLAN.md — 安全边界集成测试（3 个 AgentLoop→ToolRouter→safe_path 全链路测试）
+- [x] 05-03-PLAN.md — PermissionPipeline 边界情况测试（4 个同步单元测试）
 - [ ] 05-04-PLAN.md — 全量测试回归验证（675+ 测试通过）
+
+**Wave 1** *(05-01, 05-02, 05-03 并行 — 零文件冲突)*
+**Wave 2** *(blocked on Wave 1 completion)*
 
 **验证：** 新增 12 个测试全部通过，全量 675+ 测试无回归。
