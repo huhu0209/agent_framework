@@ -22,7 +22,7 @@
 
 **Milestone Goal:** 从单一 ReAct Agent 扩展为多类型 Agent 体系，新增编排引擎和 A2A 协议支持
 
-- [ ] **Phase 6: Agent 类型扩展** — Agent ABC 抽象 + Plan-and-Solve + Reflection 三种 Agent
+- [x] **Phase 6: Agent 类型扩展** — Agent ABC 抽象 + Plan-and-Solve + Reflection 三种 Agent (completed 2026-05-29)
 - [ ] **Phase 7: 编排引擎 + 配置化 + 搜索** — OrchestratorEngine + Agent 配置化 + 真实搜索
 - [ ] **Phase 8: A2A 协议** — AgentCard + Client/Server 同步模式 + API-key 认证
 
@@ -38,12 +38,12 @@
   3. PlanAndSolveAgent 可以接收任务、生成计划、逐步执行，偏离时重新规划（最多 2 次），空计划时 fallback 到 ReAct
   4. ReflectionAgent 可以执行任务、自我评估输出质量、改进不满意的结果（最多 2 轮）
   5. 所有新增 Agent 类型通过各自的测试套件验证
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 
 Plans:
-- [ ] 06-01: Agent ABC + AgentEvent 基础设施（AGENT-01~05）
-- [ ] 06-02: Plan-and-Solve Agent（PLAN-01~05）
-- [ ] 06-03: Reflection Agent（REFL-01~04）
+- [x] 06-01: Agent ABC + AgentEvent 基础设施（AGENT-01~05）
+- [x] 06-02: Plan-and-Solve Agent（PLAN-01~05）
+- [x] 06-03: Reflection Agent（REFL-01~04）
 
 ### Phase 7: 编排引擎 + 配置化 + 搜索
 **Goal**: 框架具备 Agent 编排能力、声明式配置能力和真实搜索能力
@@ -91,6 +91,6 @@ Phases execute in numeric order: 6 → 7 → 8
 | 3. 架构与代码质量审查 | v0.0.1 | 2/2 | Complete | 2026-05-28 |
 | 4. 性能与数据安全审查 | v0.0.1 | 1/1 | Complete | 2026-05-29 |
 | 5. 测试覆盖补充 | v0.0.1 | 4/4 | Complete | 2026-05-29 |
-| 6. Agent 类型扩展 | v0.0.2 | 0/3 | Not started | - |
+| 6. Agent 类型扩展 | v0.0.2 | 3/3 | Complete   | 2026-05-29 |
 | 7. 编排引擎 + 配置化 + 搜索 | v0.0.2 | 0/3 | Not started | - |
 | 8. A2A 协议 | v0.0.2 | 0/3 | Not started | - |
