@@ -589,22 +589,13 @@ class A2AServer:
 | A3 | parse_frontmatter() 可以直接复用于 AgentCard .md 解析 | Pattern 1 | frontmatter 中 capabilities 字段的逗号分隔格式需手动 split |
 | A4 | asyncio.create_task() 在 ASGI handler 中可安全使用 | Pattern 4 | ASGI server 的 event loop 生命周期可能影响后台任务 |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Agent.run() 事件中的最终文本提取方式**
-   - What we know: AgentEvent 有 type/step/data 字段，type 包含 step/tool_result/done/max_steps/error
-   - What's unclear: done 事件的 data 字段确切结构是什么？文本在 data["text"] 还是其他 key？
-   - Recommendation: 08-01 实现时先读 agents/base.py 和 AgentLoop 的 done 事件构建逻辑确认
+1. **Agent.run() 事件中的最终文本提取方式** — RESOLVED: done 事件 data["text"] 为最终结果，Plan 02 read_first 中确认 agents/base.py 和 AgentLoop 实现。
 
-2. **A2AServer 是否需要优雅关闭后台任务**
-   - What we know: asyncio.create_task() 创建的后台任务在 server 关闭时可能被取消
-   - What's unclear: 是否需要提供 shutdown() 方法等待正在运行的任务完成
-   - Recommendation: Claude's Discretion 范围，建议先不实现，后续按需添加
+2. **A2AServer 是否需要优雅关闭后台任务** — RESOLVED: Claude's Discretion，Phase 8 不实现 shutdown()，后续按需添加。
 
-3. **A2AMessage 的具体字段设计**
-   - What we know: A2A 规范定义 Message 有 role + parts，但本项目同步模式可简化
-   - What's unclear: 是否需要完整的 parts 结构，还是简化为 role + text 足够
-   - Recommendation: Claude's Discretion 范围，建议简化为 role: str + text: str
+3. **A2AMessage 的具体字段设计** — RESOLVED: Claude's Discretion，简化为 role: str + text: str。
 
 ## Environment Availability
 
