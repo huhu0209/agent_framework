@@ -145,3 +145,68 @@ class TestPermissionPipeline:
         decision = pipeline.check("write_file", {})
         assert decision.action == PermissionDecision.ALLOW
         assert decision.reason == "allowed"
+
+
+class TestEdgeCases:
+    """PermissionPipeline 边界情况测试。"""
+
+    def test_disallowed_overrides_allowed(self):
+        """disallowed_tools 优先于 allowed_tools — 同一工具在两列表中被 DENY。"""
+        profile = AgentProfile(
+            name="conflict",
+            description="冲突测试",
+            soul="", agents_rules="", identity="",
+            allowed_tools=["write_file"],
+            disallowed_tools=["write_file"],
+        )
+        pipeline = PermissionPipeline(profile=profile)
+
+        decision = pipeline.check("write_file", {})
+        assert decision.action == PermissionDecision.DENY
+        assert decision.reason == "disallowed"
+
+    def test_no_annotation_ask_mode_returns_low(self):
+        """无注解的 unknown tool 在 ask 模式下返回 LOW ASK。"""
+        profile = AgentProfile(
+            name="default",
+            description="默认",
+            soul="", agents_rules="", identity="",
+            permission_mode="ask",
+        )
+        pipeline = PermissionPipeline(profile=profile)
+
+        decision = pipeline.check("unknown_tool", {})
+        assert decision.action == PermissionDecision.ASK
+        assert decision.risk_level == RiskLevel.LOW
+        assert decision.reason == "unknown"
+
+    def test_empty_critical_tools_no_impact(self):
+        """_CRITICAL_TOOLS 为空集合时不影响正常权限决策流程。"""
+        profile = AgentProfile(
+            name="default",
+            description="默认",
+            soul="", agents_rules="", identity="",
+            permission_mode="ask",
+        )
+        pipeline = PermissionPipeline(profile=profile)
+        pipeline.register_annotations("read_file", {"readOnly": True})
+
+        decision = pipeline.check("read_file", {})
+        assert decision.action == PermissionDecision.ALLOW
+        assert decision.reason == "readOnly"
+
+    def test_destructive_plus_idempotent_is_medium_ask(self):
+        """destructive + idempotent 注解组合返回 MEDIUM ASK。"""
+        profile = AgentProfile(
+            name="default",
+            description="默认",
+            soul="", agents_rules="", identity="",
+            permission_mode="ask",
+        )
+        pipeline = PermissionPipeline(profile=profile)
+        pipeline.register_annotations("upsert_record", {"destructive": True, "idempotent": True})
+
+        decision = pipeline.check("upsert_record", {})
+        assert decision.action == PermissionDecision.ASK
+        assert decision.risk_level == RiskLevel.MEDIUM
+        assert decision.reason == "destructive_idempotent"
