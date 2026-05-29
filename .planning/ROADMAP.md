@@ -54,12 +54,12 @@ Plans:
 
 **依赖：** Phase 1
 
-**Plans:** 1 plan
+**Plans:** 1/1 plan complete
 
 Plans:
-- [ ] 04-01-PLAN.md — 修复 MessageBus 原子读写 + MCP header 高效读取 + 产出 PERF-REVIEW.md
+- [x] 04-01-PLAN.md — 修复 MessageBus 原子读写 + MCP header 高效读取 + 产出 PERF-REVIEW.md
 
-**验证：** 数据安全项已修复，PERF-REVIEW.md 已生成。
+**验证：** 675 测试通过。read_inbox 原子清零、MCP readline 替换、PERF-REVIEW.md（2 已修复 + 3 已记录）全部验证通过。
 
 ---
 
