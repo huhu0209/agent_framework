@@ -8,6 +8,7 @@ import time
 from typing import TYPE_CHECKING
 
 from agent_framework.agents.agent_loop import AgentLoop
+from agent_framework.agents.base import Agent
 from agent_framework.agents.sub_agent import create_filtered_router
 from agent_framework.llm.base import ILLMAdapter
 from agent_framework.teams.bus import MessageBus

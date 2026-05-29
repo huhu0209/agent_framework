@@ -1,14 +1,24 @@
-"""Agent 基类协议定义，为不同 Agent 类型提供统一接口契约。
+"""Agent ABC + AgentEvent — 多类型 Agent 的统一接口契约和事件模型。"""
 
-当前状态: scaffold（预留模块，尚未实现）。
+from __future__ import annotations
 
-预期功能:
-- 定义 Agent 协议/接口（Protocol 或 ABC），规范 Agent 行为契约
-- 为 SubAgent、TeamAgent 等派生类型提供共享基础类型
-- 统一 Agent 的输入输出类型定义，便于编排引擎调用
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+from typing import Any, AsyncGenerator
 
-相关模块:
-- agent_framework.agents.agent_loop — 已实现的 ReAct Agent Loop
-- agent_framework.agents.sub_agent — 子 Agent 管理
-- agent_framework.teams.manager — 团队 Agent 管理
-"""
+
+@dataclass
+class AgentEvent:
+    """Agent 执行过程中产生的事件基类。"""
+
+    type: str
+    step: int
+    data: dict[str, Any] = field(default_factory=dict)
+
+
+class Agent(ABC):
+    """Agent 抽象基类，定义统一的 run() 接口。"""
+
+    @abstractmethod
+    async def run(self, user_message: str) -> AsyncGenerator[AgentEvent, None]:
+        yield  # pragma: no cover
