@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Canvas Preview - Agent Framework</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #f5f4ed;
+        font-family: system-ui, -apple-system, sans-serif;
+        color: #141413;
+        gap: 16px;
+        padding: 24px;
+      }
+      h1 { font-size: 1.25rem; font-weight: 600; }
+      #canvas-container {
+        border: 1px solid #f0eee6;
+        border-radius: 4px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      }
+      .controls {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      button {
+        padding: 6px 16px;
+        border: 1px solid #5e5d59;
+        border-radius: 4px;
+        background: #faf9f5;
+        color: #141413;
+        cursor: pointer;
+        font-size: 0.875rem;
+      }
+      button:hover { background: #e8e6dc; }
+      button:active { background: #f0eee6; }
+    </style>
+  </head>
+  <body>
+    <h1>Canvas Preview - Agent Framework</h1>
+    <div id="canvas-container"></div>
+    <div class="controls">
+      <button data-state="idle">Idle</button>
+      <button data-state="thinking">Thinking</button>
+      <button data-state="tool_call">Tool Call</button>
+      <button data-state="done">Done</button>
+      <button data-state="error">Error</button>
+      <button data-state="shutdown">Shutdown</button>
+    </div>
+    <script type="module">
+      import { init, updateState, destroy } from './src/canvas/index.ts';
+
+      const container = document.getElementById('canvas-container');
+      await init(container);
+
+      function sendEvent(type) {
+        updateState({
+          type,
+          agent: 'preview-agent',
+          payload: {},
+          timestamp: Date.now() / 1000,
+        });
+      }
+
+      // Auto-demo sequence
+      setTimeout(() => sendEvent('idle'), 0);
+      setTimeout(() => sendEvent('thinking'), 2000);
+      setTimeout(() => sendEvent('tool_call'), 4000);
+      setTimeout(() => sendEvent('idle'), 6000);
+      setTimeout(() => sendEvent('shutdown'), 8000);
+
+      // Button controls
+      document.querySelectorAll('button[data-state]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          sendEvent(btn.dataset.state);
+        });
+      });
+    </script>
+  </body>
+</html>
