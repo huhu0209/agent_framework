@@ -1,21 +1,74 @@
 /**
- * Left-right layout with Canvas placeholder and right panel.
+ * Left-right layout with Canvas bridge and right panel.
  *
  * Per D-01/D-02:
  * - Top: ConnectionIndicator bar (32px, Dark Surface)
- * - Left: Canvas container (800x600)
- * - Right: scrollable panel with ConfigForm, TeamControls, AgentList
+ * - Left: Canvas container (800x600) via PixiJS imperative bridge
+ * - Right: scrollable panel with ConfigForm, TeamControls, AgentList, EventLog
  */
 
+import { useEffect, useRef } from 'react';
 import { useAppState } from '../../state/context';
 import { useWebSocket } from '../../hooks/useWebSocket';
 import { ConnectionIndicator } from './ConnectionIndicator';
 import { ConfigForm } from '../ui/ConfigForm';
 import { TeamControls } from '../ui/TeamControls';
 import { AgentList } from '../agent/AgentList';
+import { EventLog } from '../ui/EventLog';
+import {
+  init as canvasInit,
+  updateState as canvasUpdateState,
+  destroy as canvasDestroy,
+} from '../../canvas/index';
+import type { VizEvent } from '../../canvas/types';
+
+/**
+ * CanvasContainer — imperative PixiJS bridge.
+ *
+ * Uses refs to avoid re-render driving PixiJS. Processes only new events
+ * via lastProcessedIndex. Cleans up on unmount (StrictMode safe).
+ */
+function CanvasContainer({ events }: { events: readonly VizEvent[] }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const lastProcessedIndex = useRef(0);
+  const isInitialized = useRef(false);
+
+  // Initialize Canvas — runs once per mount cycle
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || isInitialized.current) {
+      return;
+    }
+
+    isInitialized.current = true;
+    canvasInit(container, { width: 800, height: 600 });
+
+    return () => {
+      canvasDestroy();
+      isInitialized.current = false;
+      lastProcessedIndex.current = 0;
+    };
+  }, []);
+
+  // Process new events incrementally
+  useEffect(() => {
+    for (let i = lastProcessedIndex.current; i < events.length; i++) {
+      canvasUpdateState(events[i]);
+    }
+    lastProcessedIndex.current = events.length;
+  }, [events]);
+
+  return (
+    <div
+      ref={containerRef}
+      style={{ width: 800, height: 600 }}
+      className="flex-shrink-0"
+    />
+  );
+}
 
 export function AppLayout() {
-  const { dispatch } = useAppState();
+  const { state, dispatch } = useAppState();
   const { sendMessage } = useWebSocket({
     url: 'ws://localhost:8765',
     dispatch,
@@ -35,23 +88,8 @@ export function AppLayout() {
 
       {/* Main content: canvas + right panel */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
-        {/* Canvas container — placeholder, Plan 11-03 will integrate canvas.init() */}
-        <div
-          style={{
-            width: '800px',
-            height: '600px',
-            flexShrink: 0,
-            backgroundColor: '#f5f4ed',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '14px',
-            fontFamily: 'system-ui',
-            color: '#87867f',
-          }}
-        >
-          Canvas (800x600)
-        </div>
+        {/* Canvas — PixiJS bridge via useRef */}
+        <CanvasContainer events={state.eventLog} />
 
         {/* Right panel */}
         <div
@@ -68,6 +106,7 @@ export function AppLayout() {
           <ConfigForm />
           <TeamControls sendMessage={sendMessage} />
           <AgentList />
+          <EventLog />
         </div>
       </div>
     </div>

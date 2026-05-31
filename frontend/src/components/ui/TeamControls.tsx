@@ -16,11 +16,15 @@ export function TeamControls({ sendMessage }: TeamControlsProps) {
   const { state, dispatch } = useAppState();
 
   const handleStart = () => {
+    const name = state.formData.name.trim();
+    if (!name) {
+      return; // Name field empty — no-op
+    }
     if (sendMessage) {
       sendMessage({
         type: 'start_team',
         agent: {
-          name: state.formData.name,
+          name,
           role: state.formData.role,
           system_prompt: state.formData.systemPrompt,
         },
