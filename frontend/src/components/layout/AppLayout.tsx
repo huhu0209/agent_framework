@@ -2,16 +2,25 @@
  * Left-right layout with Canvas placeholder and right panel.
  *
  * Per D-01/D-02:
- * - Top: ConnectionIndicator placeholder bar (32px, Dark Surface)
+ * - Top: ConnectionIndicator bar (32px, Dark Surface)
  * - Left: Canvas container (800x600)
  * - Right: scrollable panel with ConfigForm, TeamControls, AgentList
  */
 
+import { useAppState } from '../../state/context';
+import { useWebSocket } from '../../hooks/useWebSocket';
+import { ConnectionIndicator } from './ConnectionIndicator';
 import { ConfigForm } from '../ui/ConfigForm';
 import { TeamControls } from '../ui/TeamControls';
 import { AgentList } from '../agent/AgentList';
 
 export function AppLayout() {
+  const { dispatch } = useAppState();
+  const { sendMessage } = useWebSocket({
+    url: 'ws://localhost:8765',
+    dispatch,
+  });
+
   return (
     <div
       style={{
@@ -22,37 +31,7 @@ export function AppLayout() {
         backgroundColor: '#f5f4ed',
       }}
     >
-      {/* Connection indicator bar — placeholder for Plan 11-02 */}
-      <div
-        style={{
-          width: '100%',
-          height: '32px',
-          backgroundColor: '#30302e',
-          display: 'flex',
-          alignItems: 'center',
-          padding: '0 16px',
-          gap: '8px',
-          flexShrink: 0,
-        }}
-      >
-        <div
-          style={{
-            width: '8px',
-            height: '8px',
-            borderRadius: '50%',
-            backgroundColor: '#ef4444',
-          }}
-        />
-        <span
-          style={{
-            fontSize: '12px',
-            fontFamily: 'system-ui',
-            color: '#faf9f5',
-          }}
-        >
-          Disconnected
-        </span>
-      </div>
+      <ConnectionIndicator />
 
       {/* Main content: canvas + right panel */}
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
@@ -87,7 +66,7 @@ export function AppLayout() {
           }}
         >
           <ConfigForm />
-          <TeamControls />
+          <TeamControls sendMessage={sendMessage} />
           <AgentList />
         </div>
       </div>

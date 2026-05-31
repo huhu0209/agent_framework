@@ -3,19 +3,39 @@
  *
  * Start: Terracotta bg, disabled when team is running.
  * Stop: Crimson bg, disabled when team is not running.
- * Actual WebSocket send deferred to Plan 11-03.
+ * Sends WebSocket commands when sendMessage is provided.
  */
 
 import { useAppState } from '../../state/context';
 
-export function TeamControls() {
+interface TeamControlsProps {
+  sendMessage?: (data: Record<string, unknown>) => void;
+}
+
+export function TeamControls({ sendMessage }: TeamControlsProps) {
   const { state, dispatch } = useAppState();
 
   const handleStart = () => {
+    if (sendMessage) {
+      sendMessage({
+        type: 'start_team',
+        agent: {
+          name: state.formData.name,
+          role: state.formData.role,
+          system_prompt: state.formData.systemPrompt,
+        },
+      });
+    }
     dispatch({ type: 'TEAM_STARTED' });
   };
 
   const handleStop = () => {
+    if (sendMessage) {
+      sendMessage({
+        type: 'stop_team',
+        name: state.formData.name,
+      });
+    }
     dispatch({ type: 'TEAM_STOPPED' });
   };
 
