@@ -34,3 +34,9 @@ htmlcov/
 .coverage
 .pytest_cache/
 frontend/coverage/
+
+
+.understand-anything/
+.playwright-mcp/
+.planning/
+docs/
