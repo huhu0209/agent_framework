@@ -33,7 +33,7 @@
 **Milestone Goal:** 端到端链路跑通 — config → spawn → event → WebSocket → canvas render
 
 - [ ] **Phase 9: Backend 事件系统** — EventBus pub-sub + VizEvent 模型 + AgentRunner + WebSocket 推送
-- [ ] **Phase 10: Frontend Canvas 渲染** — PixiJS v8 办公室场景 + 猫精灵 + 状态动画
+- [x] **Phase 10: Frontend Canvas 渲染** — PixiJS v8 办公室场景 + 猫精灵 + 状态动画 (completed 2026-05-30)
 - [ ] **Phase 11: Frontend React 集成** — 配置面板 + WebSocket 客户端 + 事件日志 + React-PixiJS 桥接
 
 ## Phase Details
@@ -85,15 +85,15 @@ Plans:
 Plans:
 **Wave 1**
 
-- [ ] 10-01: PixiJS v8 应用初始化 + 办公室场景 + 点位系统
+- [x] 10-01: PixiJS v8 应用初始化 + 办公室场景 + 点位系统
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 10-02: 猫精灵 + 帧动画（idle/thinking/tool_call）+ 状态切换
+- [x] 10-02: 猫精灵 + 帧动画（idle/thinking/tool_call）+ 状态切换
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 10-03: 精灵移动系统（线性插值）+ shutdown 消失动画
+- [x] 10-03: 精灵移动系统（线性插值）+ shutdown 消失动画
 
 ### Phase 11: Frontend React 集成
 
@@ -133,5 +133,5 @@ Phase 9 和 Phase 10 可并行执行。Phase 11 依赖两者完成。
 | 7. 编排引擎 + 配置化 + 搜索 | v0.0.2 | 3/3 | Complete | 2026-05-29 |
 | 8. A2A 协议 | v0.0.2 | 3/3 | Complete | 2026-05-29 |
 | 9. Backend 事件系统 | v0.0.3 | 3/3 | Complete | 2026-05-29 |
-| 10. Frontend Canvas 渲染 | v0.0.3 | 0/3 | Not started | - |
+| 10. Frontend Canvas 渲染 | v0.0.3 | 3/3 | Complete    | 2026-05-31 |
 | 11. Frontend React 集成 | v0.0.3 | 0/3 | Not started | - |
