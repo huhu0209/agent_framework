@@ -26,20 +26,20 @@
 
 ## RNDR — Canvas 渲染层
 
-- [ ] **RNDR-01**: PixiJS v8 应用初始化，包含背景层/agent层/效果层三个 Container
-- [ ] **RNDR-02**: 办公室场景包含 4 个固定点位（2 个工位 + 茶水间 + 门口）
-- [ ] **RNDR-03**: 猫精灵使用 placeholder 几何图形（圆形+三角形耳朵），32×32 像素
-- [ ] **RNDR-04**: 猫精灵支持 3 种帧动画（站立/打字/喝水），对应 idle/thinking/tool_call 状态
-- [ ] **RNDR-05**: Agent 状态变化时，动物自动移动到对应场景点位（线性插值平滑移动）
-- [ ] **RNDR-06**: 动物到达目标点位后播放对应状态帧动画
-- [ ] **RNDR-07**: Agent shutdown 时动物移动到门口并消失
+- [x] **RNDR-01**: PixiJS v8 应用初始化，包含背景层/agent层/效果层三个 Container
+- [x] **RNDR-02**: 办公室场景包含 4 个固定点位（2 个工位 + 茶水间 + 门口）
+- [x] **RNDR-03**: 猫精灵使用 placeholder 几何图形（圆形+三角形耳朵），32×32 像素
+- [x] **RNDR-04**: 猫精灵支持 3 种帧动画（站立/打字/喝水），对应 idle/thinking/tool_call 状态
+- [x] **RNDR-05**: Agent 状态变化时，动物自动移动到对应场景点位（线性插值平滑移动）
+- [x] **RNDR-06**: 动物到达目标点位后播放对应状态帧动画
+- [x] **RNDR-07**: Agent shutdown 时动物移动到门口并消失
 
 ## CNFG — React 配置面板
 
-- [ ] **CNFG-01**: 用户可通过表单创建 Agent（填写 name/role/system_prompt）
+- [x] **CNFG-01**: 用户可通过表单创建 Agent（填写 name/role/system_prompt）
 - [ ] **CNFG-02**: 用户可点击按钮启动 Team（POST /api/team/start）
 - [ ] **CNFG-03**: 用户可点击按钮停止 Team（POST /api/team/stop）
-- [ ] **CNFG-04**: Agent 列表展示每个 agent 的名称和当前状态灯（idle/thinking/tool_call/shutdown）
+- [x] **CNFG-04**: Agent 列表展示每个 agent 的名称和当前状态灯（idle/thinking/tool_call/shutdown）
 
 ## CONC — WebSocket 客户端连接
 
@@ -98,10 +98,10 @@
 | RNDR-05 | 10 | — | Pending |
 | RNDR-06 | 10 | — | Pending |
 | RNDR-07 | 10 | — | Pending |
-| CNFG-01 | 11 | — | Pending |
+| CNFG-01 | 11 | 11-01 | Complete |
 | CNFG-02 | 11 | — | Pending |
 | CNFG-03 | 11 | — | Pending |
-| CNFG-04 | 11 | — | Pending |
+| CNFG-04 | 11 | 11-01 | Complete |
 | CONC-01 | 11 | — | Pending |
 | CONC-02 | 11 | — | Pending |
 | CONC-03 | 11 | — | Pending |
@@ -109,4 +109,4 @@
 | CONC-05 | 11 | — | Pending |
 
 ---
-*Last updated: 2026-05-29 — v0.0.3 roadmap created, traceability updated*
+*Last updated: 2026-05-31 — CNFG-01, CNFG-04 completed in Plan 11-01*

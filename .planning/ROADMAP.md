@@ -113,7 +113,7 @@ Plans:
 
 Plans:
 
-- [ ] 11-01: React 配置面板（创建 Agent 表单 + Team 控制 + Agent 状态列表）
+- [x] 11-01: React 配置面板（创建 Agent 表单 + Team 控制 + Agent 状态列表）
 - [ ] 11-02: WebSocket 客户端 + reducer 状态管理 + 连接状态指示器
 - [ ] 11-03: React-PixiJS ref 桥接 + 事件日志列表 + 端到端集成
 
@@ -134,4 +134,4 @@ Phase 9 和 Phase 10 可并行执行。Phase 11 依赖两者完成。
 | 8. A2A 协议 | v0.0.2 | 3/3 | Complete | 2026-05-29 |
 | 9. Backend 事件系统 | v0.0.3 | 3/3 | Complete | 2026-05-29 |
 | 10. Frontend Canvas 渲染 | v0.0.3 | 3/3 | Complete    | 2026-05-31 |
-| 11. Frontend React 集成 | v0.0.3 | 0/3 | Not started | - |
+| 11. Frontend React 集成 | v0.0.3 | 1/3 | In Progress | - |
