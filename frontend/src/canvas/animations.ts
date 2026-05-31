@@ -1,30 +1,22 @@
-/**
- * Animation controller — drives procedural frame animations for the cat sprite.
- *
- * Four animation states driven by PixiJS v8 Ticker:
- *   - standing (thinking base): subtle breathing (scale oscillation)
- *   - walking: bounce + tilt
- *   - typing (tool_call): sway side-to-side
- *   - drinking (idle): head/body bob up-down
- *
- * Thinking state additionally renders a thought bubble on the effects layer.
- *
- * v8 Ticker callback signature: (ticker: Ticker) => void
- * Use ticker.deltaTime for frame-relative timing.
- */
 import { Container, Graphics } from 'pixi.js';
 import type { Application, Ticker } from 'pixi.js';
 import type { AnimationState } from './types';
 import type { CatSprite } from './cat-sprite';
 import { DESIGN_COLORS } from './constants';
 
-/** Public interface for the animation controller. */
 export interface AnimationController {
   play(state: AnimationState): void;
   dispose(): void;
 }
 
-/** Create an animation controller bound to the given app, cat sprite, and effects layer. */
+/**
+ * Create an animation controller bound to the given app, cat sprite, and effects layer.
+ *
+ * Visual effects (scale, rotation, y-offset) are applied to catSprite.visual
+ * (inner container), NOT to catSprite.container (outer container managed by
+ * the movement system). This prevents the animation from overwriting position
+ * changes during movement.
+ */
 export function createAnimationController(
   app: Application,
   catSprite: CatSprite,
@@ -45,19 +37,16 @@ export function createAnimationController(
     bubbleCleanup?.();
     bubbleCleanup = null;
 
-    // Reset cat transform to defaults
-    const cat = catSprite.container;
-    cat.scale.set(1);
-    cat.rotation = 0;
-    // Reset y offset from animations (keep the logical position)
-    const savedX = cat.x;
-    const savedY = cat.y;
+    // Reset visual container transform (not position!)
+    const vis = catSprite.visual;
+    vis.scale.set(1);
+    vis.rotation = 0;
+    vis.y = 0;
 
     // Accumulated animation time
     let time = 0;
 
     if (state === 'shutdown') {
-      // No animation for shutdown (Plan 10-03 handles shutdown movement)
       currentAnimation = state;
       return;
     }
@@ -69,29 +58,29 @@ export function createAnimationController(
 
       switch (state) {
         case 'idle': {
-          // Drinking: body bobs up-down (sin wave)
-          const bob = Math.sin(time * 0.08) * 2;
-          cat.y = savedY + bob;
+          // Drinking: body bobs up-down (sin wave) — applied to visual y-offset
+          const bob = Math.sin(time * 0.08) * 3;
+          vis.y = bob;
           break;
         }
         case 'thinking': {
           // Standing: subtle breathing via scale
-          const breath = 1 + Math.sin(time * 0.04) * 0.02;
-          cat.scale.set(breath);
+          const breath = 1 + Math.sin(time * 0.04) * 0.03;
+          vis.scale.set(breath);
           break;
         }
         case 'tool_call': {
           // Typing: sway side-to-side
-          const sway = Math.sin(time * 0.1) * 0.06;
-          cat.rotation = sway;
+          const sway = Math.sin(time * 0.1) * 0.08;
+          vis.rotation = sway;
           break;
         }
         case 'moving': {
-          // Walking: bounce + tilt
-          const bounce = Math.sin(time * 0.15) * 2.5;
-          const tilt = Math.sin(time * 0.15) * 0.05;
-          cat.y = savedY + bounce;
-          cat.rotation = tilt;
+          // Walking: bounce + tilt — visual only, position managed by movement system
+          const bounce = Math.sin(time * 0.15) * 3;
+          const tilt = Math.sin(time * 0.15) * 0.06;
+          vis.y = bounce;
+          vis.rotation = tilt;
           break;
         }
       }
@@ -100,11 +89,10 @@ export function createAnimationController(
     app.ticker.add(tickerFn);
     cleanupCallback = () => {
       app.ticker.remove(tickerFn);
-      // Reset transform after animation ends
-      cat.scale.set(1);
-      cat.rotation = 0;
-      cat.x = savedX;
-      cat.y = savedY;
+      // Reset visual transform (not root position!)
+      vis.scale.set(1);
+      vis.rotation = 0;
+      vis.y = 0;
     };
 
     // Thinking state: add thought bubble on effects layer
@@ -112,13 +100,14 @@ export function createAnimationController(
       const bubbleContainer = createThoughtBubble(catSprite);
       effectsLayer.addChild(bubbleContainer);
 
-      // Bubble floating animation
+      // Bubble floating animation — follows root container position
       let bubbleTime = 0;
       const bubbleFn = (ticker: Ticker): void => {
         bubbleTime += ticker.deltaTime;
         const floatY = Math.sin(bubbleTime * 0.03) * 2;
-        bubbleContainer.y = catSprite.getPosition().y - 32 + floatY;
-        bubbleContainer.x = catSprite.getPosition().x + 14;
+        const pos = catSprite.getPosition();
+        bubbleContainer.x = pos.x + 14;
+        bubbleContainer.y = pos.y - 32 + floatY;
       };
       app.ticker.add(bubbleFn);
 

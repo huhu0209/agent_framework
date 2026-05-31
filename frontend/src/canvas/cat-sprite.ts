@@ -2,8 +2,12 @@
  * Cat sprite — geometric placeholder (circle body + triangle ears + eyes).
  * Fits within a 32x32 pixel area (D-07).
  *
- * v8 note: Graphics are leaf nodes and cannot have children.
- * All parts are added to the parent Container directly.
+ * Architecture: root Container (position managed by movement system)
+ *               → visual Container (visual effects managed by animation controller)
+ *                  → Graphics parts (body, ears, eyes)
+ *
+ * This separation prevents the animation controller from overwriting position
+ * changes made by the movement system.
  */
 import { Container, Graphics } from 'pixi.js';
 import { DESIGN_COLORS, CAT_SIZE } from './constants';
@@ -11,15 +15,17 @@ import type { AnimationState } from './types';
 
 /** Public interface for the cat sprite. */
 export interface CatSprite {
-  /** Root container holding all graphical parts. */
+  /** Root container — position is managed externally (by movement system). */
   container: Container;
+  /** Inner visual container — rotation/scale offsets managed by animation controller. */
+  visual: Container;
   /** Switch the animation state (delegates to AnimationController). */
   setAnimation: (state: AnimationState, effectsLayer?: Container) => void;
   /** Release resources. */
   dispose: () => void;
-  /** Get current position. */
+  /** Get current position (from root container). */
   getPosition: () => { x: number; y: number };
-  /** Set position. */
+  /** Set position (on root container). */
   setPosition: (x: number, y: number) => void;
 }
 
@@ -35,6 +41,11 @@ export interface CatSprite {
 export function createCatSprite(): CatSprite {
   const root = new Container();
   root.label = 'cat';
+
+  // Inner visual container for animation effects (scale, rotation, y-offset)
+  const visual = new Container();
+  visual.label = 'cat-visual';
+  root.addChild(visual);
 
   // Body — circle, Terracotta
   const body = new Graphics()
@@ -62,13 +73,11 @@ export function createCatSprite(): CatSprite {
     .fill(DESIGN_COLORS.NEAR_BLACK);
   eyes.label = 'cat-eyes';
 
-  root.addChild(body, leftEar, rightEar, eyes);
-
-  // Store base Y so animations can offset relative to rest position
-  const baseY = 0;
+  visual.addChild(body, leftEar, rightEar, eyes);
 
   return {
     container: root,
+    visual,
 
     setAnimation(_state: AnimationState, _effectsLayer?: Container): void {
       // Delegated to AnimationController — stub for interface completeness
