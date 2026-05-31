@@ -1,0 +1,51 @@
+"""VizEvent 单元测试 — EVNT-04。"""
+
+import json
+from typing import Any
+
+import pytest
+from pydantic import ValidationError
+
+from agent_framework.viz.viz_event import VizEvent, VizEventType
+
+
+def test_viz_event_creation() -> None:
+    event = VizEvent(
+        type="thinking",
+        agent="cat",
+        payload={"step": 1},
+        timestamp=1234.5,
+    )
+    assert event.type == "thinking"
+    assert event.agent == "cat"
+    assert event.payload == {"step": 1}
+    assert event.timestamp == 1234.5
+
+
+def test_viz_event_json_serialization() -> None:
+    event = VizEvent(
+        type="tool_call",
+        agent="dog",
+        payload={"tool": "search"},
+        timestamp=9999.0,
+    )
+    raw = event.model_dump_json()
+    data = json.loads(raw)
+    assert data["type"] == "tool_call"
+    assert data["agent"] == "dog"
+    assert data["payload"] == {"tool": "search"}
+    assert "timestamp" in data
+
+
+@pytest.mark.parametrize(
+    "valid_type",
+    ["idle", "thinking", "tool_call", "done", "error", "shutdown"],
+)
+def test_viz_event_valid_types(valid_type: VizEventType) -> None:
+    event = VizEvent(type=valid_type, agent="a", payload={}, timestamp=0.0)
+    assert event.type == valid_type
+
+
+def test_viz_event_type_invalid() -> None:
+    with pytest.raises(ValidationError):
+        VizEvent(type="invalid", agent="a", payload={}, timestamp=0.0)

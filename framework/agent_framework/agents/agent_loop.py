@@ -238,7 +238,7 @@ class AgentLoop(Agent):
             drift_text = DRIFT_WARN_TEMPLATE.format(drift_count=state.drift_count, plan_text=plan_text) + "\n\n"
         context = f"{drift_text}{plan_text}"
         plan_msg = UserMessage(content=[TextBlock(text=context)])
-        messages.insert(1, plan_msg)
+        messages.append(plan_msg)
 
     async def run(
         self,
@@ -314,9 +314,11 @@ class AgentLoop(Agent):
                         break
 
             if planning_state is not None:
-                # Remove previous plan context message (always at index 1 if it exists)
-                if len(self._messages) > 1 and self._is_plan_context_message(self._messages[1]):
-                    self._messages.pop(1)
+                # Remove previous plan context message (search entire list)
+                for i in range(len(self._messages) - 1, -1, -1):
+                    if self._is_plan_context_message(self._messages[i]):
+                        self._messages.pop(i)
+                        break
                 self._inject_plan_context(self._messages, planning_state)
 
             try:
