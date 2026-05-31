@@ -43,10 +43,10 @@
 
 ## CONC — WebSocket 客户端连接
 
-- [ ] **CONC-01**: 前端 WebSocket 客户端连接后端，连接断开时指数退避自动重连
-- [ ] **CONC-02**: WebSocket 消息通过 reducer 统一分发到 React 状态
+- [x] **CONC-01**: 前端 WebSocket 客户端连接后端，连接断开时指数退避自动重连
+- [x] **CONC-02**: WebSocket 消息通过 reducer 统一分发到 React 状态
 - [ ] **CONC-03**: React 状态通过 ref 桥接到 PixiJS，PixiJS ticker 每帧读取最新值渲染
-- [ ] **CONC-04**: 连接状态指示器显示 WebSocket 连接状态（绿=连接/黄=重连/红=断开）
+- [x] **CONC-04**: 连接状态指示器显示 WebSocket 连接状态（绿=连接/黄=重连/红=断开）
 - [ ] **CONC-05**: 事件日志列表实时展示接收到的 VizEvent，按时间排序
 
 ---
@@ -102,11 +102,11 @@
 | CNFG-02 | 11 | — | Pending |
 | CNFG-03 | 11 | — | Pending |
 | CNFG-04 | 11 | 11-01 | Complete |
-| CONC-01 | 11 | — | Pending |
-| CONC-02 | 11 | — | Pending |
+| CONC-01 | 11 | 11-02 | Complete |
+| CONC-02 | 11 | 11-02 | Complete |
 | CONC-03 | 11 | — | Pending |
-| CONC-04 | 11 | — | Pending |
+| CONC-04 | 11 | 11-02 | Complete |
 | CONC-05 | 11 | — | Pending |
 
 ---
-*Last updated: 2026-05-31 — CNFG-01, CNFG-04 completed in Plan 11-01*
+*Last updated: 2026-05-31 — CONC-01, CONC-02, CONC-04 completed in Plan 11-02*
