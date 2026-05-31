@@ -37,17 +37,17 @@
 ## CNFG — React 配置面板
 
 - [x] **CNFG-01**: 用户可通过表单创建 Agent（填写 name/role/system_prompt）
-- [ ] **CNFG-02**: 用户可点击按钮启动 Team（POST /api/team/start）
-- [ ] **CNFG-03**: 用户可点击按钮停止 Team（POST /api/team/stop）
+- [x] **CNFG-02**: 用户可点击按钮启动 Team（POST /api/team/start）
+- [x] **CNFG-03**: 用户可点击按钮停止 Team（POST /api/team/stop）
 - [x] **CNFG-04**: Agent 列表展示每个 agent 的名称和当前状态灯（idle/thinking/tool_call/shutdown）
 
 ## CONC — WebSocket 客户端连接
 
 - [x] **CONC-01**: 前端 WebSocket 客户端连接后端，连接断开时指数退避自动重连
 - [x] **CONC-02**: WebSocket 消息通过 reducer 统一分发到 React 状态
-- [ ] **CONC-03**: React 状态通过 ref 桥接到 PixiJS，PixiJS ticker 每帧读取最新值渲染
+- [x] **CONC-03**: React 状态通过 ref 桥接到 PixiJS，PixiJS ticker 每帧读取最新值渲染
 - [x] **CONC-04**: 连接状态指示器显示 WebSocket 连接状态（绿=连接/黄=重连/红=断开）
-- [ ] **CONC-05**: 事件日志列表实时展示接收到的 VizEvent，按时间排序
+- [x] **CONC-05**: 事件日志列表实时展示接收到的 VizEvent，按时间排序
 
 ---
 
@@ -99,14 +99,14 @@
 | RNDR-06 | 10 | — | Pending |
 | RNDR-07 | 10 | — | Pending |
 | CNFG-01 | 11 | 11-01 | Complete |
-| CNFG-02 | 11 | — | Pending |
-| CNFG-03 | 11 | — | Pending |
+| CNFG-02 | 11 | 11-03 | Complete |
+| CNFG-03 | 11 | 11-03 | Complete |
 | CNFG-04 | 11 | 11-01 | Complete |
 | CONC-01 | 11 | 11-02 | Complete |
 | CONC-02 | 11 | 11-02 | Complete |
-| CONC-03 | 11 | — | Pending |
+| CONC-03 | 11 | 11-03 | Complete |
 | CONC-04 | 11 | 11-02 | Complete |
-| CONC-05 | 11 | — | Pending |
+| CONC-05 | 11 | 11-03 | Complete |
 
 ---
-*Last updated: 2026-05-31 — CONC-01, CONC-02, CONC-04 completed in Plan 11-02*
+*Last updated: 2026-05-31 — CNFG-02, CNFG-03, CONC-03, CONC-05 completed in Plan 11-03*
