@@ -1,0 +1,32 @@
+import { useChatStore } from '../store'
+import { useAutoScroll } from '../hooks/useAutoScroll'
+import { UserBubble } from './UserBubble'
+import { AgentResponse } from './AgentResponse'
+import { SystemNotification } from './SystemNotification'
+
+export function MessageList() {
+  const messages = useChatStore((s) => s.messages)
+  const { containerRef, onScroll } = useAutoScroll<HTMLDivElement>(messages)
+
+  return (
+    <div ref={containerRef}
+      onScroll={onScroll}
+      className="flex-1 overflow-y-auto px-4 py-4"
+      style={{ backgroundColor: 'var(--bg-parchment)' }}>
+      <div className="max-w-3xl mx-auto flex flex-col gap-4">
+        {messages.map((msg) => {
+          if (msg.role === 'user') {
+            return <UserBubble key={msg.id} message={msg} />
+          }
+          if (msg.role === 'agent') {
+            return <AgentResponse key={msg.id} message={msg} />
+          }
+          if (msg.role === 'system') {
+            return <SystemNotification key={msg.id} message={msg} />
+          }
+          return null
+        })}
+      </div>
+    </div>
+  )
+}
