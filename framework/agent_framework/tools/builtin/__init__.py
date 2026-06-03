@@ -7,6 +7,7 @@ from agent_framework.tools.registry import ToolRegistry
 from agent_framework.tools.types import ToolSpec
 
 from .file_tools import read_file, write_file
+from .memory_tools import handle_memory_search
 from .plan_tools import handle_update_plan_status
 from .search_tools import web_search
 
@@ -66,6 +67,24 @@ def create_builtin_registry() -> ToolRegistry:
         ),
         handler=web_search,
         timeout_ms=15_000,
+    ))
+
+    registry.register(ToolSpec(
+        name="memory_search",
+        description=(
+            "搜索历史记忆和工作记录。"
+            "适合：回忆之前的决策、偏好、错误修复记录。"
+            "不适合：当前对话中已有的信息。"
+        ),
+        parameters=ToolParameterSchema(
+            properties={
+                "query": {"type": "string", "description": "搜索关键词"},
+                "top_k": {"type": "integer", "description": "返回结果数量，默认 10"},
+            },
+            required=["query"],
+        ),
+        handler=handle_memory_search,
+        timeout_ms=10_000,
     ))
 
     registry.register(ToolSpec(
