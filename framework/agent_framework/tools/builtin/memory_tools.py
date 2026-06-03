@@ -1,15 +1,42 @@
-"""记忆搜索工具 — 从每日日志中搜索历史事件。"""
+"""记忆工具 — 写入情景事件 & 搜索历史记忆。"""
 
 from __future__ import annotations
 
 import logging
 import re
+from datetime import datetime
 from pathlib import Path
 
 from agent_framework.memory.log_manager import EpisodicLogManager
+from agent_framework.memory.types import EventType
 from agent_framework.tools.types import ToolResult, ToolUseContext
 
 logger = logging.getLogger(__name__)
+
+
+async def handle_memory_write(args: dict, ctx: ToolUseContext) -> ToolResult:
+    """写入一条情景记忆到当日日志。"""
+    memory_dir = ctx.extra.get("memory_dir")
+    if memory_dir is None:
+        logger.warning("memory_write 调用时缺少 memory_dir 配置")
+        return ToolResult(content="记忆系统未配置（缺少 memory_dir）", is_error=True)
+
+    raw_type = args.get("event_type", "")
+    content = args.get("content", "")
+
+    if not content.strip():
+        return ToolResult(content="content 不能为空", is_error=True)
+
+    try:
+        event_type = EventType(raw_type)
+    except ValueError:
+        valid = ", ".join(t.value for t in EventType)
+        return ToolResult(content=f"event_type 无效，可选值: {valid}", is_error=True)
+
+    log_manager = EpisodicLogManager(memory_dir=Path(memory_dir))
+    log_manager.append(datetime.now(), event_type, content)
+
+    return ToolResult(content=f"已记录 [{event_type.value}] {content[:50]}")
 
 
 async def handle_memory_search(args: dict, ctx: ToolUseContext) -> ToolResult:

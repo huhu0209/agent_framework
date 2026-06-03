@@ -17,11 +17,14 @@ def ctx(tmp_path):
 
 class TestBuiltinRegistry:
     def test_has_three_tools(self, registry):
-        assert set(registry.list_tools()) == {"read_file", "write_file", "web_search", "update_plan_status"}
+        assert set(registry.list_tools()) == {
+            "read_file", "write_file", "web_search",
+            "update_plan_status", "memory_search", "memory_write",
+        }
 
     def test_definitions_valid(self, registry):
         defs = registry.get_definitions()
-        assert len(defs) == 4
+        assert len(defs) == 6
         for d in defs:
             assert d.name
             assert d.description

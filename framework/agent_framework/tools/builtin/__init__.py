@@ -7,7 +7,7 @@ from agent_framework.tools.registry import ToolRegistry
 from agent_framework.tools.types import ToolSpec
 
 from .file_tools import read_file, write_file
-from .memory_tools import handle_memory_search
+from .memory_tools import handle_memory_search, handle_memory_write
 from .plan_tools import handle_update_plan_status
 from .search_tools import web_search
 
@@ -67,6 +67,30 @@ def create_builtin_registry() -> ToolRegistry:
         ),
         handler=web_search,
         timeout_ms=15_000,
+    ))
+
+    registry.register(ToolSpec(
+        name="memory_write",
+        description=(
+            "记录值得跨会话保留的事件到长期记忆。"
+            "该记的：做出了影响后续的选择（decision）、用户纠正了你的做法或表达了偏好（preference）、"
+            "遇到了值得记住的错误和修复方式（error）、确立了命名规范或工作流约定（convention）、"
+            "完成了有意义的里程碑（progress）。"
+            "不该记的：临时调试信息、当前对话已充分讨论的内容、下次不需要知道的事。"
+        ),
+        parameters=ToolParameterSchema(
+            properties={
+                "event_type": {
+                    "type": "string",
+                    "enum": ["决策", "偏好", "错误", "约定", "进展"],
+                    "description": "事件类型：决策(影响后续的选择)、偏好(用户纠正或倾向)、错误(值得记住的bug和修复)、约定(命名规范或工作流)、进展(有意义的里程碑)",
+                },
+                "content": {"type": "string", "description": "简要描述事件内容和原因"},
+            },
+            required=["event_type", "content"],
+        ),
+        handler=handle_memory_write,
+        timeout_ms=5_000,
     ))
 
     registry.register(ToolSpec(
