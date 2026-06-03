@@ -33,6 +33,7 @@ from agent_framework.orchestrator.planner import (
     parse_plan_response,
     strip_plan_tags,
 )
+from agent_framework.memory.flush import FlushExtractor
 from agent_framework.memory.semantic_extractor import SemanticExtractor
 from agent_framework.prompts.assembler import PromptAssembler
 from agent_framework.prompts.profiles import AgentProfile
@@ -118,8 +119,10 @@ class AgentLoop(Agent):
             self.router.registry.register(spec)
             self.ctx.extra["skill_registry"] = self._skill_registry
 
-        # Integration hook: enable episodic memory flush at end of conversation.
-        self._memory_flush_enabled = memory_flush_enabled
+        # Integration hook: flush episodic memory before context compaction.
+        self._flush_extractor = (
+            FlushExtractor(adapter, model) if memory_flush_enabled else None
+        )
         # Integration hook: extract semantic memories from conversation.
         self._semantic_extractor = semantic_extractor
 
@@ -172,6 +175,26 @@ class AgentLoop(Agent):
                 return block.text
         return None
 
+    def _serialize_for_flush(self, messages: list[Message]) -> str:
+        """将消息列表序列化为文本字符串，供 flush prompt 使用。"""
+        parts: list[str] = []
+        for msg in messages:
+            if isinstance(msg, SystemMessage):
+                role, text = "system", msg.content
+            elif isinstance(msg, UserMessage):
+                role = "user"
+                text = " ".join(b.text for b in msg.content if isinstance(b, TextBlock))
+            elif isinstance(msg, AssistantMessage):
+                role = "assistant"
+                text = " ".join(b.text for b in msg.content if isinstance(b, TextBlock))
+            elif isinstance(msg, ToolMessage):
+                role, text = "tool", msg.content
+            else:
+                continue
+            if text and text.strip():
+                parts.append(f"[{role}] {text.strip()}")
+        return "\n\n".join(parts)
+
     def _strip_plan_from_content(self, content: list) -> list:
         cleaned = []
         for block in content:
@@ -199,6 +222,10 @@ class AgentLoop(Agent):
         step: int,
     ) -> list[Message]:
         """每轮调用前检查是否需要压缩。"""
+        from datetime import datetime as dt
+
+        from agent_framework.memory.log_manager import EpisodicLogManager
+
         config = self._build_config(messages)
         window = get_effective_window(self.adapter, config)
         compact_config = CompactConfig(
@@ -216,14 +243,35 @@ class AgentLoop(Agent):
         if not should_compact(estimated, window, compact_config):
             return messages
 
+        # Prepare flush (best-effort, parallel with compact)
+        flush_coro = None
+        if self._flush_extractor is not None:
+            memory_dir = self.ctx.extra.get("memory_dir")
+            if memory_dir:
+                text = self._serialize_for_flush(messages)
+                log_mgr = EpisodicLogManager(Path(memory_dir))
+                existing = log_mgr.read_log(dt.now().strftime("%Y-%m-%d"))
+                flush_coro = self._flush_extractor.flush(
+                    text, dt.now(), log_mgr, existing_log=existing,
+                )
+
         # Circuit breaker: skip after 3 consecutive failures
         if self._compact_failures >= 3:
             return messages
 
         try:
-            result = await compact(
-                messages, self.compact_adapter, self.model, compact_config, step,
-            )
+            if flush_coro is not None:
+                _, result = await asyncio.gather(
+                    flush_coro,
+                    compact(messages, self.compact_adapter, self.model, compact_config, step),
+                    return_exceptions=True,
+                )
+                if isinstance(result, Exception):
+                    raise result
+            else:
+                result = await compact(
+                    messages, self.compact_adapter, self.model, compact_config, step,
+                )
             self._compact_failures = 0
             return result
         except Exception:

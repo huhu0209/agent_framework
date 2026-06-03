@@ -50,13 +50,17 @@ class FlushExtractor:
         self,
         conversation_text: str,
         current_time: datetime,
+        existing_log: str | None = None,
     ) -> str | None:
         """调 LLM 提取关键事件。无事件返回 None。"""
+        user_text = f"当前时间: {current_time.strftime('%Y-%m-%d %H:%M')}\n\n"
+        if existing_log:
+            user_text += f"以下事件已经记录过（请勿重复提取）：\n{existing_log}\n\n"
+        user_text += f"对话：\n{conversation_text}"
+
         messages = [
             SystemMessage(content=_FLUSH_SYSTEM_PROMPT),
-            UserMessage(content=[TextBlock(
-                text=f"当前时间: {current_time.strftime('%Y-%m-%d %H:%M')}\n\n对话：\n{conversation_text}",
-            )]),
+            UserMessage(content=[TextBlock(text=user_text)]),
         ]
 
         config = CompletionConfig(
@@ -84,9 +88,10 @@ class FlushExtractor:
         conversation_text: str,
         current_time: datetime,
         log_manager: EpisodicLogManager,
+        existing_log: str | None = None,
     ) -> bool:
         """提取事件并追加到每日日志。有事件写入返回 True。"""
-        events_text = await self.extract(conversation_text, current_time)
+        events_text = await self.extract(conversation_text, current_time, existing_log)
         if events_text is None:
             return False
 
