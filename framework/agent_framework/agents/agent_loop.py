@@ -157,6 +157,11 @@ class AgentLoop(Agent):
                         f"使用 memory_search(\"关键词\") 搜索相关历史。"
                     )
 
+            from agent_framework.memory.store import MemoryStore
+            self.ctx.extra["memory_store"] = MemoryStore(
+                adapter=adapter, model=model, memory_dir=Path(memory_dir),
+            )
+
     def _build_config(self, messages: list[Message]) -> CompletionConfig:
         tools = self.router.registry.get_definitions()
         return CompletionConfig(model=self.model, messages=messages, tools=tools)
@@ -260,14 +265,15 @@ class AgentLoop(Agent):
 
         # Prepare flush (best-effort, parallel with compact)
         flush_coro = None
+        _conv_text: str | None = None
         if self._flush_extractor is not None:
             memory_dir = self.ctx.extra.get("memory_dir")
             if memory_dir:
-                text = self._serialize_for_flush(messages)
+                _conv_text = self._serialize_for_flush(messages)
                 log_mgr = EpisodicLogManager(Path(memory_dir))
                 existing = log_mgr.read_log(dt.now().strftime("%Y-%m-%d"))
                 flush_coro = self._flush_extractor.flush(
-                    text, dt.now(), log_mgr, existing_log=existing,
+                    _conv_text, dt.now(), log_mgr, existing_log=existing,
                 )
 
         # Circuit breaker: skip after 3 consecutive failures
@@ -288,6 +294,21 @@ class AgentLoop(Agent):
                     messages, self.compact_adapter, self.model, compact_config, step,
                 )
             self._compact_failures = 0
+
+            # Cascade: extract semantic memories before context is lost
+            if self._semantic_extractor is not None:
+                memory_dir = self.ctx.extra.get("memory_dir")
+                if memory_dir:
+                    if _conv_text is None:
+                        _conv_text = self._serialize_for_flush(messages)
+                    try:
+                        drafts = await self._semantic_extractor.extract_from_messages(_conv_text)
+                        if drafts:
+                            from agent_framework.memory.semantic_writer import SemanticWriter
+                            SemanticWriter(Path(memory_dir)).write_batch(drafts)
+                    except Exception:
+                        logger.debug("语义记忆提取失败（best-effort）", exc_info=True)
+
             return result
         except Exception:
             self._compact_failures += 1

@@ -1,11 +1,31 @@
-import type { ChatMessage } from '../types'
+import type { AgentBlock, ChatMessage } from '../types'
 import { ThinkingBlock } from './ThinkingBlock'
 import { ToolCallBlock } from './ToolCallBlock'
-import { ToolResultBlock } from './ToolResultBlock'
 import { TextResponseBlock } from './TextResponseBlock'
+
+function groupBlocks(blocks: AgentBlock[]) {
+  const grouped: { block: AgentBlock; result?: AgentBlock }[] = []
+  const paired = new Set<string>()
+
+  for (let i = 0; i < blocks.length; i++) {
+    if (paired.has(blocks[i].id)) continue
+
+    if (blocks[i].kind === 'tool_call') {
+      const next = blocks[i + 1]
+      const result = next?.kind === 'tool_result' ? next : undefined
+      if (result) paired.add(result.id)
+      grouped.push({ block: blocks[i], result })
+    } else {
+      grouped.push({ block: blocks[i] })
+    }
+  }
+
+  return grouped
+}
 
 export function AgentResponse({ message }: { message: ChatMessage }) {
   const blocks = message.blocks ?? []
+  const grouped = groupBlocks(blocks)
 
   return (
     <div className="max-w-[85%] rounded-xl px-4 py-3"
@@ -22,14 +42,14 @@ export function AgentResponse({ message }: { message: ChatMessage }) {
         </div>
       )}
       <div className="flex flex-col gap-2.5">
-        {blocks.map((block) => {
+        {grouped.map(({ block, result }) => {
           switch (block.kind) {
             case 'thinking':
               return <ThinkingBlock key={block.id} block={block} />
             case 'tool_call':
-              return <ToolCallBlock key={block.id} block={block} />
+              return <ToolCallBlock key={block.id} block={block} result={result} />
             case 'tool_result':
-              return <ToolResultBlock key={block.id} block={block} />
+              return <ToolCallBlock key={block.id} block={block} />
             case 'text_response':
               return <TextResponseBlock key={block.id} block={block} />
           }

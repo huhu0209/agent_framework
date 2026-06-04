@@ -40,10 +40,22 @@ async def handle_memory_write(args: dict, ctx: ToolUseContext) -> ToolResult:
 
 
 async def handle_memory_search(args: dict, ctx: ToolUseContext) -> ToolResult:
-    """搜索历史记忆和工作记录。"""
+    """搜索历史记忆和工作记录（情景 + 语义双层）。"""
     query = args.get("query", "")
     top_k = args.get("top_k", 10)
 
+    memory_store = ctx.extra.get("memory_store")
+    if memory_store is not None:
+        results = await memory_store.search(query, top_k=top_k)
+        if not results:
+            return ToolResult(content="未找到相关记忆。")
+        parts = []
+        for r in results:
+            label = "[情景]" if r.source == "episodic" else "[语义]"
+            parts.append(f"{label} {r.file}\n{r.content}")
+        return ToolResult(content="\n\n".join(parts))
+
+    # fallback: 纯关键词搜索（memory_store 未配置时）
     memory_dir = ctx.extra.get("memory_dir")
     if memory_dir is None:
         logger.warning("memory_search 调用时缺少 memory_dir 配置")
