@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel
 
-VizEventType = Literal["idle", "thinking", "tool_call", "done", "error", "shutdown"]
+VizEventType = Literal["idle", "thinking", "tool_call", "tool_result", "done", "error", "shutdown"]
 
 
 class VizEvent(BaseModel):

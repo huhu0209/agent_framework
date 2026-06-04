@@ -29,3 +29,10 @@ export interface MockScenario {
   events: AgentBlockInit[];
   delays: number[];
 }
+
+export interface VizEvent {
+  type: 'idle' | 'thinking' | 'tool_call' | 'tool_result' | 'done' | 'error' | 'shutdown'
+  agent: string
+  payload: Record<string, unknown>
+  timestamp: number
+}

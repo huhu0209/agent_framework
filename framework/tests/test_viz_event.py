@@ -39,7 +39,7 @@ def test_viz_event_json_serialization() -> None:
 
 @pytest.mark.parametrize(
     "valid_type",
-    ["idle", "thinking", "tool_call", "done", "error", "shutdown"],
+    ["idle", "thinking", "tool_call", "tool_result", "done", "error", "shutdown"],
 )
 def test_viz_event_valid_types(valid_type: VizEventType) -> None:
     event = VizEvent(type=valid_type, agent="a", payload={}, timestamp=0.0)

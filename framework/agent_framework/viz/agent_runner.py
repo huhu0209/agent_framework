@@ -25,8 +25,7 @@ class AgentRunner:
 
         try:
             async for event in loop_gen:
-                viz = self._map(event)
-                if viz is not None:
+                for viz in self._map(event):
                     await self._bus.publish(viz.model_dump())
                 yield event
         except Exception as exc:
@@ -35,29 +34,52 @@ class AgentRunner:
         finally:
             await self._publish("shutdown", {})
 
-    def _map(self, event: LoopEvent) -> VizEvent | None:
-        """将 LoopEvent 映射为 VizEvent（per D-07）。"""
+    def _map(self, event: LoopEvent) -> list[VizEvent]:
+        """将 LoopEvent 映射为零或多个 VizEvent。"""
         event_type = event.type
         data = event.data
 
         if event_type == "step":
             stop_reason = data.get("stop_reason")
             if stop_reason == "tool_use":
-                return self._make_viz("thinking", {"step": event.step, **data})
+                return [self._make_viz("thinking", {"step": event.step, **data})]
             if stop_reason in ("end_turn", "stop_sequence"):
-                return self._make_viz("done", {"step": event.step, **data})
-            return None
+                return [self._make_viz("done", {"step": event.step, **data})]
+            return []
 
         if event_type == "tool_result":
-            return self._make_viz("tool_call", {"step": event.step, **data})
+            results: list[VizEvent] = []
+            tool_calls = data.get("tool_calls", [])
+            tool_results_raw = data.get("tool_results", [])
+
+            for i, tc in enumerate(tool_calls):
+                result_content = tool_results_raw[i] if i < len(tool_results_raw) else ""
+                tc_id = tc.get("id", "")
+                tc_name = tc.get("name", "")
+                tc_input = tc.get("input", {})
+
+                results.append(self._make_viz("tool_call", {
+                    "step": event.step,
+                    "tool_call_id": tc_id,
+                    "tool_name": tc_name,
+                    "params": tc_input,
+                }))
+                results.append(self._make_viz("tool_result", {
+                    "step": event.step,
+                    "tool_call_id": tc_id,
+                    "tool_name": tc_name,
+                    "content": result_content,
+                }))
+
+            return results
 
         if event_type == "done":
-            return self._make_viz("done", {"step": event.step, **data})
+            return [self._make_viz("done", {"step": event.step, **data})]
 
         if event_type in ("error", "max_steps"):
-            return self._make_viz("error", {"step": event.step, **data})
+            return [self._make_viz("error", {"step": event.step, **data})]
 
-        return None
+        return []
 
     async def _publish(self, viz_type: str, payload: dict[str, Any]) -> None:
         viz = self._make_viz(viz_type, payload)

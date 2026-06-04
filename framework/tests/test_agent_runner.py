@@ -66,13 +66,45 @@ async def test_maps_step_stop_sequence_to_done() -> None:
     assert len(done) == 1
 
 
-async def test_maps_tool_result_to_tool_call() -> None:
+async def test_maps_tool_result_emits_call_and_result() -> None:
     bus = EventBus()
     runner = AgentRunner("test", bus)
-    event = LoopEvent(type="tool_result", step=1, data={"tool_calls": [], "tool_results": []})
+    event = LoopEvent(type="tool_result", step=1, data={
+        "tool_calls": [{"id": "tc_1", "name": "search", "input": {"q": "weather"}}],
+        "tool_results": ["sunny, 22C"],
+    })
     _, viz_events = await _collect_events(runner, event)
-    tool_call = _find_by_type(viz_events, "tool_call")
-    assert len(tool_call) == 1
+    calls = _find_by_type(viz_events, "tool_call")
+    results = _find_by_type(viz_events, "tool_result")
+    assert len(calls) == 1
+    assert len(results) == 1
+    assert calls[0]["payload"]["tool_call_id"] == "tc_1"
+    assert calls[0]["payload"]["tool_name"] == "search"
+    assert calls[0]["payload"]["params"] == {"q": "weather"}
+    assert results[0]["payload"]["tool_call_id"] == "tc_1"
+    assert results[0]["payload"]["tool_name"] == "search"
+    assert results[0]["payload"]["content"] == "sunny, 22C"
+
+
+async def test_maps_tool_result_with_multiple_tools() -> None:
+    bus = EventBus()
+    runner = AgentRunner("test", bus)
+    event = LoopEvent(type="tool_result", step=1, data={
+        "tool_calls": [
+            {"id": "tc_1", "name": "search", "input": {"q": "a"}},
+            {"id": "tc_2", "name": "read_file", "input": {"path": "f.txt"}},
+        ],
+        "tool_results": ["result_a", "result_b"],
+    })
+    _, viz_events = await _collect_events(runner, event)
+    calls = _find_by_type(viz_events, "tool_call")
+    results = _find_by_type(viz_events, "tool_result")
+    assert len(calls) == 2
+    assert len(results) == 2
+    assert calls[0]["payload"]["tool_name"] == "search"
+    assert results[0]["payload"]["content"] == "result_a"
+    assert calls[1]["payload"]["tool_name"] == "read_file"
+    assert results[1]["payload"]["content"] == "result_b"
 
 
 async def test_maps_done_to_done() -> None:

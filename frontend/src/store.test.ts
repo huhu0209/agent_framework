@@ -9,6 +9,7 @@ beforeEach(() => {
     connectionMode: 'mock',
     agentName: 'Agent',
     isStreaming: false,
+    sessionId: null,
   })
 })
 
