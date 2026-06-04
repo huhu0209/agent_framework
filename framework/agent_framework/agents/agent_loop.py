@@ -142,6 +142,21 @@ class AgentLoop(Agent):
         else:
             self._system_prompt_text = system_prompt
 
+        # 注入记忆索引到 system prompt
+        memory_dir = self.ctx.extra.get("memory_dir")
+        if memory_dir:
+            memory_index_path = Path(memory_dir) / "MEMORY.md"
+            if memory_index_path.exists():
+                index_content = memory_index_path.read_text(encoding="utf-8").strip()
+                if index_content:
+                    self._system_prompt_text += (
+                        f"\n\n# 记忆系统\n"
+                        f"## 语义记忆索引\n{index_content}\n\n"
+                        f"## 情景记忆\n"
+                        f"历史决策、偏好、错误记录存储在每日日志中。"
+                        f"使用 memory_search(\"关键词\") 搜索相关历史。"
+                    )
+
     def _build_config(self, messages: list[Message]) -> CompletionConfig:
         tools = self.router.registry.get_definitions()
         return CompletionConfig(model=self.model, messages=messages, tools=tools)
