@@ -8,14 +8,24 @@ export interface ChatMessage {
   blocks?: AgentBlock[];
 }
 
+export type AgentBlockKind = 'thinking' | 'tool_call' | 'tool_result' | 'text_response'
+
+type BlockBase<K extends AgentBlockKind> = { id: string; kind: K }
+
 export type AgentBlock =
-  | { kind: 'thinking'; text: string }
-  | { kind: 'tool_call'; toolName: string; params: Record<string, unknown> }
-  | { kind: 'tool_result'; content: string }
-  | { kind: 'text_response'; text: string };
+  | BlockBase<'thinking'> & { text: string }
+  | BlockBase<'tool_call'> & { toolName: string; params: Record<string, unknown> }
+  | BlockBase<'tool_result'> & { content: string }
+  | BlockBase<'text_response'> & { text: string }
+
+export type AgentBlockInit =
+  | Omit<Extract<AgentBlock, { kind: 'thinking' }>, 'id'>
+  | Omit<Extract<AgentBlock, { kind: 'tool_call' }>, 'id'>
+  | Omit<Extract<AgentBlock, { kind: 'tool_result' }>, 'id'>
+  | Omit<Extract<AgentBlock, { kind: 'text_response' }>, 'id'>
 
 export interface MockScenario {
   userMessage: string;
-  events: AgentBlock[];
+  events: AgentBlockInit[];
   delays: number[];
 }

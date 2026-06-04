@@ -6,6 +6,7 @@ import { SystemNotification } from './SystemNotification'
 
 export function MessageList() {
   const messages = useChatStore((s) => s.messages)
+  const streamingMessage = useChatStore((s) => s.streamingMessage)
   const { containerRef, onScroll } = useAutoScroll<HTMLDivElement>(messages)
 
   return (
@@ -26,6 +27,7 @@ export function MessageList() {
           }
           return null
         })}
+        {streamingMessage && <AgentResponse key={streamingMessage.id} message={streamingMessage} />}
       </div>
     </div>
   )

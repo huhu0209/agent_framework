@@ -22,16 +22,16 @@ export function AgentResponse({ message }: { message: ChatMessage }) {
         </div>
       )}
       <div className="flex flex-col gap-2.5">
-        {blocks.map((block, i) => {
+        {blocks.map((block) => {
           switch (block.kind) {
             case 'thinking':
-              return <ThinkingBlock key={i} block={block} />
+              return <ThinkingBlock key={block.id} block={block} />
             case 'tool_call':
-              return <ToolCallBlock key={i} block={block} />
+              return <ToolCallBlock key={block.id} block={block} />
             case 'tool_result':
-              return <ToolResultBlock key={i} block={block} />
+              return <ToolResultBlock key={block.id} block={block} />
             case 'text_response':
-              return <TextResponseBlock key={i} block={block} />
+              return <TextResponseBlock key={block.id} block={block} />
           }
         })}
       </div>

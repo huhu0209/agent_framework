@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react'
 
-export function useAutoScroll<T extends HTMLElement>(dependency: unknown) {
+export function useAutoScroll<T extends HTMLElement>(dependency: unknown[]) {
   const containerRef = useRef<T>(null)
   const wasAtBottom = useRef(true)
 

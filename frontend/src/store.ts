@@ -2,13 +2,18 @@ import { create } from 'zustand'
 import type { AgentBlock, ChatMessage, MessageRole } from './types'
 import { streamMockResponse } from './mock/engine'
 
-let nextId = 1
+let _nextId = 1
 function uid(): string {
-  return `msg-${nextId++}-${Date.now()}`
+  return `msg-${_nextId++}-${Date.now()}`
+}
+
+export function resetIdCounter() {
+  _nextId = 1
 }
 
 interface ChatStore {
   messages: ChatMessage[]
+  streamingMessage: ChatMessage | null
   connectionMode: 'mock' | 'ws'
   agentName: string
   isStreaming: boolean
@@ -18,6 +23,7 @@ interface ChatStore {
 
 export const useChatStore = create<ChatStore>((set, get) => ({
   messages: [],
+  streamingMessage: null,
   connectionMode: 'mock',
   agentName: 'Agent',
   isStreaming: false,
@@ -49,26 +55,32 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
 
     set((s) => ({
-      messages: [...s.messages, userMsg, agentMsg],
+      messages: [...s.messages, userMsg],
+      streamingMessage: agentMsg,
       isStreaming: true,
     }))
 
     try {
       for await (const block of streamMockResponse(text)) {
         set((s) => {
-          const msgs = [...s.messages]
-          const lastIdx = msgs.length - 1
-          const last = msgs[lastIdx]
-          if (last.role !== 'agent') return s
-          msgs[lastIdx] = {
-            ...last,
-            blocks: [...(last.blocks ?? []), block as AgentBlock],
+          if (!s.streamingMessage) return s
+          return {
+            streamingMessage: {
+              ...s.streamingMessage,
+              blocks: [...(s.streamingMessage.blocks ?? []), block as AgentBlock],
+            },
           }
-          return { messages: msgs }
         })
       }
+      const final = get().streamingMessage
+      if (final) {
+        set((s) => ({
+          messages: [...s.messages, final],
+          streamingMessage: null,
+        }))
+      }
     } finally {
-      set({ isStreaming: false })
+      set({ isStreaming: false, streamingMessage: null })
     }
   },
 }))

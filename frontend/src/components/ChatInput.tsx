@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from 'react'
+import { useState, useRef, useCallback, type KeyboardEvent } from 'react'
 import { useChatStore } from '../store'
 
 export function ChatInput() {
@@ -21,11 +21,21 @@ export function ChatInput() {
     }
   }
 
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const adjustHeight = useCallback(() => {
+    const el = textareaRef.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px'
+  }, [])
+
   return (
     <div className="px-4 py-3"
       style={{ backgroundColor: 'var(--bg-ivory)', borderTop: '1px solid var(--border-cream)' }}>
       <div className="flex items-end gap-2 max-w-3xl mx-auto">
         <textarea
+          ref={textareaRef}
           className="flex-1 resize-none rounded-xl px-4 py-2.5 text-base outline-none"
           style={{
             backgroundColor: 'var(--bg-parchment)',
@@ -37,7 +47,7 @@ export function ChatInput() {
           rows={1}
           placeholder="输入消息…"
           value={value}
-          onChange={(e) => setValue(e.target.value)}
+          onChange={(e) => { setValue(e.target.value); adjustHeight() }}
           onKeyDown={handleKeyDown}
           disabled={isStreaming}
         />
