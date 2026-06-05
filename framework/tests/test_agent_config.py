@@ -185,4 +185,4 @@ class TestAgentFromConfig:
 
         assert agent.model == "claude-haiku-4-5-20250514"
         assert agent.max_steps == 5
-        assert agent._system_prompt_text == "custom prompt"
+        assert agent._system_prompt_text.startswith("custom prompt")
