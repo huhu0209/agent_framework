@@ -29,15 +29,13 @@ from agent_framework.orchestrator.planner import (
     DriftLevel,
     PlanItem,
     PlanSnapshot,
-    PlanningState,
-    parse_plan_response,
     strip_plan_tags,
 )
+from agent_framework.orchestrator.planning_session import PlanningSession
 from agent_framework.memory.flush import FlushExtractor
 from agent_framework.memory.semantic_extractor import SemanticExtractor
 from agent_framework.prompts.assembler import PromptAssembler
 from agent_framework.prompts.profiles import AgentProfile
-from agent_framework.prompts.templates import DRIFT_WARN_TEMPLATE
 from agent_framework.tools.context.compactor import CompactConfig, compact, should_compact
 from agent_framework.tools.context.token_counter import (
     estimate_tokens,
@@ -96,8 +94,7 @@ class AgentLoop(Agent):
         self.router = router
         self.ctx = ctx
         self.max_steps = max_steps
-        self.drift_warn = drift_warn
-        self.drift_abort = drift_abort
+        self._planning = PlanningSession(allow_replan=True, drift_warn=drift_warn, drift_abort=drift_abort)
         self.compact_adapter = compact_adapter or adapter
         self.compact_keep_turns = compact_keep_turns
         self.compact_trigger_pct = compact_trigger_pct
@@ -162,6 +159,10 @@ class AgentLoop(Agent):
                 adapter=adapter, model=model, memory_dir=Path(memory_dir),
             )
 
+        # 追加计划生成指令（仅无 profile 时）
+        if self.profile is None:
+            self._system_prompt_text += "\n\n" + PlanningSession.plan_instruction_prompt()
+
     def _build_config(self, messages: list[Message]) -> CompletionConfig:
         tools = self.router.registry.get_definitions()
         return CompletionConfig(model=self.model, messages=messages, tools=tools)
@@ -169,25 +170,6 @@ class AgentLoop(Agent):
     def _extract_tool_calls(self, result: CompletionResult) -> list[ToolUseBlock]:
         return [b for b in result.content if isinstance(b, ToolUseBlock)]
 
-    def _make_plan_snapshot(self, state: PlanningState | None) -> PlanSnapshot | None:
-        if state is None:
-            return None
-        return state.snapshot()
-
-    def _try_parse_plan(
-        self, result: CompletionResult, existing_state: PlanningState | None,
-    ) -> PlanningState | None:
-        if existing_state is not None:
-            return existing_state
-        text = self._extract_text(result)
-        if text is None:
-            return existing_state
-        items = parse_plan_response(text)
-        if items is None:
-            return existing_state
-        state = PlanningState(items=items, current_focus=None, plan_source="llm_generated")
-        self.ctx.extra["planning_state"] = state
-        return state
 
     def _extract_text(self, result: CompletionResult) -> str | None:
         for block in result.content:
@@ -224,17 +206,6 @@ class AgentLoop(Agent):
             else:
                 cleaned.append(block)
         return cleaned
-
-    def _is_plan_context_message(self, msg: Message) -> bool:
-        """Check if a message is a plan context injection."""
-        if not isinstance(msg, UserMessage):
-            return False
-        if not msg.content:
-            return False
-        first = msg.content[0]
-        if not isinstance(first, TextBlock):
-            return False
-        return first.text.startswith("当前计划进度：") or first.text.startswith("[偏离提醒]")
 
     async def _maybe_compact(
         self,
@@ -314,16 +285,6 @@ class AgentLoop(Agent):
             self._compact_failures += 1
             return messages
 
-    def _inject_plan_context(self, messages: list[Message], state: PlanningState) -> None:
-        plan_text = state.format_for_injection()
-        drift_text = ""
-        drift = state.check_drift(self.drift_warn, self.drift_abort)
-        if drift == DriftLevel.WARN:
-            drift_text = DRIFT_WARN_TEMPLATE.format(drift_count=state.drift_count, plan_text=plan_text) + "\n\n"
-        context = f"{drift_text}{plan_text}"
-        plan_msg = UserMessage(content=[TextBlock(text=context)])
-        messages.append(plan_msg)
-
     async def run(
         self,
         user_message: str,
@@ -356,15 +317,10 @@ class AgentLoop(Agent):
                         TextBlock(text=f"[Hook] {result.inject_message}")
                     ]))
 
-        planning_state: PlanningState | None = None
         # 1. 如果提供了计划，初始化计划状态
         if plan is not None:
-            planning_state = PlanningState(
-                items=[PlanItem(id=i.id, action=i.action, status=i.status) for i in plan],
-                current_focus=None,
-                plan_source="caller_injected",
-            )
-            self.ctx.extra["planning_state"] = planning_state
+            self._planning.create_from_items(plan, "caller_injected")
+            self.ctx.extra["planning_session"] = self._planning
 
         plan_checked = False
 
@@ -397,13 +353,19 @@ class AgentLoop(Agent):
                     except asyncio.QueueEmpty:
                         break
 
-            if planning_state is not None:
-                # Remove previous plan context message (search entire list)
+            if self._planning.has_plan:
+                # 删除上一轮注入的计划消息
                 for i in range(len(self._messages) - 1, -1, -1):
-                    if self._is_plan_context_message(self._messages[i]):
-                        self._messages.pop(i)
-                        break
-                self._inject_plan_context(self._messages, planning_state)
+                    msg = self._messages[i]
+                    if isinstance(msg, UserMessage) and msg.content:
+                        first = msg.content[0]
+                        if isinstance(first, TextBlock) and self._planning.is_plan_context_text(first.text):
+                            self._messages.pop(i)
+                            break
+                # 注入新消息
+                drift_text, plan_text = self._planning.format_context_message()
+                if drift_text or plan_text:
+                    self._messages.append(UserMessage(content=[TextBlock(text=f"{drift_text}{plan_text}")]))
 
             try:
                 # Context management
@@ -415,10 +377,10 @@ class AgentLoop(Agent):
                 self._last_usage = result.usage
                 self._messages_at_last_call = len(self._messages)
             except Exception as exc:
-                yield LoopEvent(type="error", step=step, data={"error": str(exc)}, plan=self._make_plan_snapshot(planning_state))
+                yield LoopEvent(type="error", step=step, data={"error": str(exc)}, plan=self._planning.snapshot())
                 return
 
-            plan_snapshot = self._make_plan_snapshot(planning_state)
+            plan_snapshot = self._planning.snapshot()
 
             yield LoopEvent(
                 type="step", step=step,
@@ -427,21 +389,25 @@ class AgentLoop(Agent):
             )
 
             if result.stop_reason == StopReason.END_TURN:
-                planning_state = self._try_parse_plan(result, planning_state)
+                text = self._extract_text(result)
+                if text:
+                    self._planning.try_parse_from_response(text)
                 plan_checked = True
                 self._messages.append(AssistantMessage(content=result.content))
-                yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)}, plan=self._make_plan_snapshot(planning_state))
+                yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)}, plan=self._planning.snapshot())
                 return
 
             if result.stop_reason == StopReason.MAX_TOKENS:
-                yield LoopEvent(type="error", step=step, data={"error": "达到 max_tokens 上限"}, plan=self._make_plan_snapshot(planning_state))
+                yield LoopEvent(type="error", step=step, data={"error": "达到 max_tokens 上限"}, plan=self._planning.snapshot())
                 return
 
             if result.stop_reason == StopReason.STOP_SEQUENCE:
-                planning_state = self._try_parse_plan(result, planning_state)
+                text = self._extract_text(result)
+                if text:
+                    self._planning.try_parse_from_response(text)
                 plan_checked = True
                 self._messages.append(AssistantMessage(content=result.content))
-                yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)}, plan=self._make_plan_snapshot(planning_state))
+                yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)}, plan=self._planning.snapshot())
                 return
 
             if result.stop_reason == StopReason.TOOL_USE:
@@ -460,18 +426,19 @@ class AgentLoop(Agent):
                     self._messages.append(ToolMessage(tool_call_id=tc.id, content=tool_result.content))
                     tool_results.append(tool_result.content)
 
-                if planning_state is not None and not plan_checked:
-                    planning_state = self._try_parse_plan(result, planning_state)
+                if self._planning.has_plan and not plan_checked:
+                    text = self._extract_text(result)
+                    if text:
+                        self._planning.try_parse_from_response(text)
                     plan_checked = True
 
-                if planning_state is not None:
-                    planning_state.drift_count += 1
-                    drift = planning_state.check_drift(self.drift_warn, self.drift_abort)
+                if self._planning.has_plan:
+                    drift = self._planning.increment_drift()
                     if drift == DriftLevel.ABORT:
                         yield LoopEvent(
                             type="error", step=step,
-                            data={"error": f"偏离计划：连续 {planning_state.drift_count} 步未推进任何计划项"},
-                            plan=self._make_plan_snapshot(planning_state),
+                            data={"error": f"偏离计划：连续 {self._planning.drift_count} 步未推进任何计划项"},
+                            plan=self._planning.snapshot(),
                         )
                         return
 
@@ -481,7 +448,7 @@ class AgentLoop(Agent):
                         "tool_calls": [{"id": tc.id, "name": tc.name, "input": tc.input} for tc in tool_calls],
                         "tool_results": tool_results,
                     },
-                    plan=self._make_plan_snapshot(planning_state),
+                    plan=self._planning.snapshot(),
                 )
                 continue
 
@@ -489,4 +456,4 @@ class AgentLoop(Agent):
             yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)}, plan=plan_snapshot)
             return
 
-        yield LoopEvent(type="max_steps", step=self.max_steps, data={}, plan=self._make_plan_snapshot(planning_state))
+        yield LoopEvent(type="max_steps", step=self.max_steps, data={}, plan=self._planning.snapshot())
