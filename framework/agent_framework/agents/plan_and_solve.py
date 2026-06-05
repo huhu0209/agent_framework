@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, AsyncGenerator
+from typing import AsyncGenerator
 
 from agent_framework.agents.agent_loop import AgentLoop
 from agent_framework.agents.base import Agent, AgentEvent
 from agent_framework.agents.sub_agent import create_filtered_router
 from agent_framework.llm.base import ILLMAdapter
 from agent_framework.llm.types import CompletionConfig, SystemMessage, TextBlock, UserMessage
-from agent_framework.orchestrator.planner import PlanItem, PlanningState, parse_plan_response
+from agent_framework.orchestrator.planner import PlanItem, parse_plan_response
+from agent_framework.orchestrator.planning_session import PlanningSession
 from agent_framework.tools.router import ToolRouter
 from agent_framework.tools.types import ToolUseContext
 
@@ -23,13 +24,6 @@ _PLAN_SYSTEM_PROMPT = (
     "2. 步骤描述\n"
     "...\n"
     "只输出计划，不要解释。"
-)
-
-_DRIFT_SYSTEM_PROMPT = (
-    "你是一个执行偏离检测器。判断步骤执行输出是否偏离了原始任务。\n"
-    '如果偏离了，回复 JSON: {"drift": true}\n'
-    '如果没有偏离，回复 JSON: {"drift": false}\n'
-    "只输出 JSON，不要解释。"
 )
 
 
@@ -52,6 +46,11 @@ class PlanAndSolveAgent(Agent):
         self.ctx = ctx
         self.max_steps_per_plan_item = max_steps_per_plan_item
         self.max_replans = max_replans
+        self._planning = PlanningSession(
+            allow_replan=False,
+            drift_warn=3,
+            drift_abort=max_replans,
+        )
 
     async def run(self, user_message: str) -> AsyncGenerator[AgentEvent, None]:
         """执行 Plan-and-Solve 流程。"""
@@ -69,15 +68,15 @@ class PlanAndSolveAgent(Agent):
             return
 
         # Step 3: execute plan step by step
+        self._planning.create_from_items(plan_items, "llm_generated")
         replan_count = 0
         step_outputs: list[str] = []
         global_step = 0
-        planning_state = PlanningState(items=plan_items, current_focus=None)
         i = 0
 
         while i < len(plan_items):
             item = plan_items[i]
-            planning_state.update_status(item.id, "in_progress")
+            self._planning.update_status(item.id, "in_progress")
             step_prompt = self._build_step_prompt(user_message, item, step_outputs)
 
             # Execute step with independent AgentLoop
@@ -98,11 +97,10 @@ class PlanAndSolveAgent(Agent):
             )
 
             step_outputs.append(result_text)
-            planning_state.update_status(item.id, "completed")
+            self._planning.update_status(item.id, "completed")
 
-            # Step 4: drift detection
-            is_drift = self._detect_drift(user_message, item, result_text)
-            if is_drift:
+            # Step 4: step failure detection (replaces drift detection)
+            if self._is_step_failed(result_text):
                 replan_count += 1
                 if replan_count <= self.max_replans:
                     yield AgentEvent(
@@ -112,7 +110,7 @@ class PlanAndSolveAgent(Agent):
                     new_plan = await self._generate_plan(user_message)
                     if new_plan:
                         plan_items = new_plan
-                        planning_state = PlanningState(items=plan_items, current_focus=None)
+                        self._planning.create_from_items(plan_items, "llm_generated")
                         step_outputs = []
                         i = 0
                         continue
@@ -151,39 +149,13 @@ class PlanAndSolveAgent(Agent):
             parts.append(f"前序步骤摘要：\n{summary}")
         return "\n".join(parts)
 
-    def _detect_drift(self, user_message: str, item: PlanItem, result: str) -> bool:
-        """混合偏离检测：规则优先，规则无法判断时返回 False（避免额外 LLM 调用）。"""
-        rule_result = self._rule_check_drift(result)
-        if rule_result is not None:
-            return rule_result
-        return False
-
-    def _rule_check_drift(self, result: str) -> bool | None:
-        """规则偏离检测：快速判断明确偏离或无法判断。"""
+    def _is_step_failed(self, result: str) -> bool:
+        """规则检查：判断单步执行结果是否异常（空输出、子代理错误）。"""
         if not result or not result.strip():
             return True
         if "[子代理错误]" in result:
             return True
-        return None
-
-    async def _llm_check_drift(self, user_message: str, item: PlanItem, result: str) -> bool:
-        """LLM 偏离检测（未在 run() 中调用，保留供外部使用）。"""
-        import json
-
-        prompt = (
-            f"原始任务：{user_message}\n"
-            f"当前步骤：{item.action}\n"
-            f"执行输出：{result[:500]}\n\n"
-            "判断执行输出是否偏离了当前步骤的目标。"
-        )
-        response = await self._call_llm(_DRIFT_SYSTEM_PROMPT, prompt)
-        try:
-            parsed = json.loads(response.strip())
-            return parsed.get("drift", False) is True
-        except (json.JSONDecodeError, AttributeError):
-            # Fallback: check for keywords
-            lower = response.lower()
-            return "偏离" in lower or "off-track" in lower
+        return False
 
     async def _collect_loop_output(self, loop: AgentLoop, prompt: str) -> str:
         """从 AgentLoop 收集最终输出文本。"""

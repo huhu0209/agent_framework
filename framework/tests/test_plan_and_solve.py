@@ -129,19 +129,19 @@ class TestPlanAndSolveAgent:
         # Should still have done from fallback AgentLoop
         assert "done" in types
 
-    def test_rule_check_drift(self) -> None:
-        """规则偏离检测测试。"""
+    def test_is_step_failed(self) -> None:
+        """步骤失败检测测试。"""
         adapter = _make_mock_adapter_with_text("")
         agent = _make_agent(adapter)
 
-        # Empty string → drift
-        assert agent._rule_check_drift("") is True
-        # Whitespace only → drift
-        assert agent._rule_check_drift("   ") is True
-        # Contains error marker → drift
-        assert agent._rule_check_drift("[子代理错误] something went wrong") is True
-        # Normal output → cannot determine
-        assert agent._rule_check_drift("正常执行结果") is None
+        # Empty string → failed
+        assert agent._is_step_failed("") is True
+        # Whitespace only → failed
+        assert agent._is_step_failed("   ") is True
+        # Contains error marker → failed
+        assert agent._is_step_failed("[子代理错误] something went wrong") is True
+        # Normal output → not failed
+        assert agent._is_step_failed("正常执行结果") is False
 
     @pytest.mark.asyncio
     async def test_drift_replan(self) -> None:
@@ -295,28 +295,28 @@ class TestBuildStepPrompt:
         assert "步骤一结果" in prompt
 
 
-class TestRuleCheckDrift:
-    """_rule_check_drift 规则检查详细测试。"""
+class TestIsStepFailed:
+    """_is_step_failed 规则检查详细测试。"""
 
-    def test_empty_string_is_drift(self) -> None:
+    def test_empty_string_is_failed(self) -> None:
         adapter = _make_mock_adapter_with_text("")
         agent = _make_agent(adapter)
-        assert agent._rule_check_drift("") is True
+        assert agent._is_step_failed("") is True
 
-    def test_whitespace_only_is_drift(self) -> None:
+    def test_whitespace_only_is_failed(self) -> None:
         adapter = _make_mock_adapter_with_text("")
         agent = _make_agent(adapter)
-        assert agent._rule_check_drift("  \n\t ") is True
+        assert agent._is_step_failed("  \n\t ") is True
 
-    def test_sub_agent_error_is_drift(self) -> None:
+    def test_sub_agent_error_is_failed(self) -> None:
         adapter = _make_mock_adapter_with_text("")
         agent = _make_agent(adapter)
-        assert agent._rule_check_drift("[子代理错误] timeout") is True
+        assert agent._is_step_failed("[子代理错误] timeout") is True
 
-    def test_normal_output_is_none(self) -> None:
+    def test_normal_output_is_not_failed(self) -> None:
         adapter = _make_mock_adapter_with_text("")
         agent = _make_agent(adapter)
-        assert agent._rule_check_drift("任务完成，结果是...") is None
+        assert agent._is_step_failed("任务完成，结果是...") is False
 
 
 # ============================================================
