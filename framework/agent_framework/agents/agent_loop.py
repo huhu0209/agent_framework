@@ -390,8 +390,8 @@ class AgentLoop(Agent):
 
             if result.stop_reason == StopReason.END_TURN:
                 text = self._extract_text(result)
-                if text:
-                    self._planning.try_parse_from_response(text)
+                if text and self._planning.try_parse_from_response(text):
+                    self.ctx.extra["planning_session"] = self._planning
                 plan_checked = True
                 self._messages.append(AssistantMessage(content=result.content))
                 yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)}, plan=self._planning.snapshot())
@@ -403,8 +403,8 @@ class AgentLoop(Agent):
 
             if result.stop_reason == StopReason.STOP_SEQUENCE:
                 text = self._extract_text(result)
-                if text:
-                    self._planning.try_parse_from_response(text)
+                if text and self._planning.try_parse_from_response(text):
+                    self.ctx.extra["planning_session"] = self._planning
                 plan_checked = True
                 self._messages.append(AssistantMessage(content=result.content))
                 yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)}, plan=self._planning.snapshot())
@@ -428,8 +428,8 @@ class AgentLoop(Agent):
 
                 if self._planning.has_plan and not plan_checked:
                     text = self._extract_text(result)
-                    if text:
-                        self._planning.try_parse_from_response(text)
+                    if text and self._planning.try_parse_from_response(text):
+                        self.ctx.extra["planning_session"] = self._planning
                     plan_checked = True
 
                 if self._planning.has_plan:
