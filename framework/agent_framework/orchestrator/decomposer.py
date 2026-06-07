@@ -1,0 +1,134 @@
+"""Decomposer — LLM 驱动的任务分解：用户消息 → 子任务 DAG。"""
+
+from __future__ import annotations
+
+import re
+from typing import TYPE_CHECKING
+
+from agent_framework.llm.types import CompletionConfig, UserMessage, TextBlock
+from agent_framework.orchestrator.models import SubTask
+
+if TYPE_CHECKING:
+    from agent_framework.llm.base import ILLMAdapter
+    from agent_framework.orchestrator.worker_registry import WorkerRegistry
+
+_DECOMPOSE_SYSTEM_PROMPT = (
+    "你是一个任务分解器。分析用户任务，将其分解为可由专业 Worker 执行的子任务。\n"
+    "\n"
+    "{worker_descriptions}\n"
+    "\n"
+    "规则：\n"
+    "1. 每个子任务只分配给一个 Worker\n"
+    "2. depends_on 填写前序子任务的 id（逗号分隔），无依赖留空\n"
+    "3. prompt 要足够具体，让 Worker 知道该做什么\n"
+    "4. 只输出 <decomposition> 标签，不要解释\n"
+    "\n"
+    "输出格式：\n"
+    '<decomposition>\n'
+    '<subtask id="1" worker="xxx" depends_on="">\n'
+    "  具体指令\n"
+    "</subtask>\n"
+    "</decomposition>\n"
+)
+
+
+class Decomposer:
+    """调用 LLM 将用户消息分解为 SubTask 列表（DAG）。"""
+
+    def __init__(self, adapter: ILLMAdapter, *, model: str) -> None:
+        self._adapter = adapter
+        self._model = model
+
+    async def decompose(
+        self, user_message: str, worker_registry: WorkerRegistry,
+    ) -> list[SubTask]:
+        """将用户消息分解为子任务列表。"""
+        prompt = self._build_prompt(user_message, worker_registry)
+        response = await self._call_llm(prompt)
+        subtasks = self._parse_response(response)
+        if subtasks is None:
+            raise ValueError("Failed to parse decomposition from LLM response")
+        self._validate(subtasks, worker_registry)
+        return subtasks
+
+    def _build_prompt(self, user_message: str, registry: WorkerRegistry) -> str:
+        """构造发送给 LLM 的完整 prompt。"""
+        system = _DECOMPOSE_SYSTEM_PROMPT.format(
+            worker_descriptions=registry.describe_for_llm(),
+        )
+        return system + "\n\n用户任务: " + user_message
+
+    async def _call_llm(self, prompt: str) -> str:
+        """调用 LLM，返回文本响应。"""
+        config = CompletionConfig(
+            model=self._model,
+            messages=[UserMessage(content=[TextBlock(text=prompt)])],
+        )
+        result = await self._adapter.complete(config)
+        for block in result.content:
+            if isinstance(block, TextBlock):
+                return block.text
+        return ""
+
+    def _parse_response(self, text: str) -> list[SubTask] | None:
+        """从 LLM 响应中解析 <decomposition> XML 块。"""
+        match = re.search(r"<decomposition>(.*?)</decomposition>", text, re.DOTALL)
+        if not match:
+            return None
+        inner = match.group(1)
+        subtask_pattern = re.compile(
+            r'<subtask\s+id="(\d+)"\s+worker="([^"]+)"\s+depends_on="([^"]*)">\s*(.*?)\s*</subtask>',
+            re.DOTALL,
+        )
+        subtasks: list[SubTask] = []
+        for m in subtask_pattern.finditer(inner):
+            deps_str = m.group(3).strip()
+            depends_on = (
+                [d.strip() for d in deps_str.split(",") if d.strip()]
+                if deps_str
+                else []
+            )
+            subtasks.append(SubTask(
+                id=m.group(1),
+                worker=m.group(2),
+                prompt=m.group(4).strip(),
+                depends_on=depends_on,
+            ))
+        return subtasks if subtasks else None
+
+    def _validate(
+        self, subtasks: list[SubTask], registry: WorkerRegistry,
+    ) -> None:
+        """验证子任务：worker 存在、依赖存在、无环。"""
+        known_ids = {s.id for s in subtasks}
+        for s in subtasks:
+            # Check worker exists
+            try:
+                registry.get(s.worker)
+            except KeyError:
+                raise ValueError(f"Worker not found: {s.worker}")
+            # Check deps exist
+            for dep in s.depends_on:
+                if dep not in known_ids:
+                    raise ValueError(f"depends_on id '{dep}' not found in subtasks")
+
+        # Cycle detection via DFS
+        visited: set[str] = set()
+        in_stack: set[str] = set()
+
+        def has_cycle(node_id: str) -> bool:
+            visited.add(node_id)
+            in_stack.add(node_id)
+            task = next(t for t in subtasks if t.id == node_id)
+            for dep in task.depends_on:
+                if dep in in_stack:
+                    return True
+                if dep not in visited and has_cycle(dep):
+                    return True
+            in_stack.remove(node_id)
+            return False
+
+        for s in subtasks:
+            if s.id not in visited:
+                if has_cycle(s.id):
+                    raise ValueError("Dependency cycle detected in subtasks")
