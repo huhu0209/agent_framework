@@ -213,27 +213,34 @@ class TestValidate:
 class TestBuildPrompt:
     """Prompt 构建测试。"""
 
-    def test_prompt_contains_worker_names(self) -> None:
-        """Prompt 包含 worker 名称。"""
+    def test_system_prompt_contains_worker_names(self) -> None:
+        """System prompt 包含 worker 名称。"""
         adapter = _make_mock_adapter_with_text("")
         decomposer = Decomposer(adapter, model="mock")
         registry = _make_registry(
             WorkerSpec(name="researcher", description="搜索资料", factory=_dummy_factory),
             WorkerSpec(name="writer", description="撰写文章", factory=_dummy_factory),
         )
-        prompt = decomposer._build_prompt("帮我写一篇报告", registry)
+        prompt = decomposer._build_system_prompt(registry)
         assert "researcher" in prompt
         assert "writer" in prompt
 
-    def test_prompt_contains_format_instruction(self) -> None:
-        """Prompt 包含输出格式指令。"""
+    def test_system_prompt_contains_format_instruction(self) -> None:
+        """System prompt 包含输出格式指令。"""
         adapter = _make_mock_adapter_with_text("")
         decomposer = Decomposer(adapter, model="mock")
         registry = _make_registry(
             WorkerSpec(name="researcher", description="搜索", factory=_dummy_factory),
         )
-        prompt = decomposer._build_prompt("任务", registry)
+        prompt = decomposer._build_system_prompt(registry)
         assert "<decomposition>" in prompt
+
+    def test_user_prompt_contains_task(self) -> None:
+        """User prompt 包含用户任务。"""
+        adapter = _make_mock_adapter_with_text("")
+        decomposer = Decomposer(adapter, model="mock")
+        prompt = decomposer._build_user_prompt("帮我写一篇报告")
+        assert "帮我写一篇报告" in prompt
 
 
 # ---------------------------------------------------------------------------

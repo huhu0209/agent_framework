@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
-from agent_framework.llm.types import CompletionConfig, UserMessage, TextBlock
+from agent_framework.llm.types import CompletionConfig, SystemMessage, TextBlock, UserMessage
 from agent_framework.orchestrator.models import SubTask
 
 if TYPE_CHECKING:
@@ -43,26 +43,33 @@ class Decomposer:
         self, user_message: str, worker_registry: WorkerRegistry,
     ) -> list[SubTask]:
         """将用户消息分解为子任务列表。"""
-        prompt = self._build_prompt(user_message, worker_registry)
-        response = await self._call_llm(prompt)
+        system_prompt = self._build_system_prompt(worker_registry)
+        user_prompt = self._build_user_prompt(user_message)
+        response = await self._call_llm(system_prompt, user_prompt)
         subtasks = self._parse_response(response)
         if subtasks is None:
             raise ValueError("Failed to parse decomposition from LLM response")
         self._validate(subtasks, worker_registry)
         return subtasks
 
-    def _build_prompt(self, user_message: str, registry: WorkerRegistry) -> str:
-        """构造发送给 LLM 的完整 prompt。"""
-        system = _DECOMPOSE_SYSTEM_PROMPT.format(
+    def _build_system_prompt(self, registry: WorkerRegistry) -> str:
+        """构造发送给 LLM 的 system prompt。"""
+        return _DECOMPOSE_SYSTEM_PROMPT.format(
             worker_descriptions=registry.describe_for_llm(),
         )
-        return system + "\n\n用户任务: " + user_message
 
-    async def _call_llm(self, prompt: str) -> str:
-        """调用 LLM，返回文本响应。"""
+    def _build_user_prompt(self, user_message: str) -> str:
+        """构造发送给 LLM 的 user prompt。"""
+        return f"用户任务: {user_message}"
+
+    async def _call_llm(self, system_prompt: str, user_prompt: str) -> str:
+        """调用 LLM，返回文本响应。使用 SystemMessage + UserMessage 分离。"""
         config = CompletionConfig(
             model=self._model,
-            messages=[UserMessage(content=[TextBlock(text=prompt)])],
+            messages=[
+                SystemMessage(content=system_prompt),
+                UserMessage(content=[TextBlock(text=user_prompt)]),
+            ],
         )
         result = await self._adapter.complete(config)
         for block in result.content:
