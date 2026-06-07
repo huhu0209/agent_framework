@@ -25,7 +25,11 @@ if TYPE_CHECKING:
 
 
 class OrchestratorEngine(Agent):
-    """编排引擎：评估任务复杂度并路由到合适的 Agent。"""
+    """编排引擎：评估任务复杂度并路由到合适的 Agent。
+
+    继承 Agent 基类以保持多态兼容性——调用者可以统一处理
+    AgentLoop、PlanAndSolveAgent 和 OrchestratorEngine 实例。
+    """
 
     def __init__(
         self,
@@ -49,7 +53,13 @@ class OrchestratorEngine(Agent):
         self._worker_registry = worker_registry
 
     def _assess_complexity(self, task: str) -> Literal["simple", "complex"]:
-        """评估任务复杂度：纯字符数阈值，不调用 LLM。"""
+        """评估任务复杂度：纯字符数阈值，不调用 LLM。
+
+        Design tradeoff: 字符数阈值简单快速，但存在误判——
+        附带大量上下文的简单任务可能被标为 complex，
+        而简短但语义复杂的请求可能被标为 simple。
+        当前阶段优先零延迟、零成本；未来可引入关键词或 LLM 辅助判断。
+        """
         return "complex" if len(task) > self._complexity_threshold else "simple"
 
     async def run(self, user_message: str) -> AsyncGenerator[AgentEvent, None]:
