@@ -190,6 +190,21 @@ class TestValidate:
         with pytest.raises(ValueError, match="cycle|循环"):
             decomposer._validate(subtasks, registry)
 
+    def test_deep_chain_no_recursion_error(self) -> None:
+        """长依赖链不触发 RecursionError。"""
+        adapter = _make_mock_adapter_with_text("")
+        decomposer = Decomposer(adapter, model="mock")
+        specs = [
+            WorkerSpec(name=f"w{i}", description=f"Worker {i}", factory=_dummy_factory)
+            for i in range(200)
+        ]
+        registry = _make_registry(*specs)
+        subtasks = [SubTask(id=str(i), worker=f"w{i}", prompt=f"Task {i}",
+                            depends_on=[str(i-1)] if i > 0 else [])
+                    for i in range(200)]
+        # Should not raise RecursionError
+        decomposer._validate(subtasks, registry)
+
 
 # ---------------------------------------------------------------------------
 # TestBuildPrompt — Prompt 构建

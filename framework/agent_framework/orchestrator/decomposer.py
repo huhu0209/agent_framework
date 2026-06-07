@@ -101,34 +101,39 @@ class Decomposer:
     ) -> None:
         """验证子任务：worker 存在、依赖存在、无环。"""
         known_ids = {s.id for s in subtasks}
+        id_to_task = {s.id: s for s in subtasks}
         for s in subtasks:
-            # Check worker exists
             try:
                 registry.get(s.worker)
             except KeyError:
                 raise ValueError(f"Worker not found: {s.worker}")
-            # Check deps exist
             for dep in s.depends_on:
                 if dep not in known_ids:
                     raise ValueError(f"depends_on id '{dep}' not found in subtasks")
 
-        # Cycle detection via DFS
+        # Cycle detection via iterative DFS
         visited: set[str] = set()
         in_stack: set[str] = set()
 
-        def has_cycle(node_id: str) -> bool:
-            visited.add(node_id)
-            in_stack.add(node_id)
-            task = next(t for t in subtasks if t.id == node_id)
-            for dep in task.depends_on:
-                if dep in in_stack:
-                    return True
-                if dep not in visited and has_cycle(dep):
-                    return True
-            in_stack.remove(node_id)
-            return False
-
         for s in subtasks:
-            if s.id not in visited:
-                if has_cycle(s.id):
-                    raise ValueError("Dependency cycle detected in subtasks")
+            if s.id in visited:
+                continue
+            stack: list[tuple[str, iter]] = [
+                (s.id, iter(id_to_task[s.id].depends_on))
+            ]
+            in_stack.add(s.id)
+            visited.add(s.id)
+
+            while stack:
+                node_id, deps_iter = stack[-1]
+                try:
+                    dep = next(deps_iter)
+                    if dep in in_stack:
+                        raise ValueError("Dependency cycle detected in subtasks")
+                    if dep not in visited:
+                        visited.add(dep)
+                        in_stack.add(dep)
+                        stack.append((dep, iter(id_to_task[dep].depends_on)))
+                except StopIteration:
+                    in_stack.discard(node_id)
+                    stack.pop()
