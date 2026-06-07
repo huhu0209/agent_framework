@@ -13,3 +13,6 @@ __all__ = [
     "WorkerRegistry",
     "WorkerSpec",
 ]
+
+# router.py 为预留模块（scaffold），尚未实现。
+# 实现后需在此处补充导出。

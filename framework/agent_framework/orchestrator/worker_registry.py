@@ -21,6 +21,11 @@ class WorkerRegistry:
         return len(self._workers) > 0
 
     def describe_for_llm(self) -> str:
+        """生成 Worker 列表的 LLM 可读描述。
+
+        按 dict 插入顺序输出（Python 3.7+ dict 保序）。
+        当前 Worker 数量较少，无需额外排序。
+        """
         if not self._workers:
             return "无可用 Worker"
         lines = ["可用 Worker 列表："]
