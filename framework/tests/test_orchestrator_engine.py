@@ -239,6 +239,11 @@ class TestDegradationChain:
         # But we get the done event from PlanAndSolveAgent
         assert "done" in types
 
+        # Verify degrade event was emitted
+        degrade_events = [e for e in events if e.type == "degrade"]
+        assert len(degrade_events) == 1
+        assert "reason" in degrade_events[0].data
+
 
 # ---------------------------------------------------------------------------
 # TestImplementsAgentABC

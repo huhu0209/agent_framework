@@ -10,9 +10,12 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, AsyncGenerator, Literal
 
 from agent_framework.agents.base import Agent, AgentEvent
+
+logger = logging.getLogger(__name__)
 from agent_framework.llm.base import ILLMAdapter
 from agent_framework.tools.router import ToolRouter
 from agent_framework.tools.types import ToolUseContext
@@ -129,7 +132,12 @@ class OrchestratorEngine(Agent):
         try:
             plan = await decomposer.decompose(user_message, self._worker_registry)
         except Exception as exc:
-            # Auto-degrade: decompose failed, fall back to PlanAndSolve
+            logger.warning("Decompose failed, degrading to PlanAndSolve: %s", exc)
+            yield AgentEvent(
+                type="degrade",
+                step=1,
+                data={"reason": str(exc)},
+            )
             async for event in self._run_plan_and_solve(user_message):
                 yield event
             return
