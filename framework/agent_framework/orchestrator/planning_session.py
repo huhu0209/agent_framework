@@ -59,7 +59,7 @@ class PlanningSession:
     def update_status(self, item_id: str, new_status: str) -> None:
         if self._state is None:
             raise ValueError("No plan loaded")
-        self._state.update_status(item_id, new_status)
+        self._state = self._state.update_status(item_id, new_status)
 
     def snapshot(self) -> PlanSnapshot | None:
         if self._state is None:
@@ -69,12 +69,12 @@ class PlanningSession:
     def increment_drift(self) -> DriftLevel:
         if self._state is None:
             return DriftLevel.NONE
-        self._state.drift_count += 1
+        self._state = self._state.increment_drift()
         return self._state.check_drift(self._drift_warn, self._drift_abort)
 
     def reset_drift(self) -> None:
         if self._state is not None:
-            self._state.drift_count = 0
+            self._state = self._state.with_drift_reset()
 
     def format_context_message(self) -> tuple[str, str]:
         if self._state is None:

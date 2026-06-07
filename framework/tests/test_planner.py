@@ -22,6 +22,13 @@ def test_plan_item_creation():
     assert item.status == "pending"
 
 
+def test_plan_item_is_frozen():
+    """PlanItem 不允许直接修改属性。"""
+    item = PlanItem(id="1", action="搜索模块", status="pending")
+    with pytest.raises(AttributeError):
+        item.status = "completed"
+
+
 # --- PlanningState.update_status 正常转换 ---
 
 
@@ -32,7 +39,7 @@ def test_update_status_pending_to_in_progress():
         ],
         current_focus=None,
     )
-    state.update_status("1", "in_progress")
+    state = state.update_status("1", "in_progress")
     assert state.items[0].status == "in_progress"
     assert state.current_focus == "1"
     assert state.drift_count == 0
@@ -46,7 +53,7 @@ def test_update_status_in_progress_to_completed():
         current_focus="1",
         drift_count=2,
     )
-    state.update_status("1", "completed")
+    state = state.update_status("1", "completed")
     assert state.items[0].status == "completed"
     assert state.drift_count == 0
 
@@ -59,7 +66,7 @@ def test_update_status_in_progress_to_blocked():
         current_focus="1",
         drift_count=2,
     )
-    state.update_status("1", "blocked")
+    state = state.update_status("1", "blocked")
     assert state.items[0].status == "blocked"
     assert state.drift_count == 2  # blocked 不重置 drift
 
@@ -71,7 +78,7 @@ def test_update_status_blocked_to_in_progress():
         ],
         current_focus=None,
     )
-    state.update_status("1", "in_progress")
+    state = state.update_status("1", "in_progress")
     assert state.items[0].status == "in_progress"
     assert state.current_focus == "1"
 

@@ -14,7 +14,7 @@ class DriftLevel(Enum):
     ABORT = "abort"  # 中止
 
 
-@dataclass
+@dataclass(frozen=True)
 class PlanItem:
     id: str
     action: str
@@ -39,15 +39,16 @@ _VALID_TRANSITIONS: dict[str, list[str]] = {
 }
 
 
-@dataclass
+@dataclass(frozen=True)
 class PlanningState:
-    """计划状态。"""
+    """计划状态（不可变）。所有状态变更返回新实例。"""
     items: list[PlanItem]  # 计划中的所有步骤
     current_focus: str | None  # 当前关注的步骤 ID
     drift_count: int = 0  # 计划偏离次数
     plan_source: Literal["llm_generated", "caller_injected"] = "llm_generated"  # 计划来源类型：LLM 生成、调用注入
 
-    def update_status(self, item_id: str, new_status: str) -> None:
+    def update_status(self, item_id: str, new_status: str) -> PlanningState:
+        """返回状态更新后的新 PlanningState 实例。"""
         item = next((i for i in self.items if i.id == item_id), None)
         if item is None:
             raise ValueError(f"Unknown plan item: {item_id}")
@@ -56,11 +57,36 @@ class PlanningState:
         if new_status not in allowed:
             raise ValueError(f"Invalid transition: {item.status} -> {new_status}")
 
-        item.status = new_status
-        if new_status != "blocked":
-            self.drift_count = 0
-        if new_status == "in_progress":
-            self.current_focus = item_id
+        new_items = [
+            PlanItem(id=i.id, action=i.action, status=new_status) if i.id == item_id else i
+            for i in self.items
+        ]
+        new_drift = self.drift_count if new_status == "blocked" else 0
+        new_focus = item_id if new_status == "in_progress" else self.current_focus
+        return PlanningState(
+            items=new_items,
+            current_focus=new_focus,
+            drift_count=new_drift,
+            plan_source=self.plan_source,
+        )
+
+    def increment_drift(self) -> PlanningState:
+        """返回 drift_count +1 的新 PlanningState 实例。"""
+        return PlanningState(
+            items=self.items,
+            current_focus=self.current_focus,
+            drift_count=self.drift_count + 1,
+            plan_source=self.plan_source,
+        )
+
+    def with_drift_reset(self) -> PlanningState:
+        """返回 drift_count 重置为 0 的新 PlanningState 实例。"""
+        return PlanningState(
+            items=self.items,
+            current_focus=self.current_focus,
+            drift_count=0,
+            plan_source=self.plan_source,
+        )
 
     def check_drift(self, warn_threshold: int, abort_threshold: int) -> DriftLevel:
         """
