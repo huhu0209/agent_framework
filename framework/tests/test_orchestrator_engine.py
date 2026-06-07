@@ -21,6 +21,8 @@ from agent_framework.tools.registry import ToolRegistry
 from agent_framework.tools.router import ToolRouter
 from agent_framework.tools.types import ToolUseContext
 
+from tests.conftest import AsyncIter, async_iter
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -60,27 +62,6 @@ def _make_engine(adapter: AsyncMock, **kwargs) -> OrchestratorEngine:
 async def _collect_events(engine: OrchestratorEngine, message: str) -> list[AgentEvent]:
     """收集 engine.run() 产生的所有事件。"""
     return [event async for event in engine.run(message)]
-
-
-class _AsyncIter:
-    """Helper to create async iterables from a list."""
-
-    def __init__(self, items: list[AgentEvent]) -> None:
-        self._items = iter(items)
-
-    def __aiter__(self):
-        return self
-
-    async def __anext__(self) -> AgentEvent:
-        try:
-            return next(self._items)
-        except StopIteration:
-            raise StopAsyncIteration
-
-
-def _async_iter(items: list[AgentEvent]) -> _AsyncIter:
-    """创建异步迭代器。"""
-    return _AsyncIter(items)
 
 
 def _register_dummy_worker(registry: WorkerRegistry, name: str = "dummy") -> None:
@@ -129,7 +110,7 @@ class TestDegradationChain:
         adapter = _make_mock_adapter_with_text("完成")
 
         mock_loop = MagicMock()
-        mock_loop.run = MagicMock(return_value=_async_iter([
+        mock_loop.run = MagicMock(return_value=async_iter([
             AgentEvent(type="step", step=1, data={"content": []}),
             AgentEvent(type="done", step=1, data={"content": [{"type": "text", "text": "完成"}]}),
         ]))
@@ -158,7 +139,7 @@ class TestDegradationChain:
         )
 
         mock_pns = MagicMock()
-        mock_pns.run = MagicMock(return_value=_async_iter([
+        mock_pns.run = MagicMock(return_value=async_iter([
             AgentEvent(type="step", step=1, data={"text": "执行步骤"}),
             AgentEvent(type="done", step=1, data={"text": "完成"}),
         ]))
@@ -190,7 +171,7 @@ class TestDegradationChain:
 
         # Mock the agent created by worker factory
         mock_worker_agent = MagicMock()
-        mock_worker_agent.run = MagicMock(return_value=_async_iter([
+        mock_worker_agent.run = MagicMock(return_value=async_iter([
             AgentEvent(type="done", step=0, data={"content": [{"type": "text", "text": "worker output"}]}),
         ]))
 
@@ -237,7 +218,7 @@ class TestDegradationChain:
         _register_dummy_worker(worker_registry, "dummy")
 
         mock_pns = MagicMock()
-        mock_pns.run = MagicMock(return_value=_async_iter([
+        mock_pns.run = MagicMock(return_value=async_iter([
             AgentEvent(type="done", step=1, data={"text": "plan and solve result"}),
         ]))
 
@@ -277,7 +258,7 @@ class TestImplementsAgentABC:
         adapter = _make_mock_adapter_with_text("完成")
 
         mock_loop = MagicMock()
-        mock_loop.run = MagicMock(return_value=_async_iter([
+        mock_loop.run = MagicMock(return_value=async_iter([
             AgentEvent(type="done", step=0, data={"content": [{"type": "text", "text": "完成"}]}),
         ]))
 

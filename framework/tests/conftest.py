@@ -39,3 +39,27 @@ def memory_dir(tmp_path):
     d = tmp_path / "memory"
     d.mkdir()
     return d
+
+
+from agent_framework.agents.base import AgentEvent
+
+
+class AsyncIter:
+    """Wrap a list of AgentEvents as an async iterable."""
+
+    def __init__(self, items: list[AgentEvent]) -> None:
+        self._items = iter(items)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self) -> AgentEvent:
+        try:
+            return next(self._items)
+        except StopIteration:
+            raise StopAsyncIteration
+
+
+def async_iter(items: list[AgentEvent]) -> AsyncIter:
+    """Create async iterable from a list of AgentEvents."""
+    return AsyncIter(items)

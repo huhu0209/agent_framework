@@ -14,35 +14,17 @@ from agent_framework.tools.registry import ToolRegistry
 from agent_framework.tools.router import ToolRouter
 from agent_framework.tools.types import ToolUseContext
 
+from tests.conftest import AsyncIter, async_iter
+
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-class _AsyncIter:
-    """Wrap a list of AgentEvents as an async iterable."""
-
-    def __init__(self, items: list[AgentEvent]) -> None:
-        self._items = iter(items)
-
-    def __aiter__(self):
-        return self
-
-    async def __anext__(self) -> AgentEvent:
-        try:
-            return next(self._items)
-        except StopIteration:
-            raise StopAsyncIteration
-
-
-def _async_iter(items: list[AgentEvent]) -> _AsyncIter:
-    return _AsyncIter(items)
-
-
 def _make_mock_agent(*, events: list[AgentEvent]) -> MagicMock:
     """Create a mock Agent whose run() returns the given events."""
     agent = MagicMock(spec=Agent)
-    agent.run = MagicMock(return_value=_async_iter(events))
+    agent.run = MagicMock(return_value=async_iter(events))
     return agent
 
 
