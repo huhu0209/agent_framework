@@ -123,6 +123,27 @@ class TestSerialExecution:
         assert events[3].type == "worker_done"
         assert events[3].data["output"] == "结果B"
 
+    @pytest.mark.asyncio
+    async def test_out_of_order_plan_raises(self) -> None:
+        """依赖未在前面执行 → ValueError。"""
+        mock_agent = _make_mock_agent(events=[
+            AgentEvent(type="done", step=1, data={"content": [{"type": "text", "text": "ok"}]}),
+        ])
+        factory = MagicMock(return_value=mock_agent)
+        registry = WorkerRegistry()
+        registry.register(WorkerSpec(name="a", description="A", factory=factory))
+        registry.register(WorkerSpec(name="b", description="B", factory=factory))
+
+        executor = _make_executor(registry)
+        # t2 depends on t1, but t2 comes first in the list
+        plan = [
+            SubTask(id="t2", worker="b", prompt="B", depends_on=["t1"]),
+            SubTask(id="t1", worker="a", prompt="A", depends_on=[]),
+        ]
+
+        with pytest.raises(ValueError, match="topological"):
+            await _collect_events(executor, plan)
+
 
 class TestFailureFastFail:
     """异常与空输出测试。"""

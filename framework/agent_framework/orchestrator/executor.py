@@ -47,6 +47,7 @@ class DAGExecutor:
 
     async def execute(self, plan: list[SubTask]) -> AsyncGenerator[AgentEvent, None]:
         """串行执行计划中的所有 SubTask。"""
+        self._validate_order(plan)
         for subtask in plan:
             yield AgentEvent(
                 type="worker_start",
@@ -79,6 +80,18 @@ class DAGExecutor:
                     },
                 )
                 return
+
+    def _validate_order(self, plan: list[SubTask]) -> None:
+        """验证 plan 是否按拓扑序排列：每个 subtask 的 depends_on 必须在它之前出现。"""
+        seen: set[str] = set()
+        for subtask in plan:
+            for dep in subtask.depends_on:
+                if dep not in seen:
+                    raise ValueError(
+                        f"Plan not in topological order: subtask '{subtask.id}' "
+                        f"depends on '{dep}' which hasn't been executed yet"
+                    )
+            seen.add(subtask.id)
 
     async def _run_worker(self, subtask: SubTask) -> SubTaskResult:
         """执行单个 subtask，捕获异常。"""
