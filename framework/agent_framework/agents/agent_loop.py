@@ -327,6 +327,7 @@ class AgentLoop(Agent):
         for step in range(1, self.max_steps + 1):
             # Drain 后台任务通知
             if self._task_runner is not None:
+                # 取后台通知— 非阻塞，把后台任务/队友的状态变化取出来注入消息
                 notifications = await self._task_runner.drain_notifications()
                 for note in notifications:
                     status_text = {
@@ -352,9 +353,10 @@ class AgentLoop(Agent):
                         )]))
                     except asyncio.QueueEmpty:
                         break
-
+            
+            # 注入计划上下文（如果有）
             if self._planning.has_plan:
-                # 删除上一轮注入的计划消息
+                # 更新计划上下文 - 如果有活跃计划，删掉上一轮注入的计划文本，换上最新的
                 for i in range(len(self._messages) - 1, -1, -1):
                     msg = self._messages[i]
                     if isinstance(msg, UserMessage) and msg.content:
@@ -362,7 +364,7 @@ class AgentLoop(Agent):
                         if isinstance(first, TextBlock) and self._planning.is_plan_context_text(first.text):
                             self._messages.pop(i)
                             break
-                # 注入新消息
+                # 注入新计划消息
                 drift_text, plan_text = self._planning.format_context_message()
                 if drift_text or plan_text:
                     self._messages.append(UserMessage(content=[TextBlock(text=f"{drift_text}{plan_text}")]))
@@ -388,6 +390,7 @@ class AgentLoop(Agent):
                 plan=plan_snapshot,
             )
 
+            # 根据 stop_reason 分流— 这是核心决策
             if result.stop_reason == StopReason.END_TURN:
                 text = self._extract_text(result)
                 if text and self._planning.try_parse_from_response(text):
