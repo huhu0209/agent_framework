@@ -200,6 +200,28 @@ class TestFailureFastFail:
         assert events[1].data["success"] is True
         assert events[1].data["output"] == ""
 
+    @pytest.mark.asyncio
+    async def test_error_event_marks_failure(self) -> None:
+        """Agent 产出 error 事件 → worker_done(success=False)。"""
+        error_agent = MagicMock(spec=Agent)
+        error_agent.run = MagicMock(return_value=async_iter([
+            AgentEvent(type="error", step=0, data={"error": "内部错误"}),
+        ]))
+
+        factory = MagicMock(return_value=error_agent)
+        registry = WorkerRegistry()
+        registry.register(WorkerSpec(name="worker", description="W", factory=factory))
+
+        executor = _make_executor(registry)
+        plan = [SubTask(id="t1", worker="worker", prompt="do")]
+
+        events = await _collect_events(executor, plan)
+
+        assert len(events) == 3
+        assert events[1].type == "worker_done"
+        assert events[1].data["success"] is False
+        assert "内部错误" in events[1].data["error"]
+
 
 class TestEventOrder:
     """事件顺序测试。"""

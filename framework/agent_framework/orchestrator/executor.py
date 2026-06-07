@@ -114,7 +114,7 @@ class DAGExecutor:
             )
 
     async def _collect_output(self, agent, prompt: str) -> str:
-        """从 agent.run() 中收集文本输出。"""
+        """从 agent.run() 中收集文本输出。error 事件抛 RuntimeError。"""
         text = ""
         async for event in agent.run(prompt):
             if event.type == "done":
@@ -122,5 +122,5 @@ class DAGExecutor:
                     if isinstance(block, dict) and block.get("type") == "text":
                         text += block.get("text", "")
             elif event.type == "error":
-                return f"[Worker错误] {event.data.get('error', '')}"
+                raise RuntimeError(event.data.get("error", "Unknown worker error"))
         return text or ""
