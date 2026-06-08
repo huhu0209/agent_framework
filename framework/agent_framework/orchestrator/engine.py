@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, AsyncGenerator, Literal
 
 from agent_framework.agents.base import Agent, AgentEvent
 from agent_framework.llm.base import ILLMAdapter
+from agent_framework.orchestrator.models import SubTask
 from agent_framework.tools.router import ToolRouter
 from agent_framework.tools.types import ToolUseContext
 
@@ -129,9 +130,7 @@ class OrchestratorEngine(Agent):
     async def _run_orchestrated(self, user_message: str) -> AsyncGenerator[AgentEvent, None]:
         """复杂任务路径（有 Workers）：Decomposer → DAGExecutor → 合成。"""
         from agent_framework.orchestrator.decomposer import Decomposer
-        from agent_framework.orchestrator.executor import DAGExecutor
 
-        # Step 1: Decompose
         yield AgentEvent(
             type="decompose_start",
             step=1,
@@ -158,7 +157,13 @@ class OrchestratorEngine(Agent):
             data={"subtask_count": len(plan)},
         )
 
-        # Step 2: Execute via DAGExecutor
+        async for event in self._execute_plan(plan):
+            yield event
+
+    async def _execute_plan(self, plan: list[SubTask]) -> AsyncGenerator[AgentEvent, None]:
+        """执行子任务计划并合成结果。"""
+        from agent_framework.orchestrator.executor import DAGExecutor
+
         executor = DAGExecutor(
             self._worker_registry,
             self.adapter,
@@ -174,8 +179,7 @@ class OrchestratorEngine(Agent):
             if event.type == "worker_done":
                 results.append(event.data)
 
-        # Step 3: Synthesize
-        combined = self._synthesize(user_message, results)
+        combined = self._synthesize("", results)
         yield AgentEvent(
             type="orchestrator_done",
             step=1,
