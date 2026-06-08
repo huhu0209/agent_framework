@@ -374,3 +374,18 @@ def test_get_messages_nonexistent(client: TestClient) -> None:
     """get_messages 对不存在的 session 应返回 None。"""
     sm = client.app.state.session_manager
     assert sm.get_messages("a" * 32) is None
+
+
+def test_get_history_after_eviction(client_with_storage: TestClient) -> None:
+    """GET /chat/{id} 应在 session 被回收后仍能返回历史。"""
+    res = client_with_storage.post("/api/v1/chat", json={"message": "hello"})
+    sid = res.headers["X-Session-Id"]
+
+    sm = client_with_storage.app.state.session_manager
+    sm.remove(sid)
+
+    history_res = client_with_storage.get(f"/api/v1/chat/{sid}")
+    assert history_res.status_code == 200
+    data = history_res.json()
+    assert data["session_id"] == sid
+    assert any(m["role"] == "user" for m in data["messages"])

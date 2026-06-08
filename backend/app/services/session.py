@@ -74,11 +74,17 @@ class SessionManager:
             return None
         from agent_framework.transcript import TranscriptReader
         reader = TranscriptReader(transcript_path)
-        messages = reader.to_messages()
-        return [
-            {"role": m.role, "content": m.content if isinstance(m.content, str) else [b.model_dump() for b in m.content]}
-            for m in messages
-        ]
+        result: list[dict] = []
+        for ev in reader.events():
+            if ev.type.value == "user":
+                text = ev.content if isinstance(ev.content, str) else ""
+                result.append({"role": "user", "content": text, "timestamp": ev.timestamp})
+            elif ev.type.value == "assistant":
+                blocks = ev.content if isinstance(ev.content, list) else []
+                result.append({"role": "agent", "blocks": blocks, "timestamp": ev.timestamp})
+            elif ev.type.value == "tool_result":
+                continue  # tool_result 不展示在历史中
+        return result
 
     def remove(self, session_id: str) -> None:
         session = self._sessions.pop(session_id, None)

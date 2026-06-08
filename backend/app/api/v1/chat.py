@@ -13,7 +13,6 @@ from starlette.responses import StreamingResponse
 from agent_framework.agents.agent_loop import LoopEvent
 from agent_framework.transcript import TranscriptConsumer
 from app.models import ChatRequest, HistoryResponse, RenameRequest
-from app.services.session import ChatSession
 
 logger = logging.getLogger(__name__)
 
@@ -152,10 +151,10 @@ async def create_chat(req: ChatRequest, request: Request):
 @router.get("/chat/{session_id}", response_model=HistoryResponse)
 async def get_history(session_id: str, request: Request) -> HistoryResponse:
     sm = request.app.state.session_manager
-    session = sm.get(session_id)
-    if session is None:
+    messages = sm.get_messages(session_id)
+    if messages is None:
         raise HTTPException(404, "session not found")
-    return HistoryResponse(session_id=session.session_id, messages=session.messages)
+    return HistoryResponse(session_id=session_id, messages=messages)
 
 
 # ---------------------------------------------------------------------------
