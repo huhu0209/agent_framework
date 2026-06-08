@@ -242,7 +242,7 @@ class TestDegradationChain:
         # Verify degrade event was emitted
         degrade_events = [e for e in events if e.type == "degrade"]
         assert len(degrade_events) == 1
-        assert "reason" in degrade_events[0].data
+        assert degrade_events[0].data["reason"] == "Decomposition failed"
 
 
 # ---------------------------------------------------------------------------

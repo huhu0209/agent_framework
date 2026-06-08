@@ -110,7 +110,7 @@ class DAGExecutor:
         except Exception as e:
             logger.error("Worker '%s' failed: %s", subtask.worker, e)
             return SubTaskResult(
-                id=subtask.id, worker=subtask.worker, output="", success=False, error=str(e),
+                id=subtask.id, worker=subtask.worker, output="", success=False, error="Worker execution failed",
             )
 
     async def _collect_output(self, agent: Agent, prompt: str) -> str:

@@ -173,10 +173,10 @@ class TestFailureFastFail:
         assert events[0].type == "worker_start"
         assert events[1].type == "worker_done"
         assert events[1].data["success"] is False
-        assert "LLM 挂了" in events[1].data["error"]
+        assert events[1].data["error"] == "Worker execution failed"
 
         assert events[2].type == "orchestrator_error"
-        assert "searcher" in events[2].data["error"]
+        assert "Worker execution failed" in events[2].data["error"]
         assert events[2].data["subtask_id"] == "t1"
 
     @pytest.mark.asyncio
@@ -220,7 +220,7 @@ class TestFailureFastFail:
         assert len(events) == 3
         assert events[1].type == "worker_done"
         assert events[1].data["success"] is False
-        assert "内部错误" in events[1].data["error"]
+        assert events[1].data["error"] == "Worker execution failed"
 
 
 class TestEventOrder:

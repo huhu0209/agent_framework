@@ -145,7 +145,7 @@ class OrchestratorEngine(Agent):
             yield AgentEvent(
                 type="degrade",
                 step=1,
-                data={"reason": str(exc)},
+                data={"reason": "Decomposition failed"},
             )
             async for event in self._run_plan_and_solve(user_message):
                 yield event
