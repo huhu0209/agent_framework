@@ -1,0 +1,52 @@
+"""Skills parser — SKILL.md frontmatter 与字段解析。"""
+
+from __future__ import annotations
+
+from agent_framework.memory.frontmatter import parse_frontmatter_lines
+
+
+def _parse_skill_document(text: str) -> tuple[dict[str, str], str]:
+    """解析 SKILL.md，返回 (meta_dict, body_string)。
+
+    无 frontmatter → ({}, text)。
+    frontmatter 不闭合 → ({}, text)。
+    """
+    lines = text.split("\n")
+    if not lines or lines[0].strip() != "---":
+        return {}, text
+
+    end_idx = None
+    for i, line in enumerate(lines[1:], start=1):
+        if line.strip() == "---":
+            end_idx = i
+            break
+
+    if end_idx is None:
+        return {}, text
+
+    body = "\n".join(lines[end_idx + 1 :]).strip()
+    meta = parse_frontmatter_lines(lines[1:end_idx])
+    return meta, body
+
+
+def _parse_bool(value: str | None, default: bool) -> bool:
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in ("true", "yes", "1"):
+        return True
+    if normalized in ("false", "no", "0"):
+        return False
+    return default
+
+
+def _parse_list(value: str | None) -> list[str] | None:
+    if value is None:
+        return None
+    items = [v.strip() for v in value.split(",") if v.strip()]
+    return items or None
+
+
+def _parse_paths(value: str | None) -> list[str] | None:
+    """解析 paths 字段 — 逗号分隔的 glob 模式列表。"""
+    return _parse_list(value)
