@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
 from agent_framework.agents.base import Agent
 
@@ -46,6 +46,16 @@ class SubTaskResult:
     worker: str
     output: str
     success: bool
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class WorkerHandle:
+    """运行中的 Worker 实例跟踪。"""
+    id: str
+    worker_name: str
+    status: Literal["running", "completed", "failed"]
+    output: str = ""
     error: str | None = None
 
 

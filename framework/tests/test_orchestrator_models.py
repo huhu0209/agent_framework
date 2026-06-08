@@ -50,3 +50,28 @@ class TestSubTaskResult:
         result = SubTaskResult(id="1", worker="w", output="o", success=True)
         with pytest.raises(AttributeError):
             result.output = "modified"
+
+
+class TestWorkerHandle:
+    def test_create_running_handle(self):
+        from agent_framework.orchestrator.models import WorkerHandle
+        h = WorkerHandle(id="w_abc", worker_name="researcher", status="running")
+        assert h.id == "w_abc"
+        assert h.output == ""
+        assert h.error is None
+
+    def test_create_completed_handle(self):
+        from agent_framework.orchestrator.models import WorkerHandle
+        h = WorkerHandle(id="w_abc", worker_name="researcher", status="completed", output="result text")
+        assert h.output == "result text"
+
+    def test_create_failed_handle(self):
+        from agent_framework.orchestrator.models import WorkerHandle
+        h = WorkerHandle(id="w_abc", worker_name="researcher", status="failed", error="boom")
+        assert h.error == "boom"
+
+    def test_handle_is_frozen(self):
+        from agent_framework.orchestrator.models import WorkerHandle
+        h = WorkerHandle(id="w_abc", worker_name="researcher", status="running")
+        with pytest.raises(AttributeError):
+            h.status = "completed"
