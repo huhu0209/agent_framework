@@ -101,14 +101,14 @@ def test_to_messages_empty_file(tmp_path: Path):
     assert reader.to_messages() == []
 
 
-def test_round_trip_load_messages(tmp_path: Path):
+async def test_round_trip_load_messages(tmp_path: Path):
     """写 transcript → to_messages() → load_messages() → resume 运行。"""
     from agent_framework.agents.agent_loop import AgentLoop
     from agent_framework.tools.registry import ToolRegistry
     from agent_framework.tools.router import ToolRouter
     from agent_framework.tools.types import ToolUseContext
     from agent_framework.llm.types import (
-        CompletionConfig, CompletionResult, StopReason, UsageStats, ProviderInfo,
+        CompletionResult, StopReason, UsageStats, ProviderInfo,
     )
     from unittest.mock import AsyncMock
     from agent_framework.llm.base import ILLMAdapter
@@ -143,14 +143,9 @@ def test_round_trip_load_messages(tmp_path: Path):
     loop.load_messages(messages)
 
     # 4. resume 运行
-    async def run():
-        events = []
-        async for ev in loop.run("continue", resume=True):
-            events.append(ev)
-        return events
-
-    import asyncio
-    events = asyncio.get_event_loop().run_until_complete(run())
+    events = []
+    async for ev in loop.run("continue", resume=True):
+        events.append(ev)
     assert len(events) >= 1
 
     # resume=True 时 _messages 已有 [SystemMessage, UserMessage, AssistantMessage, UserMessage]
