@@ -12,7 +12,7 @@ from starlette.responses import StreamingResponse
 
 from agent_framework.agents.agent_loop import LoopEvent
 from agent_framework.transcript import TranscriptConsumer
-from app.models import ChatRequest, HistoryResponse
+from app.models import ChatRequest, HistoryResponse, RenameRequest
 from app.services.session import ChatSession
 
 logger = logging.getLogger(__name__)
@@ -178,4 +178,15 @@ async def delete_session(session_id: str, request: Request) -> dict:
     deleted = sm.delete_session(session_id)
     if not deleted:
         raise HTTPException(404, "session not found")
+    return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# PATCH /sessions/{session_id} — 重命名会话
+# ---------------------------------------------------------------------------
+
+@router.patch("/sessions/{session_id}")
+async def rename_session(session_id: str, req: RenameRequest, request: Request) -> dict:
+    sm = request.app.state.session_manager
+    sm.update_title(session_id, req.title)
     return {"status": "ok"}

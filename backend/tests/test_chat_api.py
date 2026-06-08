@@ -304,3 +304,20 @@ def test_session_title_updated_on_first_message(client_with_storage: TestClient)
     matching = [s for s in sessions if s["session_id"] == sid]
     assert len(matching) == 1
     assert matching[0]["title"] == "hello this is a long message that should be trunca"
+
+
+def test_rename_session(client_with_storage: TestClient) -> None:
+    # 先创建一个会话
+    resp = client_with_storage.post("/api/v1/chat", json={"message": "hello world"})
+    session_id = resp.headers["X-Session-Id"]
+
+    # 重命名
+    resp = client_with_storage.patch(f"/api/v1/sessions/{session_id}", json={"title": "My Chat"})
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok"}
+
+    # 验证标题已更新
+    resp = client_with_storage.get("/api/v1/sessions")
+    sessions = resp.json()
+    target = next(s for s in sessions if s["session_id"] == session_id)
+    assert target["title"] == "My Chat"

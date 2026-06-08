@@ -46,3 +46,17 @@ Message = UserMessage | AgentMessage | ErrorMessage
 class HistoryResponse(BaseModel):
     session_id: str
     messages: list[Message]
+
+
+class RenameRequest(BaseModel):
+    title: str
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("title cannot be empty")
+        if len(v) > 100:
+            raise ValueError("title too long (max 100)")
+        return v
