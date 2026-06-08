@@ -101,8 +101,8 @@ class TestSerialExecution:
 
         executor = _make_executor(registry)
         plan = [
-            SubTask(id="t1", worker="searcher", prompt="搜索X", depends_on=[]),
-            SubTask(id="t2", worker="analyzer", prompt="分析Y", depends_on=["t1"]),
+            SubTask(id="t1", worker="searcher", prompt="搜索X", depends_on=()),
+            SubTask(id="t2", worker="analyzer", prompt="分析Y", depends_on=("t1",)),
         ]
 
         events = await _collect_events(executor, plan)
@@ -137,8 +137,8 @@ class TestSerialExecution:
         executor = _make_executor(registry)
         # t2 depends on t1, but t2 comes first in the list
         plan = [
-            SubTask(id="t2", worker="b", prompt="B", depends_on=["t1"]),
-            SubTask(id="t1", worker="a", prompt="A", depends_on=[]),
+            SubTask(id="t2", worker="b", prompt="B", depends_on=("t1",)),
+            SubTask(id="t1", worker="a", prompt="A", depends_on=()),
         ]
 
         with pytest.raises(ValueError, match="topological"):

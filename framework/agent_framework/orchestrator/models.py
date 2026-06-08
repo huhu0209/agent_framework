@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 from agent_framework.agents.base import Agent
@@ -19,7 +19,7 @@ class WorkerFactory(Protocol):
     ) -> Agent: ...
 
 
-@dataclass
+@dataclass(frozen=True)
 class WorkerSpec:
     """Worker 注册信息：名称、描述、工厂函数。"""
 
@@ -28,17 +28,17 @@ class WorkerSpec:
     factory: WorkerFactory
 
 
-@dataclass
+@dataclass(frozen=True)
 class SubTask:
     """分解后的子任务，含依赖关系。"""
 
     id: str
     worker: str
     prompt: str
-    depends_on: list[str] = field(default_factory=list)
+    depends_on: tuple[str, ...] = ()
 
 
-@dataclass
+@dataclass(frozen=True)
 class SubTaskResult:
     """子任务执行结果。"""
 

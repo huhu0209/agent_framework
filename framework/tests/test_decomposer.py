@@ -74,7 +74,7 @@ class TestParseResponse:
         assert result[0].id == "1"
         assert result[0].worker == "researcher"
         assert result[0].prompt == "搜索相关资料"
-        assert result[0].depends_on == []
+        assert result[0].depends_on == ()
 
     def test_multiple_subtasks_with_deps(self) -> None:
         """解析多个带依赖的子任务。"""
@@ -92,7 +92,7 @@ class TestParseResponse:
         result = decomposer._parse_response(xml)
         assert result is not None
         assert len(result) == 2
-        assert result[1].depends_on == ["1"]
+        assert result[1].depends_on == ("1",)
 
     def test_no_decomposition_tag_returns_none(self) -> None:
         """没有 decomposition 标签返回 None。"""
@@ -124,7 +124,7 @@ class TestParseResponse:
         )
         result = decomposer._parse_response(xml)
         assert result is not None
-        assert result[2].depends_on == ["1", "2"]
+        assert result[2].depends_on == ("1", "2")
 
 
 # ---------------------------------------------------------------------------
@@ -143,8 +143,8 @@ class TestValidate:
             WorkerSpec(name="writer", description="写作", factory=_dummy_factory),
         )
         subtasks = [
-            SubTask(id="1", worker="researcher", prompt="搜索", depends_on=[]),
-            SubTask(id="2", worker="writer", prompt="写作", depends_on=["1"]),
+            SubTask(id="1", worker="researcher", prompt="搜索", depends_on=()),
+            SubTask(id="2", worker="writer", prompt="写作", depends_on=("1",)),
         ]
         # Should not raise
         decomposer._validate(subtasks, registry)
@@ -157,7 +157,7 @@ class TestValidate:
             WorkerSpec(name="researcher", description="搜索", factory=_dummy_factory),
         )
         subtasks = [
-            SubTask(id="1", worker="nonexistent", prompt="做事", depends_on=[]),
+            SubTask(id="1", worker="nonexistent", prompt="做事", depends_on=()),
         ]
         with pytest.raises(ValueError, match="Worker not found"):
             decomposer._validate(subtasks, registry)
@@ -170,7 +170,7 @@ class TestValidate:
             WorkerSpec(name="researcher", description="搜索", factory=_dummy_factory),
         )
         subtasks = [
-            SubTask(id="1", worker="researcher", prompt="搜索", depends_on=["99"]),
+            SubTask(id="1", worker="researcher", prompt="搜索", depends_on=("99",)),
         ]
         with pytest.raises(ValueError, match="depends_on id"):
             decomposer._validate(subtasks, registry)
@@ -184,8 +184,8 @@ class TestValidate:
             WorkerSpec(name="b", description="B", factory=_dummy_factory),
         )
         subtasks = [
-            SubTask(id="1", worker="a", prompt="A", depends_on=["2"]),
-            SubTask(id="2", worker="b", prompt="B", depends_on=["1"]),
+            SubTask(id="1", worker="a", prompt="A", depends_on=("2",)),
+            SubTask(id="2", worker="b", prompt="B", depends_on=("1",)),
         ]
         with pytest.raises(ValueError, match="cycle|循环"):
             decomposer._validate(subtasks, registry)
@@ -200,7 +200,7 @@ class TestValidate:
         ]
         registry = _make_registry(*specs)
         subtasks = [SubTask(id=str(i), worker=f"w{i}", prompt=f"Task {i}",
-                            depends_on=[str(i-1)] if i > 0 else [])
+                            depends_on=(str(i-1),) if i > 0 else ())
                     for i in range(200)]
         # Should not raise RecursionError
         decomposer._validate(subtasks, registry)
@@ -272,7 +272,7 @@ class TestDecompose:
         result = await decomposer.decompose("写一篇 AI 报告", registry)
         assert len(result) == 2
         assert result[0].worker == "researcher"
-        assert result[1].depends_on == ["1"]
+        assert result[1].depends_on == ("1",)
 
     @pytest.mark.asyncio
     async def test_unparseable_raises_value_error(self) -> None:

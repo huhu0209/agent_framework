@@ -93,9 +93,9 @@ class Decomposer:
         for m in subtask_pattern.finditer(inner):
             deps_str = m.group(3).strip()
             depends_on = (
-                [d.strip() for d in deps_str.split(",") if d.strip()]
+                tuple(d.strip() for d in deps_str.split(",") if d.strip())
                 if deps_str
-                else []
+                else ()
             )
             subtasks.append(SubTask(
                 id=m.group(1),
