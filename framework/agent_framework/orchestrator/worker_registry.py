@@ -2,14 +2,24 @@
 
 from __future__ import annotations
 
+import re
+
 from agent_framework.orchestrator.models import WorkerSpec
 
 
 class WorkerRegistry:
+    _VALID_NAME_PATTERN = re.compile(r'^[a-zA-Z][a-zA-Z0-9_-]*$')
+
     def __init__(self) -> None:
         self._workers: dict[str, WorkerSpec] = {}
 
     def register(self, spec: WorkerSpec) -> None:
+        if not spec.name or not spec.name.strip():
+            raise ValueError("Worker name cannot be empty")
+        if not self._VALID_NAME_PATTERN.match(spec.name):
+            raise ValueError(f"Invalid worker name: {spec.name!r}")
+        if spec.name in self._workers:
+            raise ValueError(f"Worker already registered: {spec.name}")
         self._workers[spec.name] = spec
 
     def get(self, name: str) -> WorkerSpec:
@@ -21,11 +31,7 @@ class WorkerRegistry:
         return len(self._workers) > 0
 
     def describe_for_llm(self) -> str:
-        """生成 Worker 列表的 LLM 可读描述。
-
-        按 dict 插入顺序输出（Python 3.7+ dict 保序）。
-        当前 Worker 数量较少，无需额外排序。
-        """
+        """生成 Worker 列表的 LLM 可读描述。"""
         if not self._workers:
             return "可用 Worker 列表：无"
         lines = ["可用 Worker 列表："]

@@ -15,12 +15,6 @@ class TestRegisterAndGet:
         registry.register(spec)
         assert registry.get("data_agent") is spec
 
-    def test_register_overwrites_same_name(self):
-        registry = WorkerRegistry()
-        registry.register(_make_spec("data_agent", "v1"))
-        registry.register(_make_spec("data_agent", "v2"))
-        assert registry.get("data_agent").description == "v2"
-
     def test_get_unknown_raises_key_error(self):
         registry = WorkerRegistry()
         with pytest.raises(KeyError):
@@ -50,3 +44,21 @@ class TestDescribeForLLM:
         assert "查询数据库中的设备数据" in desc
         assert "rag_agent" in desc
         assert "检索维修手册和知识库" in desc
+
+
+class TestRegisterValidation:
+    def test_empty_name_raises(self):
+        registry = WorkerRegistry()
+        with pytest.raises(ValueError, match="cannot be empty"):
+            registry.register(_make_spec("", "desc"))
+
+    def test_invalid_name_raises(self):
+        registry = WorkerRegistry()
+        with pytest.raises(ValueError, match="Invalid worker name"):
+            registry.register(_make_spec("123bad", "desc"))
+
+    def test_duplicate_name_raises(self):
+        registry = WorkerRegistry()
+        registry.register(_make_spec("data_agent"))
+        with pytest.raises(ValueError, match="already registered"):
+            registry.register(_make_spec("data_agent"))
