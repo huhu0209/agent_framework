@@ -46,6 +46,7 @@ class OrchestratorEngine(Agent):
         max_replans: int = 2,
         worker_registry: WorkerRegistry | None = None,
     ) -> None:
+        super().__init__()
         self.adapter = adapter
         self.model = model
         self.router = router
