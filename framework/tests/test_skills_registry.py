@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from agent_framework.skills.registry import SkillRegistry
+from agent_framework.skills.types import SkillDocument, SkillManifest, SkillSource
 
 from tests.helpers import create_skill
 
@@ -297,3 +298,95 @@ class TestGetManifest:
 
         assert manifest is not None
         assert manifest.user_invocable is False
+
+
+class TestSkillSourceTracking:
+    def test_source_stored_on_manifest(self, tmp_path):
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        create_skill(skills_dir, "deploy", "部署")
+
+        registry = SkillRegistry([skills_dir])
+        manifest = registry.get_manifest("deploy")
+        assert manifest is not None
+        assert manifest.source == SkillSource.USER
+
+    def test_is_trusted_user_source(self, tmp_path):
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        create_skill(skills_dir, "deploy", "部署")
+
+        registry = SkillRegistry([skills_dir])
+        assert registry.is_trusted("deploy") is True
+
+    def test_is_not_trusted_mcp_source(self):
+        manifest = SkillManifest(
+            name="mcp-tool",
+            description="MCP tool",
+            path=Path("/tmp"),
+            source=SkillSource.MCP,
+        )
+        registry = SkillRegistry([])
+        registry._documents["mcp-tool"] = SkillDocument(manifest=manifest, body="body")
+        assert registry.is_trusted("mcp-tool") is False
+
+    def test_is_trusted_unknown_skill(self):
+        registry = SkillRegistry([])
+        assert registry.is_trusted("nonexistent") is False
+
+
+class TestActivateForPaths:
+    def test_activate_matching_skill(self, tmp_path):
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        skill_path = skills_dir / "python-review"
+        skill_path.mkdir()
+        (skill_path / "SKILL.md").write_text(
+            "---\nname: python-review\ndescription: Python 审查\npaths: src/**/*.py\n---\nbody",
+            encoding="utf-8",
+        )
+
+        registry = SkillRegistry([skills_dir])
+        doc = registry._documents.get("python-review")
+        assert doc is not None
+        assert doc.active is False
+
+        activated = registry.activate_for_paths(["src/main.py"])
+        assert "python-review" in activated
+        assert registry._documents["python-review"].active is True
+
+    def test_no_match_stays_inactive(self, tmp_path):
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        skill_path = skills_dir / "python-review"
+        skill_path.mkdir()
+        (skill_path / "SKILL.md").write_text(
+            "---\nname: python-review\ndescription: Python 审查\npaths: src/**/*.py\n---\nbody",
+            encoding="utf-8",
+        )
+
+        registry = SkillRegistry([skills_dir])
+        activated = registry.activate_for_paths(["frontend/App.tsx"])
+        assert activated == []
+
+    def test_describe_available_excludes_inactive(self, tmp_path):
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        skill_path = skills_dir / "python-review"
+        skill_path.mkdir()
+        (skill_path / "SKILL.md").write_text(
+            "---\nname: python-review\ndescription: Python 审查\npaths: src/**/*.py\n---\nbody",
+            encoding="utf-8",
+        )
+        create_skill(skills_dir, "deploy", "部署")
+
+        registry = SkillRegistry([skills_dir])
+        catalog = registry.describe_available()
+        assert "deploy" in catalog
+        assert "python-review" not in catalog
+
+
+class TestSkillRegistryConstructor:
+    def test_empty_list(self):
+        registry = SkillRegistry([])
+        assert registry.get_names() == []

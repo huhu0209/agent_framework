@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from xml.sax.saxutils import quoteattr
 
-from agent_framework.skills.manifest import (
+from agent_framework.skills.parser import (
+    _parse_bool,
+    _parse_list,
+    _parse_paths,
+    _parse_skill_document,
+)
+from agent_framework.skills.types import (
     SkillDocument,
     SkillLoadResult,
     SkillManifest,
-    _parse_bool,
-    _parse_list,
-    _parse_skill_document,
+    SkillSource,
 )
 
 logger = logging.getLogger(__name__)
@@ -32,13 +36,16 @@ class SkillRegistry:
         self._full_refresh()
 
     def describe_available(self) -> str:
-        """L1: 轻量目录，注入 system prompt。自动检查更新。"""
+        """L1: 轻量目录，注入 system prompt。自动检查更新。仅显示 active skills。"""
         self._maybe_refresh()
-        if not self._documents:
+        active = {
+            n: d for n, d in self._documents.items() if d.active
+        }
+        if not active:
             return "(没有可用的 skills)"
         lines = []
-        for name in sorted(self._documents):
-            doc = self._documents[name]
+        for name in sorted(active):
+            doc = active[name]
             lines.append(f"- {name}: {doc.manifest.description}")
         return "\n".join(lines)
 
@@ -63,6 +70,35 @@ class SkillRegistry:
         self._maybe_refresh()
         doc = self._documents.get(name)
         return doc.manifest if doc else None
+
+    def is_trusted(self, name: str) -> bool:
+        """判断 skill 是否可信。MCP 来源返回 False，其他来源返回 True。"""
+        doc = self._documents.get(name)
+        if doc is None:
+            return False
+        return doc.manifest.source != SkillSource.MCP
+
+    def activate_for_paths(self, file_paths: list[str]) -> list[str]:
+        """检查文件路径，激活匹配的 inactive skills。
+
+        遍历所有 inactive 的 skills，如果其 paths glob 模式
+        匹配到任一 file_path，则激活该 skill。
+        """
+        activated: list[str] = []
+        for name, doc in self._documents.items():
+            if doc.active:
+                continue
+            paths = doc.manifest.paths
+            if not paths:
+                continue
+            for pattern in paths:
+                if any(self._glob_match(fp, pattern) for fp in file_paths):
+                    self._documents[name] = SkillDocument(
+                        manifest=doc.manifest, body=doc.body, active=True
+                    )
+                    activated.append(name)
+                    break
+        return activated
 
     def refresh(self) -> None:
         """强制全量重新扫描。"""
@@ -113,6 +149,11 @@ class SkillRegistry:
             user_invocable = _parse_bool(meta.get("user-invocable"), default=True)
             allowed_tools = _parse_list(meta.get("allowed-tools"))
             model = meta.get("model")
+            disable_model_invocation = _parse_bool(
+                meta.get("disable-model-invocation"), default=False
+            )
+            context = meta.get("context")
+            paths = _parse_paths(meta.get("paths"))
 
             if "name" not in meta:
                 logger.warning(
@@ -130,11 +171,19 @@ class SkillRegistry:
                 name=name,
                 description=description,
                 path=path.parent,
+                source=SkillSource.USER,
                 user_invocable=user_invocable,
                 allowed_tools=allowed_tools,
                 model=model,
+                disable_model_invocation=disable_model_invocation,
+                context=context,
+                paths=paths,
             )
-            self._documents[name] = SkillDocument(manifest=manifest, body=body)
+            # paths skills 默认 inactive
+            active = not bool(paths)
+            self._documents[name] = SkillDocument(
+                manifest=manifest, body=body, active=active
+            )
 
     def _format_skill_body(self, doc: SkillDocument) -> str:
         parts = [
@@ -164,3 +213,26 @@ class SkillRegistry:
             if f.is_file()
         )
         return files[:10], len(files)
+
+    @staticmethod
+    def _glob_match(file_path: str, pattern: str) -> bool:
+        """支持 ** 递归 glob 的路径匹配。
+
+        PurePosixPath.match 要求 ** 至少匹配一层目录，
+        但语义上 ** 应匹配零层或更多层，因此同时尝试两种情况。
+        """
+        p = PurePosixPath(file_path)
+        if p.match(pattern):
+            return True
+        # ** 通常应匹配零层目录，尝试去掉 /** 的变体
+        if "/**/" in pattern:
+            # src/**/*.py → 同时尝试 src/*.py
+            flat = pattern.replace("/**/", "/")
+            if p.match(flat):
+                return True
+        if pattern.startswith("**/"):
+            # **/foo.py → 同时尝试 foo.py
+            flat = pattern[3:]
+            if p.match(flat):
+                return True
+        return False
