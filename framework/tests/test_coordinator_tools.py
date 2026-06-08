@@ -136,3 +136,26 @@ class TestListWorkersTool:
         data = json.loads(result.content)
         assert len(data["workers"]) == 1
         assert data["workers"][0]["status"] == "completed"
+
+
+class TestCoordinatorPrompt:
+    def test_prompt_contains_worker_descriptions(self):
+        from agent_framework.orchestrator.coordinator_prompt import build_coordinator_prompt
+        from agent_framework.orchestrator.worker_registry import WorkerRegistry
+        from agent_framework.orchestrator.models import WorkerSpec
+        from unittest.mock import MagicMock
+
+        reg = WorkerRegistry()
+        reg.register(WorkerSpec(name="researcher", description="研究代码库", factory=MagicMock()))
+        prompt = build_coordinator_prompt(reg)
+        assert "researcher" in prompt
+        assert "spawn_worker" in prompt
+
+    def test_prompt_contains_all_tools(self):
+        from agent_framework.orchestrator.coordinator_prompt import build_coordinator_prompt
+        from agent_framework.orchestrator.worker_registry import WorkerRegistry
+
+        prompt = build_coordinator_prompt(WorkerRegistry())
+        assert "spawn_worker" in prompt
+        assert "send_message" in prompt
+        assert "list_workers" in prompt
