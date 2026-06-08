@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING, AsyncGenerator
 
 from agent_framework.agents.base import Agent, AgentEvent
-from agent_framework.orchestrator.models import SubTask, SubTaskResult
+from agent_framework.orchestrator.models import SubTask, SubTaskResult, OrchestratorEventType
 
 if TYPE_CHECKING:
     from agent_framework.llm.base import ILLMAdapter
@@ -50,7 +50,7 @@ class DAGExecutor:
         self._validate_order(plan)
         for subtask in plan:
             yield AgentEvent(
-                type="worker_start",
+                type=OrchestratorEventType.WORKER_START,
                 step=1,
                 data={
                     "subtask_id": subtask.id,
@@ -60,7 +60,7 @@ class DAGExecutor:
             )
             result = await self._run_worker(subtask)
             yield AgentEvent(
-                type="worker_done",
+                type=OrchestratorEventType.WORKER_DONE,
                 step=1,
                 data={
                     "subtask_id": result.id,
@@ -72,7 +72,7 @@ class DAGExecutor:
             )
             if not result.success:
                 yield AgentEvent(
-                    type="orchestrator_error",
+                    type=OrchestratorEventType.ORCHESTRATOR_ERROR,
                     step=1,
                     data={
                         "error": f"Worker '{result.worker}' failed: {result.error}",

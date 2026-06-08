@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, AsyncGenerator, Literal
 
 from agent_framework.agents.base import Agent, AgentEvent
 from agent_framework.llm.base import ILLMAdapter
-from agent_framework.orchestrator.models import SubTask
+from agent_framework.orchestrator.models import SubTask, OrchestratorEventType
 from agent_framework.tools.router import ToolRouter
 from agent_framework.tools.types import ToolUseContext
 
@@ -139,7 +139,7 @@ class OrchestratorEngine(Agent):
         from agent_framework.orchestrator.decomposer import Decomposer
 
         yield AgentEvent(
-            type="decompose_start",
+            type=OrchestratorEventType.DECOMPOSE_START,
             step=1,
             data={"task_length": len(user_message)},
         )
@@ -150,7 +150,7 @@ class OrchestratorEngine(Agent):
         except Exception as exc:
             logger.warning("Decompose failed, degrading to PlanAndSolve: %s", exc)
             yield AgentEvent(
-                type="degrade",
+                type=OrchestratorEventType.DEGRADE,
                 step=1,
                 data={"reason": "Decomposition failed"},
             )
@@ -159,7 +159,7 @@ class OrchestratorEngine(Agent):
             return
 
         yield AgentEvent(
-            type="decompose_done",
+            type=OrchestratorEventType.DECOMPOSE_DONE,
             step=1,
             data={"subtask_count": len(plan)},
         )
@@ -181,14 +181,14 @@ class OrchestratorEngine(Agent):
         results: list[dict] = []
         async for event in executor.execute(plan):
             yield event
-            if event.type == "orchestrator_error":
+            if event.type == OrchestratorEventType.ORCHESTRATOR_ERROR:
                 return
-            if event.type == "worker_done":
+            if event.type == OrchestratorEventType.WORKER_DONE:
                 results.append(event.data)
 
         combined = self._synthesize("", results)
         yield AgentEvent(
-            type="orchestrator_done",
+            type=OrchestratorEventType.ORCHESTRATOR_DONE,
             step=1,
             data={"synthesized_output": combined},
         )

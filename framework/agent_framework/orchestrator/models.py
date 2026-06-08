@@ -47,3 +47,14 @@ class SubTaskResult:
     output: str
     success: bool
     error: str | None = None
+
+
+class OrchestratorEventType:
+    """事件类型常量。"""
+    DECOMPOSE_START = "decompose_start"
+    DECOMPOSE_DONE = "decompose_done"
+    DEGRADE = "degrade"
+    WORKER_START = "worker_start"
+    WORKER_DONE = "worker_done"
+    ORCHESTRATOR_ERROR = "orchestrator_error"
+    ORCHESTRATOR_DONE = "orchestrator_done"
