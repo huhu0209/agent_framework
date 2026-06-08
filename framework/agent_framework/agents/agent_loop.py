@@ -163,6 +163,13 @@ class AgentLoop(Agent):
         if self.profile is None:
             self._system_prompt_text += "\n\n" + PlanningSession.plan_instruction_prompt()
 
+    def load_messages(self, messages: list[Message]) -> None:
+        """注入历史消息（用于 resume）。前插 SystemMessage 以确保 system prompt 存在。"""
+        self._messages = [
+            SystemMessage(content=self._system_prompt_text),
+            *messages,
+        ]
+
     def _build_config(self, messages: list[Message]) -> CompletionConfig:
         tools = self.router.registry.get_definitions()
         return CompletionConfig(model=self.model, messages=messages, tools=tools)

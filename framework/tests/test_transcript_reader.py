@@ -99,3 +99,61 @@ def test_to_messages_empty_file(tmp_path: Path):
     path.write_text("")
     reader = TranscriptReader(path)
     assert reader.to_messages() == []
+
+
+def test_round_trip_load_messages(tmp_path: Path):
+    """写 transcript → to_messages() → load_messages() → resume 运行。"""
+    from agent_framework.agents.agent_loop import AgentLoop
+    from agent_framework.tools.registry import ToolRegistry
+    from agent_framework.tools.router import ToolRouter
+    from agent_framework.tools.types import ToolUseContext
+    from agent_framework.llm.types import (
+        CompletionConfig, CompletionResult, StopReason, UsageStats, ProviderInfo,
+    )
+    from unittest.mock import AsyncMock
+    from agent_framework.llm.base import ILLMAdapter
+
+    # 1. 写一个简单的 transcript
+    path = _write_events(tmp_path, [
+        TranscriptEvent(type=TranscriptEventType.USER, timestamp=1.0, content="hello"),
+        TranscriptEvent(type=TranscriptEventType.ASSISTANT, timestamp=2.0,
+                        content=[{"type": "text", "text": "hi there"}]),
+    ])
+
+    # 2. 读取历史
+    reader = TranscriptReader(path)
+    messages = reader.to_messages()
+    assert len(messages) == 2
+
+    # 3. 新 loop，load_messages
+    adapter = AsyncMock(spec=ILLMAdapter)
+    adapter.get_provider_info.return_value = ProviderInfo(
+        name="mock", base_url="https://mock", default_model="mock",
+    )
+    adapter.complete.return_value = CompletionResult(
+        id="test", model="mock",
+        content=[TextBlock(text="welcome back")],
+        stop_reason=StopReason.END_TURN,
+        usage=UsageStats(),
+    )
+    loop = AgentLoop(
+        adapter=adapter, model="mock",
+        router=ToolRouter(ToolRegistry()), ctx=ToolUseContext(),
+    )
+    loop.load_messages(messages)
+
+    # 4. resume 运行
+    async def run():
+        events = []
+        async for ev in loop.run("continue", resume=True):
+            events.append(ev)
+        return events
+
+    import asyncio
+    events = asyncio.get_event_loop().run_until_complete(run())
+    assert len(events) >= 1
+
+    # resume=True 时 _messages 已有 [SystemMessage, UserMessage, AssistantMessage, UserMessage]
+    call_args = adapter.complete.call_args
+    config = call_args[0][0]
+    assert len(config.messages) == 4  # system + user + assistant + new user
