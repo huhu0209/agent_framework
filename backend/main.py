@@ -3,6 +3,7 @@
 import logging
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -21,7 +22,8 @@ ALLOWED_ORIGINS = os.getenv("APP_CORS_ORIGINS", "http://localhost:30001").split(
 async def lifespan(app: FastAPI):
     settings = Settings()
     factory = AgentFactory.from_settings(settings)
-    sm = SessionManager()
+    storage_dir = Path(__file__).parent / "data" / "sessions"
+    sm = SessionManager(storage_dir=storage_dir)
     sm.start_cleanup()
 
     app.state.session_manager = sm

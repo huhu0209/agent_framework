@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Request
 from starlette.responses import StreamingResponse
 
 from agent_framework.agents.agent_loop import LoopEvent
+from agent_framework.transcript import TranscriptConsumer
 from app.models import ChatRequest, HistoryResponse
 from app.services.session import ChatSession
 
@@ -38,7 +39,7 @@ def _map_to_sse(event: LoopEvent) -> list[str]:
         if stop_reason == "tool_use":
             return [_sse("thinking", {"step": event.step, **data})]
         if stop_reason in ("end_turn", "stop_sequence"):
-            return [_sse("done", {"step": event.step, **data})]
+            return []
         return []
 
     if event_type == "tool_result":
@@ -84,7 +85,8 @@ async def create_chat(req: ChatRequest, request: Request):
 
     is_resume = False
     if req.session_id:
-        session = sm.get(req.session_id)
+        agent_loop = factory.create_loop()
+        session = sm.get_or_restore(req.session_id, agent_loop)
         if session is None:
             raise HTTPException(404, "session not found")
         is_resume = True
@@ -105,7 +107,14 @@ async def create_chat(req: ChatRequest, request: Request):
             yield _sse("shutdown", {})
             return
         try:
-            async for loop_event in loop.run(req.message, resume=is_resume):
+            gen = loop.run(req.message, resume=is_resume)
+            if session.transcript_writer is not None:
+                consumer = TranscriptConsumer(
+                    session.transcript_writer,
+                    system_prompt=getattr(loop, '_system_prompt_text', None),
+                )
+                gen = consumer.wrap(gen, req.message)
+            async for loop_event in gen:
                 for sse_line in _map_to_sse(loop_event):
                     yield sse_line
                 if loop_event.type == "done":
@@ -115,6 +124,9 @@ async def create_chat(req: ChatRequest, request: Request):
                         "blocks": content,
                         "timestamp": time.time(),
                     })
+                    # 更新会话标题（取第一条用户消息前 50 字符）
+                    if len(session.messages) <= 2:
+                        sm.update_title(session.session_id, req.message[:50])
         except Exception as exc:
             logger.exception("Agent error in session %s", session.session_id)
             yield _sse("error", {"error": str(exc)})
@@ -144,3 +156,26 @@ async def get_history(session_id: str, request: Request) -> HistoryResponse:
     if session is None:
         raise HTTPException(404, "session not found")
     return HistoryResponse(session_id=session.session_id, messages=session.messages)
+
+
+# ---------------------------------------------------------------------------
+# GET /sessions — 列出历史会话
+# ---------------------------------------------------------------------------
+
+@router.get("/sessions")
+async def list_sessions(request: Request) -> list[dict]:
+    sm = request.app.state.session_manager
+    return sm.list_sessions()
+
+
+# ---------------------------------------------------------------------------
+# DELETE /sessions/{session_id} — 删除会话
+# ---------------------------------------------------------------------------
+
+@router.delete("/sessions/{session_id}")
+async def delete_session(session_id: str, request: Request) -> dict:
+    sm = request.app.state.session_manager
+    deleted = sm.delete_session(session_id)
+    if not deleted:
+        raise HTTPException(404, "session not found")
+    return {"status": "ok"}
