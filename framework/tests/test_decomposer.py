@@ -73,7 +73,7 @@ class TestParseResponse:
         assert len(result) == 1
         assert result[0].id == "1"
         assert result[0].worker == "researcher"
-        assert result[0].prompt == "搜索相关资料"
+        assert result[0].prompt == "[Decomposer-generated subtask]\n搜索相关资料"
         assert result[0].depends_on == ()
 
     def test_multiple_subtasks_with_deps(self) -> None:

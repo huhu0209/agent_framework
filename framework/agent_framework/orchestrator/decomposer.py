@@ -107,7 +107,7 @@ class Decomposer:
             subtasks.append(SubTask(
                 id=m.group(1),
                 worker=m.group(2),
-                prompt=prompt_text,
+                prompt=f"[Decomposer-generated subtask]\n{prompt_text}",
                 depends_on=depends_on,
             ))
         if not subtasks:
