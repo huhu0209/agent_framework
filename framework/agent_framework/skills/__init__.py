@@ -1,13 +1,21 @@
-"""Skills 系统 — 渐进式 Skill 加载。"""
+"""Skills 系统。"""
 
-from agent_framework.skills.manifest import SkillDocument, SkillLoadResult, SkillManifest
+from agent_framework.skills.discovery import SkillDiscovery
 from agent_framework.skills.registry import SkillRegistry
 from agent_framework.skills.tool import create_load_skill_spec
+from agent_framework.skills.types import (
+    SkillDocument,
+    SkillLoadResult,
+    SkillManifest,
+    SkillSource,
+)
 
 __all__ = [
+    "SkillDiscovery",
     "SkillDocument",
     "SkillLoadResult",
     "SkillManifest",
     "SkillRegistry",
+    "SkillSource",
     "create_load_skill_spec",
 ]
