@@ -73,6 +73,9 @@ interface ChatStore {
   sessionId: string | null
   sessions: SessionInfo[]
   sidebarOpen: boolean
+  sessionsLoading: boolean
+  switchingSession: boolean
+  messageCache: Map<string, ChatMessage[]>
   sendMessage: (text: string) => Promise<void>
   addSystemMessage: (text: string) => void
   loadSessions: () => Promise<void>
@@ -81,6 +84,7 @@ interface ChatStore {
   renameSession: (id: string, title: string) => Promise<void>
   newSession: () => void
   toggleSidebar: () => void
+  prefetchSession: (id: string) => Promise<void>
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -91,6 +95,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   sessionId: null,
   sessions: [],
   sidebarOpen: true,
+  sessionsLoading: false,
+  switchingSession: false,
+  messageCache: new Map(),
 
   addSystemMessage: (text: string) => {
     const msg: ChatMessage = {
@@ -130,39 +137,63 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // Error handled: streamingMessage finalized in finally
     } finally {
       const final = get().streamingMessage
-      set((s) => ({
-        messages: final ? [...s.messages, final] : s.messages,
-        streamingMessage: null,
-        isStreaming: false,
-      }))
+      set((s) => {
+        const msgs = final ? [...s.messages, final] : s.messages
+        const cache = new Map(s.messageCache)
+        if (s.sessionId) cache.set(s.sessionId, msgs)
+        return {
+          messages: msgs,
+          streamingMessage: null,
+          isStreaming: false,
+          messageCache: cache,
+        }
+      })
     }
   },
 
   loadSessions: async () => {
+    set({ sessionsLoading: true })
     try {
       const res = await fetch(`${API_BASE}/api/v1/sessions`)
       if (res.ok) {
         const data = await res.json()
         const sessions = Array.isArray(data) ? data : []
-        set({ sessions })
+        set({ sessions, sessionsLoading: false })
+      } else {
+        set({ sessionsLoading: false })
       }
     } catch {
-      // network error — keep existing sessions list
+      set({ sessionsLoading: false })
     }
   },
 
   switchSession: async (id: string) => {
-    const res = await fetch(`${API_BASE}/api/v1/chat/${id}`)
-    if (!res.ok) return
-    const data = await res.json()
-    const messages: ChatMessage[] = data.messages.map((m: Record<string, unknown>, i: number) => ({
-      id: `restored-${i}-${Date.now()}`,
-      role: m.role as MessageRole,
-      timestamp: (m.timestamp as number) ?? Date.now(),
-      ...(m.content ? { content: m.content as string } : {}),
-      ...(m.blocks ? { blocks: toFrontendBlocks(m.blocks as Record<string, unknown>[]) } : {}),
-    }))
-    set({ messages, sessionId: id, streamingMessage: null })
+    const cached = get().messageCache.get(id)
+    if (cached) {
+      set({ messages: cached, sessionId: id, streamingMessage: null })
+      return
+    }
+    set({ switchingSession: true })
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/chat/${id}`)
+      if (!res.ok) {
+        set({ switchingSession: false })
+        return
+      }
+      const data = await res.json()
+      const messages: ChatMessage[] = data.messages.map((m: Record<string, unknown>, i: number) => ({
+        id: `restored-${i}-${Date.now()}`,
+        role: m.role as MessageRole,
+        timestamp: (m.timestamp as number) ?? Date.now(),
+        ...(m.content ? { content: m.content as string } : {}),
+        ...(m.blocks ? { blocks: toFrontendBlocks(m.blocks as Record<string, unknown>[]) } : {}),
+      }))
+      const cache = new Map(get().messageCache)
+      cache.set(id, messages)
+      set({ messages, sessionId: id, streamingMessage: null, switchingSession: false, messageCache: cache })
+    } catch {
+      set({ switchingSession: false })
+    }
   },
 
   deleteSession: async (id: string) => {
@@ -191,13 +222,43 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   newSession: () => {
-    set({ messages: [], sessionId: null, streamingMessage: null })
+    const optimistic: SessionInfo = {
+      session_id: `temp-${Date.now()}`,
+      title: '新对话',
+      created_at: Date.now() / 1000,
+    }
+    set((s) => ({
+      sessions: [optimistic, ...s.sessions],
+      messages: [],
+      sessionId: null,
+      streamingMessage: null,
+    }))
     get().addSystemMessage('新会话已开始。输入消息开始对话。')
-    get().loadSessions()
   },
 
   toggleSidebar: () => {
     set((s) => ({ sidebarOpen: !s.sidebarOpen }))
+  },
+
+  prefetchSession: async (id: string) => {
+    if (get().messageCache.has(id)) return
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/chat/${id}`)
+      if (!res.ok) return
+      const data = await res.json()
+      const messages: ChatMessage[] = data.messages.map((m: Record<string, unknown>, i: number) => ({
+        id: `restored-${i}-${Date.now()}`,
+        role: m.role as MessageRole,
+        timestamp: (m.timestamp as number) ?? Date.now(),
+        ...(m.content ? { content: m.content as string } : {}),
+        ...(m.blocks ? { blocks: toFrontendBlocks(m.blocks as Record<string, unknown>[]) } : {}),
+      }))
+      const cache = new Map(get().messageCache)
+      cache.set(id, messages)
+      set({ messageCache: cache })
+    } catch {
+      // prefetch failure is silent
+    }
   },
 }))
 
@@ -223,7 +284,20 @@ async function sendViaSse(
   }
 
   const sessionId = res.headers.get('X-Session-Id')
-  if (sessionId) set({ sessionId })
+  if (sessionId) {
+    set((s) => {
+      const tempIndex = s.sessions.findIndex(sess => sess.session_id.startsWith('temp-'))
+      if (tempIndex !== -1) {
+        const updated = [...s.sessions]
+        updated[tempIndex] = { ...updated[tempIndex], session_id: sessionId }
+        return { sessionId, sessions: updated }
+      }
+      return { sessionId }
+    })
+    if (get().sessions.some(s => s.session_id === sessionId && s.title === '新对话')) {
+      get().loadSessions()
+    }
+  }
 
   const reader = res.body!.getReader()
   const decoder = new TextDecoder()

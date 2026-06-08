@@ -50,6 +50,9 @@ beforeEach(() => {
     sessionId: null,
     sessions: [],
     sidebarOpen: true,
+    sessionsLoading: false,
+    switchingSession: false,
+    messageCache: new Map(),
   })
 })
 
@@ -277,11 +280,14 @@ describe('useChatStore', () => {
       sessionId: 'a',
     })
     mockFetch.mockResolvedValueOnce({ ok: true })
-    mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) })
 
     await useChatStore.getState().deleteSession('a')
 
-    expect(useChatStore.getState().sessions).toHaveLength(1)
+    const sessions = useChatStore.getState().sessions
+    // 'a' removed, newSession adds optimistic temp entry
+    expect(sessions.some(s => s.session_id === 'a')).toBe(false)
+    expect(sessions.some(s => s.session_id === 'b')).toBe(true)
+    expect(sessions.some(s => s.session_id.startsWith('temp-'))).toBe(true)
     expect(useChatStore.getState().sessionId).toBeNull()
   })
 
@@ -294,5 +300,121 @@ describe('useChatStore', () => {
     await useChatStore.getState().renameSession('a', 'New Title')
 
     expect(useChatStore.getState().sessions[0].title).toBe('New Title')
+  })
+
+  it('loadSessions sets sessionsLoading during fetch', async () => {
+    let loadingDuringFetch = false
+    mockFetch.mockImplementationOnce(() => {
+      loadingDuringFetch = useChatStore.getState().sessionsLoading
+      return Promise.resolve({ ok: true, json: () => Promise.resolve([]) })
+    })
+
+    await useChatStore.getState().loadSessions()
+
+    expect(loadingDuringFetch).toBe(true)
+    expect(useChatStore.getState().sessionsLoading).toBe(false)
+  })
+
+  it('switchSession uses cache on second call', async () => {
+    const apiMessages = [
+      { role: 'user', content: 'hi', timestamp: 1700000000 },
+    ]
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ session_id: 'abc', messages: apiMessages }),
+    })
+
+    await useChatStore.getState().switchSession('abc')
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+
+    await useChatStore.getState().switchSession('abc')
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+    expect(useChatStore.getState().sessionId).toBe('abc')
+  })
+
+  it('switchSession sets switchingSession during fetch', async () => {
+    let switchingDuringFetch = false
+    mockFetch.mockImplementationOnce(() => {
+      switchingDuringFetch = useChatStore.getState().switchingSession
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ session_id: 'abc', messages: [] }),
+      })
+    })
+
+    await useChatStore.getState().switchSession('abc')
+
+    expect(switchingDuringFetch).toBe(true)
+    expect(useChatStore.getState().switchingSession).toBe(false)
+  })
+
+  it('newSession adds optimistic entry to sessions', () => {
+    useChatStore.setState({ sessions: [{ session_id: 'old', title: 'Old', created_at: 1 }] })
+    mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) })
+
+    useChatStore.getState().newSession()
+
+    const sessions = useChatStore.getState().sessions
+    expect(sessions.length).toBe(2)
+    expect(sessions[0].session_id).toMatch(/^temp-/)
+    expect(sessions[0].title).toBe('新对话')
+  })
+
+  it('sendMessage replaces temp session ID with real one', async () => {
+    useChatStore.setState({
+      sessions: [{ session_id: 'temp-123', title: '新对话', created_at: 1 }],
+    })
+    mockFetch.mockResolvedValueOnce(
+      createMockSseResponse([{ type: 'shutdown', payload: {} }], 'real-id-1'),
+    )
+
+    await useChatStore.getState().sendMessage('hello')
+
+    const sessions = useChatStore.getState().sessions
+    expect(sessions.some(s => s.session_id === 'real-id-1')).toBe(true)
+    expect(sessions.some(s => s.session_id.startsWith('temp-'))).toBe(false)
+  })
+
+  it('messageCache is updated after sendMessage completes', async () => {
+    mockFetch.mockResolvedValueOnce(
+      createMockSseResponse([
+        { type: 'done', payload: { step: 1, content: [{ type: 'text', text: 'reply' }] } },
+        { type: 'shutdown', payload: {} },
+      ], 'cache-test'),
+    )
+
+    await useChatStore.getState().sendMessage('hello')
+
+    const cache = useChatStore.getState().messageCache
+    expect(cache.has('cache-test')).toBe(true)
+    expect(cache.get('cache-test')!.length).toBe(2)
+  })
+
+  it('prefetchSession populates messageCache', async () => {
+    const apiMessages = [
+      { role: 'user', content: 'prefetched', timestamp: 1700000000 },
+    ]
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ session_id: 'prefetch-1', messages: apiMessages }),
+    })
+
+    await useChatStore.getState().prefetchSession('prefetch-1')
+
+    const cache = useChatStore.getState().messageCache
+    expect(cache.has('prefetch-1')).toBe(true)
+  })
+
+  it('prefetchSession skips if already cached', async () => {
+    const cache = new Map()
+    cache.set('cached-1', [{ id: '1', role: 'user' as const, timestamp: 0, content: 'hi' }])
+    useChatStore.setState({ messageCache: cache })
+
+    await useChatStore.getState().prefetchSession('cached-1')
+
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 })
