@@ -24,12 +24,6 @@ export type AgentBlockInit =
   | Omit<Extract<AgentBlock, { kind: 'tool_result' }>, 'id'>
   | Omit<Extract<AgentBlock, { kind: 'text_response' }>, 'id'>
 
-export interface MockScenario {
-  userMessage: string;
-  events: AgentBlockInit[];
-  delays: number[];
-}
-
 export interface VizEvent {
   type: 'idle' | 'thinking' | 'tool_call' | 'tool_result' | 'done' | 'error' | 'shutdown'
   agent: string

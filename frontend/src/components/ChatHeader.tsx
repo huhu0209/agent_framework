@@ -2,7 +2,6 @@ import { useChatStore } from '../store'
 
 export function ChatHeader() {
   const agentName = useChatStore((s) => s.agentName)
-  const mode = useChatStore((s) => s.connectionMode)
 
   return (
     <header className="flex items-center justify-between px-5 py-3"
@@ -15,14 +14,8 @@ export function ChatHeader() {
           backgroundColor: 'var(--surface-sand)',
           color: 'var(--text-tertiary)',
         }}>
-        {mode === 'mock' ? (
-          'Mock'
-        ) : (
-          <>
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-            Connected
-          </>
-        )}
+        <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+        Connected
       </span>
     </header>
   )

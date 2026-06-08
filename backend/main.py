@@ -14,7 +14,7 @@ from app.services.session import SessionManager
 
 logging.basicConfig(level=logging.INFO)
 
-ALLOWED_ORIGINS = os.getenv("APP_CORS_ORIGINS", "http://localhost:5173").split(",")
+ALLOWED_ORIGINS = os.getenv("APP_CORS_ORIGINS", "http://localhost:30001").split(",")
 
 
 @asynccontextmanager

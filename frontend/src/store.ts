@@ -1,6 +1,5 @@
 import { create } from 'zustand'
 import type { AgentBlock, AgentBlockInit, ChatMessage, MessageRole, VizEvent } from './types'
-import { streamMockResponse } from './mock/engine'
 
 let _nextId = 1
 function uid(): string {
@@ -53,26 +52,19 @@ function vizEventToBlock(event: VizEvent): AgentBlockInit | null {
 interface ChatStore {
   messages: ChatMessage[]
   streamingMessage: ChatMessage | null
-  connectionMode: 'mock' | 'ws'
   agentName: string
   isStreaming: boolean
   sessionId: string | null
   sendMessage: (text: string) => Promise<void>
   addSystemMessage: (text: string) => void
-  setConnectionMode: (mode: 'mock' | 'ws') => void
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
   messages: [],
   streamingMessage: null,
-  connectionMode: 'mock',
   agentName: 'Agent',
   isStreaming: false,
   sessionId: null,
-
-  setConnectionMode: (mode: 'mock' | 'ws') => {
-    set({ connectionMode: mode })
-  },
 
   addSystemMessage: (text: string) => {
     const msg: ChatMessage = {
@@ -106,14 +98,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       isStreaming: true,
     }))
 
-    const mode = get().connectionMode
-
     try {
-      if (mode === 'ws') {
-        await sendViaWs(text, get, set)
-      } else {
-        await sendViaMock(get, set)
-      }
+      await sendViaWs(text, get, set)
+    } catch {
+      // Error handled: streamingMessage finalized in finally
     } finally {
       const final = get().streamingMessage
       set((s) => ({
@@ -124,23 +112,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 }))
-
-async function sendViaMock(
-  _get: () => ChatStore,
-  set: (partial: Partial<ChatStore> | ((s: ChatStore) => Partial<ChatStore>)) => void,
-) {
-  for await (const block of streamMockResponse('')) {
-    set((s) => {
-      if (!s.streamingMessage) return s
-      return {
-        streamingMessage: {
-          ...s.streamingMessage,
-          blocks: [...(s.streamingMessage.blocks ?? []), block as AgentBlock],
-        },
-      }
-    })
-  }
-}
 
 async function sendViaWs(
   text: string,

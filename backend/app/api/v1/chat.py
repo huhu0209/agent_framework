@@ -70,6 +70,7 @@ async def ws_endpoint(websocket: WebSocket, session_id: str) -> None:
         return
 
     queue = await session.bus.subscribe()
+    session.subscriber_ready.set()
     try:
         while True:
             event = await queue.get()
@@ -91,6 +92,8 @@ async def _run_agent(
         return
 
     runner = AgentRunner("Agent", session.bus)
+
+    await session.subscriber_ready.wait()
 
     try:
         async for loop_event in runner.wrap(loop.run(user_message, resume=is_resume)):

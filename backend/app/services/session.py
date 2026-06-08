@@ -24,6 +24,7 @@ class ChatSession:
     agent_loop: AgentLoop | None = None
     task: asyncio.Task | None = None  # type: ignore[type-arg]
     created_at: float = field(default_factory=time.time)
+    subscriber_ready: asyncio.Event = field(default_factory=asyncio.Event)
 
 
 class SessionManager:
