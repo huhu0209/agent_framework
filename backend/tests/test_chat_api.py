@@ -342,3 +342,35 @@ def test_rename_nonexistent_session_404(client_with_storage: TestClient) -> None
         f"/api/v1/sessions/{'a' * 32}", json={"title": "new name"},
     )
     assert resp.status_code == 404
+
+
+def test_get_messages_from_memory(client: TestClient) -> None:
+    """get_messages 应从内存中返回消息。"""
+    res = client.post("/api/v1/chat", json={"message": "hello"})
+    sid = res.headers["X-Session-Id"]
+
+    sm = client.app.state.session_manager
+    messages = sm.get_messages(sid)
+    assert messages is not None
+    assert len(messages) >= 1
+    assert messages[0]["role"] == "user"
+
+
+def test_get_messages_from_transcript(client_with_storage: TestClient) -> None:
+    """get_messages 应在 session 被回收后从 transcript 恢复消息。"""
+    res = client_with_storage.post("/api/v1/chat", json={"message": "hello"})
+    sid = res.headers["X-Session-Id"]
+
+    sm = client_with_storage.app.state.session_manager
+    sm.remove(sid)
+    assert sm.get(sid) is None
+
+    messages = sm.get_messages(sid)
+    assert messages is not None
+    assert any(m["role"] == "user" for m in messages)
+
+
+def test_get_messages_nonexistent(client: TestClient) -> None:
+    """get_messages 对不存在的 session 应返回 None。"""
+    sm = client.app.state.session_manager
+    assert sm.get_messages("a" * 32) is None

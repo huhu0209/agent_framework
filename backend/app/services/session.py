@@ -62,6 +62,24 @@ class SessionManager:
             session.created_at = time.time()
         return session
 
+    def get_messages(self, session_id: str) -> list[dict] | None:
+        """获取 session 的消息列表，支持从 transcript 恢复。"""
+        session = self._sessions.get(session_id)
+        if session is not None:
+            return session.messages
+        if not self._storage_dir:
+            return None
+        transcript_path = self._storage_dir / f"{session_id}.jsonl"
+        if not transcript_path.exists():
+            return None
+        from agent_framework.transcript import TranscriptReader
+        reader = TranscriptReader(transcript_path)
+        messages = reader.to_messages()
+        return [
+            {"role": m.role, "content": m.content if isinstance(m.content, str) else [b.model_dump() for b in m.content]}
+            for m in messages
+        ]
+
     def remove(self, session_id: str) -> None:
         session = self._sessions.pop(session_id, None)
         if session:
