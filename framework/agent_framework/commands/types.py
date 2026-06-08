@@ -1,4 +1,4 @@
-"""Slash Commands — 类型定义。"""
+"""Commands 系统 — 类型定义。"""
 
 from __future__ import annotations
 
@@ -7,21 +7,34 @@ from enum import Enum
 from typing import Callable
 
 
-class CommandSource(str, Enum):
-    """命令来源。继承 str 实现值比较和序列化。"""
+class CommandCategory(str, Enum):
+    """命令分类。"""
 
-    BUILTIN = "builtin" # 框架硬编码命令 如 /help
-    SKILL = "skill" # 动态加载的SKILL.md命令
+    SESSION = "session"
+    CONFIG = "config"
+    QUERY = "query"
+
+
+class CommandAction(str, Enum):
+    """CLI 层面要执行的动作。"""
+
+    CLEAR_CONTEXT = "clear_context"
+    COMPACT_CONTEXT = "compact_context"
+    SHOW_HELP = "show_help"
+    SHOW_STATUS = "show_status"
+    SET_CONFIG = "set_config"
+    LOAD_SKILL = "load_skill"
+    NONE = "none"
 
 
 @dataclass(frozen=True)
-class ResolvedCommand:
-    """resolve() 返回结果。"""
+class CommandResult:
+    """命令执行结果 — 结构化的 CLI 指令。"""
 
-    is_command: bool
-    content: str
-    source: CommandSource | None = None
-    skill_loaded: bool = False
+    action: CommandAction
+    message: str = ""
+    data: dict = field(default_factory=dict)
+    skill_content: str = ""
 
 
 @dataclass(frozen=True)
@@ -30,6 +43,6 @@ class SlashCommand:
 
     name: str
     description: str
-    source: CommandSource
+    category: CommandCategory
     arg_hint: str = ""
-    handler: Callable[..., ResolvedCommand] | None = field(default=None, hash=False)
+    handler: Callable[..., CommandResult] | None = field(default=None, hash=False)
