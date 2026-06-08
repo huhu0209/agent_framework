@@ -25,10 +25,10 @@ class PlanItem:
     status: Literal["pending", "in_progress", "completed", "blocked"]  # 计划中的单个步骤状态
 
 
-@dataclass
+@dataclass(frozen=True)
 class PlanSnapshot:
     """计划快照。"""
-    items: list[PlanItem]  # 计划中的所有步骤
+    items: tuple[PlanItem, ...]  # 计划中的所有步骤
     completed_count: int  # 已完成的步骤数
     total_count: int  # 总步骤数
     current_focus: str | None  # 当前关注的步骤 ID
@@ -130,7 +130,7 @@ class PlanningState:
         生成计划快照。
         """
         return PlanSnapshot(
-            items=[PlanItem(id=i.id, action=i.action, status=i.status) for i in self.items],
+            items=tuple(PlanItem(id=i.id, action=i.action, status=i.status) for i in self.items),
             completed_count=sum(1 for i in self.items if i.status == "completed"),
             total_count=len(self.items),
             current_focus=self.current_focus,
