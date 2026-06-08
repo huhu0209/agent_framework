@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any, AsyncGenerator
 
 import pytest
@@ -16,6 +17,9 @@ class _FakeAgentLoop:
 
     def __init__(self, events: list[LoopEvent]) -> None:
         self._events = events
+
+    def load_messages(self, messages: list[Any]) -> None:
+        """noop — 支持 transcript 恢复路径。"""
 
     async def run(
         self, user_message: str, *, resume: bool = False,
@@ -212,3 +216,91 @@ def test_agent_error_sends_error_event(client: TestClient) -> None:
     messages = history_res.json()["messages"]
     error_msgs = [m for m in messages if m["role"] == "error"]
     assert len(error_msgs) == 1
+
+
+# --- Transcript 持久化 ---
+
+
+@pytest.fixture
+def client_with_storage(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> TestClient:
+    """带持久化存储的测试客户端。"""
+    monkeypatch.setenv("APP_LLM_API_KEY", "test-key")
+    monkeypatch.setenv("APP_CORS_ORIGINS", "http://localhost:5173")
+
+    from app.services.session import SessionManager
+    from main import app
+
+    storage_dir = tmp_path / "sessions"
+    session_manager = SessionManager(storage_dir=storage_dir)
+
+    app.state.session_manager = session_manager
+    app.state.agent_factory = _FakeFactory()
+
+    return TestClient(app)
+
+
+def test_transcript_file_created_after_chat(client_with_storage: TestClient, tmp_path: Path) -> None:
+    res = client_with_storage.post("/api/v1/chat", json={"message": "hello"})
+    assert res.status_code == 200
+    sid = res.headers["X-Session-Id"]
+
+    transcript_path = tmp_path / "sessions" / f"{sid}.jsonl"
+    assert transcript_path.exists()
+    content = transcript_path.read_text()
+    assert len(content) > 0
+    first_line = content.strip().split("\n")[0]
+    data = json.loads(first_line)
+    assert data["type"] in ("system", "user")
+
+
+def test_list_sessions_returns_created_session(client_with_storage: TestClient) -> None:
+    client_with_storage.post("/api/v1/chat", json={"message": "hello world"})
+
+    res = client_with_storage.get("/api/v1/sessions")
+    assert res.status_code == 200
+    sessions = res.json()
+    assert len(sessions) >= 1
+    assert "session_id" in sessions[0]
+    assert "title" in sessions[0]
+
+
+def test_delete_session_removes_transcript(client_with_storage: TestClient, tmp_path: Path) -> None:
+    res = client_with_storage.post("/api/v1/chat", json={"message": "hello"})
+    sid = res.headers["X-Session-Id"]
+
+    transcript_path = tmp_path / "sessions" / f"{sid}.jsonl"
+    assert transcript_path.exists()
+
+    del_res = client_with_storage.delete(f"/api/v1/sessions/{sid}")
+    assert del_res.status_code == 200
+    assert not transcript_path.exists()
+
+
+def test_session_restored_from_transcript(client_with_storage: TestClient, tmp_path: Path) -> None:
+    # 创建会话并聊天
+    res = client_with_storage.post("/api/v1/chat", json={"message": "first message"})
+    sid = res.headers["X-Session-Id"]
+
+    # 从内存中移除 session（模拟 TTL 过期）
+    sm = client_with_storage.app.state.session_manager
+    sm.remove(sid)
+    assert sm.get(sid) is None
+
+    # 用同一个 session_id 发消息 — 应该从 transcript 恢复
+    resume_res = client_with_storage.post(
+        "/api/v1/chat", json={"message": "second message", "session_id": sid}
+    )
+    assert resume_res.status_code == 200
+
+
+def test_session_title_updated_on_first_message(client_with_storage: TestClient) -> None:
+    res = client_with_storage.post(
+        "/api/v1/chat", json={"message": "hello this is a long message that should be truncated"}
+    )
+    sid = res.headers["X-Session-Id"]
+
+    list_res = client_with_storage.get("/api/v1/sessions")
+    sessions = list_res.json()
+    matching = [s for s in sessions if s["session_id"] == sid]
+    assert len(matching) == 1
+    assert matching[0]["title"] == "hello this is a long message that should be trunca"
