@@ -43,6 +43,12 @@ function vizEventToBlock(event: VizEvent): AgentBlockInit | null {
       }
       return { kind: 'text_response', text }
     }
+    case 'error': {
+      const msg = typeof event.payload.error === 'string'
+        ? event.payload.error
+        : 'Unknown error'
+      return { kind: 'error', text: msg }
+    }
     default:
       return null
   }

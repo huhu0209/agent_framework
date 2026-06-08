@@ -169,6 +169,7 @@ class DeepSeekProvider(ILLMAdapter):
                 write=10.0,
                 pool=timeout,
             ),
+            proxy=None,
         )
 
     async def complete(self, config: CompletionConfig) -> CompletionResult:

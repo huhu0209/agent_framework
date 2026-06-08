@@ -131,6 +131,7 @@ class OpenAIProvider(ILLMAdapter):
                 write=10.0,
                 pool=timeout,
             ),
+            proxy=None,
         )
 
     async def complete(self, config: CompletionConfig) -> CompletionResult:
@@ -149,6 +150,12 @@ class OpenAIProvider(ILLMAdapter):
 
         if response.status_code != 200:
             _handle_error(response)
+
+        body = response.text
+        if not body or not body.strip():
+            raise LLMAdapterError(
+                "LLM returned 200 OK with empty body", provider="openai",
+            )
 
         return _parse_response(response.json())
 
