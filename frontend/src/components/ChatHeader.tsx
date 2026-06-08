@@ -1,15 +1,17 @@
 import { useChatStore } from '../store'
+import { SidebarToggle } from './SidebarToggle'
 
 export function ChatHeader() {
   const agentName = useChatStore((s) => s.agentName)
 
   return (
-    <header className="flex items-center justify-between px-5 py-3"
+    <header className="flex items-center gap-3 px-5 py-3"
       style={{ backgroundColor: 'var(--bg-ivory)', borderBottom: '1px solid var(--border-cream)' }}>
+      <SidebarToggle />
       <span className="text-lg font-medium" style={{ fontFamily: 'var(--font-serif)' }}>
         {agentName}
       </span>
-      <span className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full"
+      <span className="ml-auto flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full"
         style={{
           backgroundColor: 'var(--surface-sand)',
           color: 'var(--text-tertiary)',
