@@ -19,7 +19,13 @@ from agent_framework.prompts.templates import (
 
 
 class PlanningSession:
-    """Manage plan creation, status transitions, and drift detection."""
+    """Manage plan creation, status transitions, and drift detection.
+
+    Mutable session-scoped state machine wrapping immutable PlanningState.
+    Each state transition replaces self._state with a new PlanningState instance,
+    keeping individual states safe to share/compare while allowing the session
+    to evolve over time.
+    """
 
     def __init__(
         self,
