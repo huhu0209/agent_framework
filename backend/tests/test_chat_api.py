@@ -321,3 +321,24 @@ def test_rename_session(client_with_storage: TestClient) -> None:
     sessions = resp.json()
     target = next(s for s in sessions if s["session_id"] == session_id)
     assert target["title"] == "My Chat"
+
+
+def test_rename_session_empty_title_422(client_with_storage: TestClient) -> None:
+    resp = client_with_storage.post("/api/v1/chat", json={"message": "hello"})
+    sid = resp.headers["X-Session-Id"]
+    resp = client_with_storage.patch(f"/api/v1/sessions/{sid}", json={"title": "   "})
+    assert resp.status_code == 422
+
+
+def test_rename_session_title_too_long_422(client_with_storage: TestClient) -> None:
+    resp = client_with_storage.post("/api/v1/chat", json={"message": "hello"})
+    sid = resp.headers["X-Session-Id"]
+    resp = client_with_storage.patch(f"/api/v1/sessions/{sid}", json={"title": "x" * 101})
+    assert resp.status_code == 422
+
+
+def test_rename_nonexistent_session_404(client_with_storage: TestClient) -> None:
+    resp = client_with_storage.patch(
+        f"/api/v1/sessions/{'a' * 32}", json={"title": "new name"},
+    )
+    assert resp.status_code == 404

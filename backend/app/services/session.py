@@ -96,14 +96,15 @@ class SessionManager:
         with open(history_path, "a", encoding="utf-8") as f:
             f.write(entry + "\n")
 
-    def update_title(self, session_id: str, title: str) -> None:
-        """更新 history.jsonl 中的标题。"""
+    def update_title(self, session_id: str, title: str) -> bool:
+        """更新 history.jsonl 中的标题，返回是否实际更新。"""
         if not self._storage_dir:
-            return
+            return False
         history_path = self._storage_dir / "history.jsonl"
         if not history_path.exists():
-            return
+            return False
         lines = []
+        updated = False
         with open(history_path, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
@@ -112,9 +113,11 @@ class SessionManager:
                 entry = json.loads(line)
                 if entry["session_id"] == session_id:
                     entry["title"] = title
+                    updated = True
                 lines.append(json.dumps(entry, ensure_ascii=False))
         with open(history_path, "w", encoding="utf-8") as f:
             f.write("\n".join(lines) + "\n")
+        return updated
 
     def list_sessions(self) -> list[dict]:
         """列出所有历史会话。"""

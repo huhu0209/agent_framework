@@ -188,5 +188,7 @@ async def delete_session(session_id: str, request: Request) -> dict:
 @router.patch("/sessions/{session_id}")
 async def rename_session(session_id: str, req: RenameRequest, request: Request) -> dict:
     sm = request.app.state.session_manager
-    sm.update_title(session_id, req.title)
+    updated = sm.update_title(session_id, req.title)
+    if not updated:
+        raise HTTPException(404, "session not found")
     return {"status": "ok"}
