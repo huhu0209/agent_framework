@@ -30,3 +30,21 @@ body {
   display: flex;
   flex-direction: column;
 }
+
+/* Markdown table styling */
+.markdown-table th,
+.markdown-table td {
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  border: 1px solid var(--border-warm);
+}
+
+.markdown-table th {
+  background-color: var(--surface-sand);
+  color: #4d4c48;
+  font-weight: 600;
+}
+
+.markdown-table tbody tr:nth-child(even) {
+  background-color: var(--bg-ivory);
+}
