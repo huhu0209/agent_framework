@@ -24,6 +24,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+_MAX_USER_MESSAGE_LENGTH = 100_000
+
 
 class OrchestratorEngine(Agent):
     """编排引擎：评估任务复杂度并路由到合适的 Agent。
@@ -65,6 +67,11 @@ class OrchestratorEngine(Agent):
 
     async def run(self, user_message: str) -> AsyncGenerator[AgentEvent, None]:
         """执行编排流程：评估复杂度 → 路由到合适的执行路径。"""
+        if len(user_message) > _MAX_USER_MESSAGE_LENGTH:
+            raise ValueError(
+                f"User message too long: {len(user_message)} chars "
+                f"(max {_MAX_USER_MESSAGE_LENGTH})"
+            )
         complexity = self._assess_complexity(user_message)
         yield AgentEvent(
             type="step",

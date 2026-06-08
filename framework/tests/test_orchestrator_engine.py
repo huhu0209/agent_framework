@@ -273,3 +273,20 @@ class TestImplementsAgentABC:
 
         assert events[0].data["complexity"] == "simple"
         assert len(events) == 2  # step + done
+
+
+# ---------------------------------------------------------------------------
+# TestInputValidation
+# ---------------------------------------------------------------------------
+
+
+class TestInputValidation:
+    """输入验证测试。"""
+
+    @pytest.mark.asyncio
+    async def test_user_message_too_long_raises(self) -> None:
+        """超长 user_message 抛出 ValueError。"""
+        adapter = _make_mock_adapter_with_text("")
+        engine = _make_engine(adapter)
+        with pytest.raises(ValueError, match="User message too long"):
+            await _collect_events(engine, "x" * 100_001)
