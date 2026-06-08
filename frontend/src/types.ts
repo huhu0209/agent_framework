@@ -32,3 +32,9 @@ export interface VizEvent {
   payload: Record<string, unknown>
   timestamp: number
 }
+
+export interface SessionInfo {
+  session_id: string
+  title: string
+  created_at: number
+}
