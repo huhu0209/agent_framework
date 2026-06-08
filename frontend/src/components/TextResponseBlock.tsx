@@ -14,6 +14,12 @@ export function TextResponseBlock({ block }: { block: AgentBlock }) {
     <div
       className="prose prose-sm max-w-none
         prose-headings:font-serif prose-headings:text-[var(--text-primary)]
+        prose-p:my-1.5
+        prose-headings:mt-3 prose-headings:mb-1.5
+        prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0
+        prose-blockquote:my-1.5
+        prose-pre:my-1.5
+        prose-table:my-1.5
         prose-a:text-[var(--accent-coral)]
         prose-code:text-[var(--accent-terracotta)]
         prose-blockquote:border-[var(--accent-terracotta)]
