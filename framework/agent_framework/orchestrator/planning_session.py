@@ -17,6 +17,8 @@ from agent_framework.prompts.templates import (
     PLAN_GENERATION_INSTRUCTION,
 )
 
+_VALID_STATUSES = frozenset({"pending", "in_progress", "completed", "blocked"})
+
 
 class PlanningSession:
     """Manage plan creation, status transitions, and drift detection.
@@ -49,6 +51,9 @@ class PlanningSession:
         return self._state.drift_count
 
     def create_from_items(self, items: list[PlanItem], source: PlanSource) -> None:
+        for item in items:
+            if item.status not in _VALID_STATUSES:
+                raise ValueError(f"Invalid plan item status: {item.status!r}")
         self._state = PlanningState(
             items=[PlanItem(id=i.id, action=i.action, status=i.status) for i in items],
             current_focus=None,

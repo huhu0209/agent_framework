@@ -35,6 +35,12 @@ class TestCreateFromItems:
         assert snap.total_count == 2
         assert snap.plan_source == "caller_injected"
 
+    def test_invalid_status_raises(self) -> None:
+        session = PlanningSession()
+        items = [PlanItem(id="1", action="step", status="invalid_status")]
+        with pytest.raises(ValueError, match="Invalid plan item status"):
+            session.create_from_items(items, source="caller_injected")
+
 
 # ---------------------------------------------------------------------------
 # 2. try_parse_from_response — success
