@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useChatStore } from '../store'
 import type { SessionInfo } from '../types'
 
@@ -24,16 +24,19 @@ function SessionItem({
   onSelect,
   onDelete,
   onRename,
+  onHover,
 }: {
   session: SessionInfo
   isActive: boolean
   onSelect: () => void
   onDelete: () => void
   onRename: (title: string) => void
+  onHover: () => void
 }) {
   const [isEditing, setIsEditing] = useState(false)
   const [editTitle, setEditTitle] = useState(session.title)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const hoverRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   if (isEditing) {
     return (
@@ -80,9 +83,11 @@ function SessionItem({
       }}
       onClick={confirmDelete ? undefined : onSelect}
       onMouseEnter={(e) => {
+        hoverRef.current = setTimeout(onHover, 200)
         if (!isActive) e.currentTarget.style.backgroundColor = 'var(--bg-ivory)'
       }}
       onMouseLeave={(e) => {
+        if (hoverRef.current) clearTimeout(hoverRef.current)
         if (!isActive) e.currentTarget.style.backgroundColor = 'transparent'
       }}
     >
@@ -182,6 +187,7 @@ export function SessionSidebar() {
   const renameSession = useChatStore((s) => s.renameSession)
   const newSession = useChatStore((s) => s.newSession)
   const sessionsLoading = useChatStore((s) => s.sessionsLoading)
+  const prefetchSession = useChatStore((s) => s.prefetchSession)
 
   if (!sidebarOpen) return null
 
@@ -231,6 +237,7 @@ export function SessionSidebar() {
                 onSelect={() => switchSession(session.session_id)}
                 onDelete={() => deleteSession(session.session_id)}
                 onRename={(title) => renameSession(session.session_id, title)}
+                onHover={() => prefetchSession(session.session_id)}
               />
             ))}
             {sessions.length === 0 && (
