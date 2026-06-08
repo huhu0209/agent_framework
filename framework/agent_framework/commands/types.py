@@ -10,8 +10,8 @@ from typing import Callable
 class CommandSource(str, Enum):
     """命令来源。继承 str 实现值比较和序列化。"""
 
-    BUILTIN = "builtin"
-    SKILL = "skill"
+    BUILTIN = "builtin" # 框架硬编码命令 如 /help
+    SKILL = "skill" # 动态加载的SKILL.md命令
 
 
 @dataclass(frozen=True)

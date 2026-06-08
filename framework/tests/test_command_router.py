@@ -64,6 +64,13 @@ class TestHelpBuiltin:
         assert result.is_command is True
         assert "/help" in result.content
 
+    def test_help_lists_new_builtins(self):
+        router = CommandRouter()
+        result = router.resolve("/help")
+        assert result.is_command is True
+        assert "/clear" in result.content
+        assert "/status" in result.content
+
     def test_help_builtin_and_skill_alignment(self, tmp_path):
         """builtins 和 skills 的描述列对齐一致。"""
         skills_dir = tmp_path / "skills"
@@ -219,11 +226,11 @@ class TestEdgeCases:
         """skill 正文没有 $ARGUMENTS 时正常加载，不做替换。"""
         skills_dir = tmp_path / "skills"
         skills_dir.mkdir()
-        create_skill(skills_dir, "status", "状态", "系统运行正常")
+        create_skill(skills_dir, "ping", "状态", "系统运行正常")
 
         registry = SkillRegistry([skills_dir])
         router = CommandRouter(skill_registry=registry)
-        result = router.resolve("/status --verbose")
+        result = router.resolve("/ping --verbose")
 
         assert result.is_command is True
         assert "系统运行正常" in result.content
@@ -246,3 +253,31 @@ class TestEdgeCases:
         assert result.is_command is True
         assert result.content == "/noop"
         assert result.source == CommandSource.BUILTIN
+
+
+class TestClearBuiltin:
+    def test_clear_returns_command(self):
+        router = CommandRouter()
+        result = router.resolve("/clear")
+        assert result.is_command is True
+        assert result.source == CommandSource.BUILTIN
+        assert "清空" in result.content
+
+    def test_clear_ignores_args(self):
+        router = CommandRouter()
+        result = router.resolve("/clear all")
+        assert result.is_command is True
+
+
+class TestStatusBuiltin:
+    def test_status_returns_command(self):
+        router = CommandRouter()
+        result = router.resolve("/status")
+        assert result.is_command is True
+        assert result.source == CommandSource.BUILTIN
+        assert "状态" in result.content
+
+    def test_status_ignores_args(self):
+        router = CommandRouter()
+        result = router.resolve("/status --verbose")
+        assert result.is_command is True

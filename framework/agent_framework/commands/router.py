@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 
+from agent_framework.commands.builtins import register_all
 from agent_framework.commands.types import CommandSource, ResolvedCommand, SlashCommand
 from agent_framework.skills.registry import SkillRegistry
 
@@ -16,7 +17,7 @@ class CommandRouter:
     def __init__(self, skill_registry: SkillRegistry | None = None) -> None:
         self._skill_registry = skill_registry
         self._builtins: dict[str, SlashCommand] = {}
-        self._register_builtins()
+        register_all(self._builtins, skill_registry=skill_registry)
 
     def resolve(self, user_input: str) -> ResolvedCommand:
         """解析 /command args -> ResolvedCommand。
@@ -75,32 +76,4 @@ class CommandRouter:
             content=body,
             source=CommandSource.SKILL,
             skill_loaded=True,
-        )
-
-    def _register_builtins(self) -> None:
-        self._builtins["help"] = SlashCommand(
-            name="help",
-            description="显示所有可用命令",
-            source=CommandSource.BUILTIN,
-            handler=self._cmd_help,
-        )
-
-    def _cmd_help(self, _args: str) -> ResolvedCommand:
-        lines = ["可用命令：", ""]
-        for cmd in self._builtins.values():
-            label = f"/{cmd.name}"
-            hint = f" {cmd.arg_hint}" if cmd.arg_hint else ""
-            lines.append(f"  {label + hint:<22} {cmd.description}")
-
-        if self._skill_registry:
-            for name in self._skill_registry.get_names():
-                manifest = self._skill_registry.get_manifest(name)
-                if manifest and manifest.user_invocable:
-                    label = f"/{name}"
-                    lines.append(f"  {label:<22} {manifest.description}")
-
-        return ResolvedCommand(
-            is_command=True,
-            content="\n".join(lines),
-            source=CommandSource.BUILTIN,
         )
