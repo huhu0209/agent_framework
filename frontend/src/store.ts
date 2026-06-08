@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { AgentBlock, AgentBlockInit, ChatMessage, MessageRole, VizEvent } from './types'
+import type { AgentBlock, AgentBlockInit, ChatMessage, MessageRole, SessionInfo, VizEvent } from './types'
 
 let _nextId = 1
 function uid(): string {
@@ -60,8 +60,16 @@ interface ChatStore {
   agentName: string
   isStreaming: boolean
   sessionId: string | null
+  sessions: SessionInfo[]
+  sidebarOpen: boolean
   sendMessage: (text: string) => Promise<void>
   addSystemMessage: (text: string) => void
+  loadSessions: () => Promise<void>
+  switchSession: (id: string) => Promise<void>
+  deleteSession: (id: string) => Promise<void>
+  renameSession: (id: string, title: string) => Promise<void>
+  newSession: () => void
+  toggleSidebar: () => void
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -70,6 +78,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   agentName: 'Agent',
   isStreaming: false,
   sessionId: null,
+  sessions: [],
+  sidebarOpen: true,
 
   addSystemMessage: (text: string) => {
     const msg: ChatMessage = {
@@ -115,6 +125,61 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         isStreaming: false,
       }))
     }
+  },
+
+  loadSessions: async () => {
+    const res = await fetch(`${API_BASE}/api/v1/sessions`)
+    if (res.ok) {
+      const sessions = await res.json()
+      set({ sessions })
+    }
+  },
+
+  switchSession: async (id: string) => {
+    const res = await fetch(`${API_BASE}/api/v1/chat/${id}`)
+    if (!res.ok) return
+    const data = await res.json()
+    const messages: ChatMessage[] = data.messages.map((m: Record<string, unknown>, i: number) => ({
+      id: `restored-${i}-${Date.now()}`,
+      role: m.role as MessageRole,
+      timestamp: (m.timestamp as number) ?? Date.now(),
+      ...(m.content ? { content: m.content as string } : {}),
+      ...(m.blocks ? { blocks: m.blocks as AgentBlock[] } : {}),
+    }))
+    set({ messages, sessionId: id, streamingMessage: null })
+  },
+
+  deleteSession: async (id: string) => {
+    await fetch(`${API_BASE}/api/v1/sessions/${id}`, { method: 'DELETE' })
+    const { sessions, sessionId } = get()
+    const next = sessions.filter((s) => s.session_id !== id)
+    set({ sessions: next })
+    if (sessionId === id) {
+      get().newSession()
+    }
+  },
+
+  renameSession: async (id: string, title: string) => {
+    await fetch(`${API_BASE}/api/v1/sessions/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    })
+    set((s) => ({
+      sessions: s.sessions.map((sess) =>
+        sess.session_id === id ? { ...sess, title } : sess,
+      ),
+    }))
+  },
+
+  newSession: () => {
+    set({ messages: [], sessionId: null, streamingMessage: null })
+    get().addSystemMessage('新会话已开始。输入消息开始对话。')
+    get().loadSessions()
+  },
+
+  toggleSidebar: () => {
+    set((s) => ({ sidebarOpen: !s.sidebarOpen }))
   },
 }))
 

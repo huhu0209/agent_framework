@@ -48,6 +48,8 @@ beforeEach(() => {
     agentName: 'Agent',
     isStreaming: false,
     sessionId: null,
+    sessions: [],
+    sidebarOpen: true,
   })
 })
 
@@ -203,5 +205,94 @@ describe('useChatStore', () => {
     expect(agentMsg.blocks![1].kind).toBe('tool_call')
     expect(agentMsg.blocks![2].kind).toBe('tool_result')
     expect(agentMsg.blocks![3].kind).toBe('text_response')
+  })
+
+  it('loadSessions fetches and sets sessions', async () => {
+    const sessions = [
+      { session_id: 'abc123', title: 'Hello', created_at: 1700000000 },
+    ]
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(sessions),
+    })
+
+    await useChatStore.getState().loadSessions()
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/sessions'),
+    )
+    expect(useChatStore.getState().sessions).toEqual(sessions)
+  })
+
+  it('newSession clears messages and sessionId', () => {
+    useChatStore.setState({
+      messages: [{ id: '1', role: 'user', timestamp: 0, content: 'hi' }],
+      sessionId: 'old-id',
+    })
+    // loadSessions mock
+    mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) })
+
+    useChatStore.getState().newSession()
+
+    expect(useChatStore.getState().messages).toHaveLength(1)
+    expect(useChatStore.getState().messages[0].role).toBe('system')
+    expect(useChatStore.getState().sessionId).toBeNull()
+  })
+
+  it('toggleSidebar flips sidebarOpen', () => {
+    expect(useChatStore.getState().sidebarOpen).toBe(true)
+    useChatStore.getState().toggleSidebar()
+    expect(useChatStore.getState().sidebarOpen).toBe(false)
+    useChatStore.getState().toggleSidebar()
+    expect(useChatStore.getState().sidebarOpen).toBe(true)
+  })
+
+  it('switchSession loads messages from API', async () => {
+    const apiMessages = [
+      { role: 'user', content: 'hi', timestamp: 1700000000 },
+      { role: 'agent', blocks: [{ type: 'text_response', text: 'hello' }], timestamp: 1700000001 },
+    ]
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ session_id: 'abc', messages: apiMessages }),
+    })
+
+    await useChatStore.getState().switchSession('abc')
+
+    expect(useChatStore.getState().sessionId).toBe('abc')
+    const msgs = useChatStore.getState().messages
+    expect(msgs).toHaveLength(2)
+    expect(msgs[0].role).toBe('user')
+    expect(msgs[1].role).toBe('agent')
+  })
+
+  it('deleteSession removes from list and resets if current', async () => {
+    useChatStore.setState({
+      sessions: [
+        { session_id: 'a', title: 'A', created_at: 1 },
+        { session_id: 'b', title: 'B', created_at: 2 },
+      ],
+      sessionId: 'a',
+    })
+    mockFetch.mockResolvedValueOnce({ ok: true })
+    mockFetch.mockResolvedValueOnce({ ok: true, json: () => Promise.resolve([]) })
+
+    await useChatStore.getState().deleteSession('a')
+
+    expect(useChatStore.getState().sessions).toHaveLength(1)
+    expect(useChatStore.getState().sessionId).toBeNull()
+  })
+
+  it('renameSession updates title in sessions list', async () => {
+    useChatStore.setState({
+      sessions: [{ session_id: 'a', title: 'Old', created_at: 1 }],
+    })
+    mockFetch.mockResolvedValueOnce({ ok: true })
+
+    await useChatStore.getState().renameSession('a', 'New Title')
+
+    expect(useChatStore.getState().sessions[0].title).toBe('New Title')
   })
 })
