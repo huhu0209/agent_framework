@@ -1,4 +1,4 @@
-"""Session 管理 — 内存存储，每 session 独立 EventBus，含 TTL 淘汰。"""
+"""Session 管理 — 内存存储，含 TTL 淘汰。"""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ import uuid
 from dataclasses import dataclass, field
 
 from agent_framework.agents.agent_loop import AgentLoop
-from agent_framework.viz.event_bus import EventBus
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +18,10 @@ SESSION_TTL = 3600  # 1 hour
 @dataclass
 class ChatSession:
     session_id: str
-    bus: EventBus = field(default_factory=EventBus)
     messages: list[dict] = field(default_factory=list)
     agent_loop: AgentLoop | None = None
     task: asyncio.Task | None = None  # type: ignore[type-arg]
     created_at: float = field(default_factory=time.time)
-    subscriber_ready: asyncio.Event = field(default_factory=asyncio.Event)
 
 
 class SessionManager:

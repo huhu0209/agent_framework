@@ -1,8 +1,8 @@
-"""Chat API 单元测试。"""
+"""Chat API 单元测试 — SSE 模式。"""
 
 from __future__ import annotations
 
-import asyncio
+import json
 from typing import Any, AsyncGenerator
 
 import pytest
@@ -66,6 +66,24 @@ class _FailingFactory:
         return _FailingAgentLoop()
 
 
+def _parse_sse(body: str) -> list[tuple[str, dict]]:
+    """解析 SSE 文本为 (event_type, payload) 列表。"""
+    events: list[tuple[str, dict]] = []
+    for block in body.strip().split("\n\n"):
+        if not block.strip():
+            continue
+        event_type = ""
+        data = ""
+        for line in block.split("\n"):
+            if line.startswith("event: "):
+                event_type = line[7:]
+            elif line.startswith("data: "):
+                data = line[6:]
+        if event_type and data:
+            events.append((event_type, json.loads(data)))
+    return events
+
+
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setenv("APP_LLM_API_KEY", "test-key")
@@ -82,30 +100,29 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     return TestClient(app)
 
 
-def _wait_for_task(client: TestClient, sid: str, timeout: float = 2.0) -> None:
-    """轮询直到 agent task 完成或超时。"""
-    import time
-    deadline = time.time() + timeout
-    sm = client.app.state.session_manager
-    while time.time() < deadline:
-        session = sm.get(sid)
-        if session is None:
-            break
-        task = session.task
-        if task is None or task.done():
-            break
-        time.sleep(0.05)
+# --- POST /chat (SSE) ---
 
 
-# --- POST /chat ---
-
-
-def test_post_chat_returns_session_id(client: TestClient) -> None:
+def test_post_chat_returns_sse_stream(client: TestClient) -> None:
     res = client.post("/api/v1/chat", json={"message": "hello"})
-    assert res.status_code == 201
-    data = res.json()
-    assert "session_id" in data
-    assert data["status"] == "processing"
+    assert res.status_code == 200
+    assert "text/event-stream" in res.headers["content-type"]
+    assert "X-Session-Id" in res.headers
+
+    events = _parse_sse(res.text)
+    event_types = [t for t, _ in events]
+    assert "done" in event_types
+    assert "shutdown" in event_types
+
+
+def test_post_chat_sse_done_contains_content(client: TestClient) -> None:
+    res = client.post("/api/v1/chat", json={"message": "hello"})
+    events = _parse_sse(res.text)
+    done_events = [(t, p) for t, p in events if t == "done"]
+    assert len(done_events) >= 1
+    first_done_payload = done_events[0][1]
+    assert "content" in first_done_payload
+    assert first_done_payload["content"][0]["text"] == "hello"
 
 
 def test_post_chat_empty_message_400(client: TestClient) -> None:
@@ -123,14 +140,27 @@ def test_post_chat_unknown_session_404(client: TestClient) -> None:
     assert res.status_code == 404
 
 
+def test_post_chat_tool_events(client: TestClient) -> None:
+    client.app.state.agent_factory = _FakeFactory(_make_tool_events())
+
+    res = client.post("/api/v1/chat", json={"message": "search test"})
+    assert res.status_code == 200
+
+    events = _parse_sse(res.text)
+    event_types = [t for t, _ in events]
+    assert "thinking" in event_types
+    assert "tool_call" in event_types
+    assert "tool_result" in event_types
+    assert "done" in event_types
+    assert "shutdown" in event_types
+
+
 # --- GET /chat/{id} ---
 
 
 def test_get_chat_history(client: TestClient) -> None:
     create_res = client.post("/api/v1/chat", json={"message": "hello"})
-    sid = create_res.json()["session_id"]
-
-    _wait_for_task(client, sid)
+    sid = create_res.headers["X-Session-Id"]
 
     res = client.get(f"/api/v1/chat/{sid}")
     assert res.status_code == 200
@@ -150,15 +180,11 @@ def test_get_chat_unknown_session_404(client: TestClient) -> None:
 
 def test_post_chat_resume_existing_session(client: TestClient) -> None:
     create_res = client.post("/api/v1/chat", json={"message": "first"})
-    sid = create_res.json()["session_id"]
-
-    _wait_for_task(client, sid)
+    sid = create_res.headers["X-Session-Id"]
 
     resume_res = client.post("/api/v1/chat", json={"message": "second", "session_id": sid})
-    assert resume_res.status_code == 201
-    assert resume_res.json()["session_id"] == sid
-
-    _wait_for_task(client, sid)
+    assert resume_res.status_code == 200
+    assert resume_res.headers["X-Session-Id"] == sid
 
     history_res = client.get(f"/api/v1/chat/{sid}")
     messages = history_res.json()["messages"]
@@ -169,45 +195,20 @@ def test_post_chat_resume_existing_session(client: TestClient) -> None:
 # --- agent error ---
 
 
-def test_agent_error_still_returns_201(client: TestClient) -> None:
+def test_agent_error_sends_error_event(client: TestClient) -> None:
     client.app.state.agent_factory = _FailingFactory()
 
     res = client.post("/api/v1/chat", json={"message": "hello"})
-    assert res.status_code == 201
-    sid = res.json()["session_id"]
+    assert res.status_code == 200
 
-    _wait_for_task(client, sid)
+    events = _parse_sse(res.text)
+    event_types = [t for t, _ in events]
+    assert "error" in event_types
+    assert "shutdown" in event_types
 
+    # 错误也保存到历史
+    sid = res.headers["X-Session-Id"]
     history_res = client.get(f"/api/v1/chat/{sid}")
     messages = history_res.json()["messages"]
     error_msgs = [m for m in messages if m["role"] == "error"]
     assert len(error_msgs) == 1
-
-
-# --- WebSocket ---
-
-
-def test_ws_connects_to_valid_session(client: TestClient) -> None:
-    create_res = client.post("/api/v1/chat", json={"message": "hello"})
-    sid = create_res.json()["session_id"]
-
-    with client.websocket_connect(f"/api/v1/ws/{sid}") as ws:
-        assert ws is not None
-
-
-def test_ws_receives_events(client: TestClient) -> None:
-    """验证 WS 能收到 agent 事件。使用同步 TestClient 存在竞态，
-    此测试仅验证 WS 连接后 session 有效且不立即断开。"""
-    create_res = client.post("/api/v1/chat", json={"message": "hello"})
-    sid = create_res.json()["session_id"]
-
-    with client.websocket_connect(f"/api/v1/ws/{sid}") as ws:
-        # WS 连接存活即证明 session 有效
-        # 事件接收的完整覆盖应由集成测试完成
-        assert ws is not None
-
-
-def test_ws_unknown_session_closes(client: TestClient) -> None:
-    with pytest.raises(Exception):
-        with client.websocket_connect("/api/v1/ws/" + "a" * 32) as ws:
-            ws.receive_json()

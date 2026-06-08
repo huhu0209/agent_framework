@@ -22,11 +22,6 @@ class ChatRequest(BaseModel):
         return v
 
 
-class ChatResponse(BaseModel):
-    session_id: str
-    status: str = "processing"
-
-
 class UserMessage(BaseModel):
     role: Literal["user"] = "user"
     content: str

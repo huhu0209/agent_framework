@@ -11,7 +11,6 @@ export function resetIdCounter() {
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''
-const WS_BASE = import.meta.env.VITE_WS_BASE ?? ''
 
 function vizEventToBlock(event: VizEvent): AgentBlockInit | null {
   switch (event.type) {
@@ -99,7 +98,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }))
 
     try {
-      await sendViaWs(text, get, set)
+      await sendViaSse(text, get, set)
     } catch {
       // Error handled: streamingMessage finalized in finally
     } finally {
@@ -113,7 +112,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 }))
 
-async function sendViaWs(
+async function sendViaSse(
   text: string,
   get: () => ChatStore,
   set: (partial: Partial<ChatStore> | ((s: ChatStore) => Partial<ChatStore>)) => void,
@@ -134,59 +133,58 @@ async function sendViaWs(
     throw new Error(err.error || `HTTP ${res.status}`)
   }
 
-  const data = await res.json()
-  const sessionId: string = data.session_id
-  set({ sessionId })
+  const sessionId = res.headers.get('X-Session-Id')
+  if (sessionId) set({ sessionId })
 
-  const wsProtocol = WS_BASE
-    ? (WS_BASE.startsWith('wss') ? 'wss' : 'ws')
-    : (window.location.protocol === 'https:' ? 'wss:' : 'ws:')
-  const wsHost = WS_BASE
-    ? WS_BASE.replace(/^wss?:\/\//, '')
-    : window.location.host
-  const wsUrl = `${wsProtocol}//${wsHost}/api/v1/ws/${sessionId}`
+  const reader = res.body!.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
 
-  const ws = new WebSocket(wsUrl)
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
 
-  await new Promise<void>((resolve, reject) => {
-    ws.onmessage = (ev) => {
-      const event: VizEvent = JSON.parse(ev.data)
+    buffer += decoder.decode(value, { stream: true })
 
-      if (event.type === 'idle') return
+    let boundary: number
+    while ((boundary = buffer.indexOf('\n\n')) !== -1) {
+      const block = buffer.slice(0, boundary)
+      buffer = buffer.slice(boundary + 2)
 
-      if (event.type === 'shutdown') {
-        ws.close()
-        resolve()
-        return
+      let eventType = ''
+      let eventData = ''
+      for (const line of block.split('\n')) {
+        if (line.startsWith('event: ')) eventType = line.slice(7)
+        else if (line.startsWith('data: ')) eventData = line.slice(6)
       }
 
-      if (event.type === 'error') {
-        ws.close()
-        resolve()
-        return
+      if (eventType && eventData) {
+        const payload = JSON.parse(eventData)
+        handleSseEvent(eventType, payload, get, set)
       }
-
-      const blockInit = vizEventToBlock(event)
-      if (!blockInit) return
-
-      set((s) => {
-        if (!s.streamingMessage) return s
-        const block = { ...blockInit, id: `blk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` } as AgentBlock
-        return {
-          streamingMessage: {
-            ...s.streamingMessage,
-            blocks: [...(s.streamingMessage.blocks ?? []), block],
-          },
-        }
-      })
     }
+  }
+}
 
-    ws.onerror = () => {
-      reject(new Error('WebSocket connection failed'))
-    }
+function handleSseEvent(
+  type: string,
+  payload: Record<string, unknown>,
+  _get: () => ChatStore,
+  set: (partial: Partial<ChatStore> | ((s: ChatStore) => Partial<ChatStore>)) => void,
+) {
+  if (type === 'idle' || type === 'shutdown') return
 
-    ws.onclose = () => {
-      resolve()
+  const blockInit = vizEventToBlock({ type: type as VizEvent['type'], agent: 'Agent', payload, timestamp: Date.now() })
+  if (!blockInit) return
+
+  set((s) => {
+    if (!s.streamingMessage) return s
+    const block = { ...blockInit, id: `blk-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` } as AgentBlock
+    return {
+      streamingMessage: {
+        ...s.streamingMessage,
+        blocks: [...(s.streamingMessage.blocks ?? []), block],
+      },
     }
   })
 }
