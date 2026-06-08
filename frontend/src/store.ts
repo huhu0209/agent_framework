@@ -1,6 +1,17 @@
 import { create } from 'zustand'
 import type { AgentBlock, AgentBlockInit, ChatMessage, MessageRole, SessionInfo, VizEvent } from './types'
 
+function toFrontendBlocks(rawBlocks: Record<string, unknown>[]): AgentBlock[] {
+  return rawBlocks.map((b, i) => {
+    const t = b.type as string
+    const id = `blk-restored-${i}-${Date.now()}`
+    if (t === 'text') return { id, kind: 'text_response' as const, text: (b.text as string) ?? '' }
+    if (t === 'tool_use') return { id, kind: 'tool_call' as const, toolName: (b.name as string) ?? '', params: (b.input as Record<string, unknown>) ?? {} }
+    if (t === 'tool_result') return { id, kind: 'tool_result' as const, content: typeof b.content === 'string' ? b.content : JSON.stringify(b.content) }
+    return { id, kind: 'text_response' as const, text: JSON.stringify(b) }
+  })
+}
+
 let _nextId = 1
 function uid(): string {
   return `msg-${_nextId++}-${Date.now()}`
@@ -149,7 +160,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       role: m.role as MessageRole,
       timestamp: (m.timestamp as number) ?? Date.now(),
       ...(m.content ? { content: m.content as string } : {}),
-      ...(m.blocks ? { blocks: m.blocks as AgentBlock[] } : {}),
+      ...(m.blocks ? { blocks: toFrontendBlocks(m.blocks as Record<string, unknown>[]) } : {}),
     }))
     set({ messages, sessionId: id, streamingMessage: null })
   },
