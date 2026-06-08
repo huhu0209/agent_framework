@@ -6,6 +6,7 @@ from agent_framework.orchestrator.planner import (
     DriftLevel,
     PlanItem,
     PlanSnapshot,
+    PlanSource,
     PlanningState,
     PLAN_PROGRESS_PREFIX,
     parse_plan_response,

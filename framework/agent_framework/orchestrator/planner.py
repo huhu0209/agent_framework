@@ -11,6 +11,8 @@ from typing import Literal
 
 PLAN_PROGRESS_PREFIX = "当前计划进度："
 
+PlanSource = Literal["llm_generated", "caller_injected", "none"]
+
 
 class DriftLevel(Enum):
     NONE = "none"  # 无偏离
@@ -32,7 +34,7 @@ class PlanSnapshot:
     completed_count: int  # 已完成的步骤数
     total_count: int  # 总步骤数
     current_focus: str | None  # 当前关注的步骤 ID
-    plan_source: Literal["llm_generated", "caller_injected", "none"]  # 计划来源类型：LLM 生成、调用注入、无
+    plan_source: PlanSource  # 计划来源类型：LLM 生成、调用注入、无
 
 
 _VALID_TRANSITIONS = MappingProxyType({
