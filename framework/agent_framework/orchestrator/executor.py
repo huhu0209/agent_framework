@@ -51,7 +51,7 @@ class DAGExecutor:
         for subtask in plan:
             yield AgentEvent(
                 type="worker_start",
-                step=0,
+                step=1,
                 data={
                     "subtask_id": subtask.id,
                     "worker": subtask.worker,
@@ -61,7 +61,7 @@ class DAGExecutor:
             result = await self._run_worker(subtask)
             yield AgentEvent(
                 type="worker_done",
-                step=0,
+                step=1,
                 data={
                     "subtask_id": result.id,
                     "worker": result.worker,
@@ -73,7 +73,7 @@ class DAGExecutor:
             if not result.success:
                 yield AgentEvent(
                     type="orchestrator_error",
-                    step=0,
+                    step=1,
                     data={
                         "error": f"Worker '{result.worker}' failed: {result.error}",
                         "subtask_id": result.id,
