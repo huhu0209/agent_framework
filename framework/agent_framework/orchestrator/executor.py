@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, AsyncGenerator
 
-from agent_framework.agents.base import AgentEvent
+from agent_framework.agents.base import Agent, AgentEvent
 from agent_framework.orchestrator.models import SubTask, SubTaskResult
 
 if TYPE_CHECKING:
@@ -113,14 +113,21 @@ class DAGExecutor:
                 id=subtask.id, worker=subtask.worker, output="", success=False, error=str(e),
             )
 
-    async def _collect_output(self, agent, prompt: str) -> str:
+    async def _collect_output(self, agent: Agent, prompt: str) -> str:
         """从 agent.run() 中收集文本输出。error 事件抛 RuntimeError。"""
         text = ""
         async for event in agent.run(prompt):
             if event.type == "done":
-                for block in (event.data or {}).get("content", []):
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        text += block.get("text", "")
+                content = (event.data or {}).get("content", [])
+                if not isinstance(content, list):
+                    continue
+                for block in content:
+                    if not isinstance(block, dict):
+                        continue
+                    if block.get("type") == "text":
+                        text_value = block.get("text", "")
+                        if isinstance(text_value, str):
+                            text += text_value
             elif event.type == "error":
                 raise RuntimeError((event.data or {}).get("error", "Unknown worker error"))
         return text or ""
