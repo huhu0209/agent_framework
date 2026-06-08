@@ -126,6 +126,20 @@ class TestParseResponse:
         assert result is not None
         assert result[2].depends_on == ("1", "2")
 
+    def test_prompt_too_long_raises(self) -> None:
+        """超长 prompt 抛出 ValueError。"""
+        decomposer = Decomposer(_make_mock_adapter_with_text(""), model="mock")
+        long_prompt = "x" * 10001
+        xml = (
+            f'<decomposition>\n'
+            f'<subtask id="1" worker="researcher" depends_on="">\n'
+            f'  {long_prompt}\n'
+            f'</subtask>\n'
+            f'</decomposition>'
+        )
+        with pytest.raises(ValueError, match="Subtask prompt too long"):
+            decomposer._parse_response(xml)
+
 
 # ---------------------------------------------------------------------------
 # TestValidate — 验证逻辑

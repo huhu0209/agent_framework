@@ -31,6 +31,8 @@ _DECOMPOSE_SYSTEM_PROMPT = (
     "</decomposition>\n"
 )
 
+_MAX_PROMPT_LENGTH = 10_000
+
 
 class Decomposer:
     """调用 LLM 将用户消息分解为 SubTask 列表（DAG）。"""
@@ -97,10 +99,15 @@ class Decomposer:
                 if deps_str
                 else ()
             )
+            prompt_text = m.group(4).strip()
+            if len(prompt_text) > _MAX_PROMPT_LENGTH:
+                raise ValueError(
+                    f"Subtask prompt too long: {len(prompt_text)} chars (max {_MAX_PROMPT_LENGTH})"
+                )
             subtasks.append(SubTask(
                 id=m.group(1),
                 worker=m.group(2),
-                prompt=m.group(4).strip(),
+                prompt=prompt_text,
                 depends_on=depends_on,
             ))
         if not subtasks:
