@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from agent_framework.orchestrator.planner import (
+    VALID_PLAN_STATUSES,
     DriftLevel,
     PlanItem,
     PlanSnapshot,
@@ -16,8 +17,6 @@ from agent_framework.prompts.templates import (
     DRIFT_WARN_TEMPLATE,
     PLAN_GENERATION_INSTRUCTION,
 )
-
-_VALID_STATUSES = frozenset({"pending", "in_progress", "completed", "blocked"})
 
 
 class PlanningSession:
@@ -52,10 +51,10 @@ class PlanningSession:
 
     def create_from_items(self, items: list[PlanItem], source: PlanSource) -> None:
         for item in items:
-            if item.status not in _VALID_STATUSES:
+            if item.status not in VALID_PLAN_STATUSES:
                 raise ValueError(f"Invalid plan item status: {item.status!r}")
         self._state = PlanningState(
-            items=[PlanItem(id=i.id, action=i.action, status=i.status) for i in items],
+            items=tuple(PlanItem(id=i.id, action=i.action, status=i.status) for i in items),
             current_focus=None,
             plan_source=source,
         )
@@ -67,7 +66,7 @@ class PlanningSession:
         if parsed is None:
             return False
         self._state = PlanningState(
-            items=parsed,
+            items=tuple(parsed),
             current_focus=None,
             plan_source="llm_generated",
         )

@@ -44,11 +44,13 @@ _VALID_TRANSITIONS = MappingProxyType({
     "blocked": ("in_progress",),
 })
 
+VALID_PLAN_STATUSES = frozenset(_VALID_TRANSITIONS.keys())
+
 
 @dataclass(frozen=True)
 class PlanningState:
     """计划状态（不可变）。所有状态变更返回新实例。"""
-    items: list[PlanItem]  # 计划中的所有步骤
+    items: tuple[PlanItem, ...]  # 计划中的所有步骤
     current_focus: str | None  # 当前关注的步骤 ID
     drift_count: int = 0  # 计划偏离次数
     plan_source: Literal["llm_generated", "caller_injected"] = "llm_generated"  # 计划来源类型：LLM 生成、调用注入
@@ -63,10 +65,10 @@ class PlanningState:
         if new_status not in allowed:
             raise ValueError(f"Invalid transition: {item.status} -> {new_status}")
 
-        new_items = [
+        new_items = tuple(
             PlanItem(id=i.id, action=i.action, status=new_status) if i.id == item_id else i
             for i in self.items
-        ]
+        )
         # blocked 保留 drift_count：阻塞解除后继续追踪偏离；
         # 其他状态转换（completed 等）重置，因为步骤已推进。
         new_drift = self.drift_count if new_status == "blocked" else 0
@@ -132,7 +134,7 @@ class PlanningState:
         生成计划快照。
         """
         return PlanSnapshot(
-            items=tuple(PlanItem(id=i.id, action=i.action, status=i.status) for i in self.items),
+            items=self.items,
             completed_count=sum(1 for i in self.items if i.status == "completed"),
             total_count=len(self.items),
             current_focus=self.current_focus,

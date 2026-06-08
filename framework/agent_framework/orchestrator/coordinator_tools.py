@@ -10,13 +10,13 @@ import json
 from typing import TYPE_CHECKING
 
 from agent_framework.llm.types import ToolParameterSchema
-from agent_framework.tools.types import ToolResult, ToolSpec
+from agent_framework.tools.types import ToolResult, ToolSpec, ToolUseContext
 
 if TYPE_CHECKING:
     from agent_framework.orchestrator.worker_agent import WorkerManager
 
 
-def _get_manager(ctx) -> WorkerManager | None:
+def _get_manager(ctx: ToolUseContext) -> WorkerManager | None:
     from agent_framework.orchestrator.worker_agent import WorkerManager
     manager = ctx.extra.get("worker_manager")
     if not isinstance(manager, WorkerManager):

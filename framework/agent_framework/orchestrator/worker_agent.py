@@ -60,14 +60,13 @@ class WorkerManager:
         self._model = model
         self._router = router
         self._ctx = ctx
-        self._workers: list[WorkerHandle] = []
+        self._workers: dict[str, WorkerHandle] = {}
 
     async def spawn(self, worker_name: str, prompt: str) -> WorkerHandle:
         """创建并执行一个 Worker，返回执行结果。"""
         spec = self._registry.get(worker_name)
         worker_id = _new_worker_id()
-        handle = WorkerHandle(id=worker_id, worker_name=worker_name, status="running")
-        self._workers.append(handle)
+        self._workers[worker_id] = WorkerHandle(id=worker_id, worker_name=worker_name, status="running")
         try:
             agent = spec.factory(
                 adapter=self._adapter,
@@ -79,25 +78,26 @@ class WorkerManager:
             completed = WorkerHandle(
                 id=worker_id, worker_name=worker_name, status="completed", output=output,
             )
-            self._workers[-1] = completed
+            self._workers[worker_id] = completed
             return completed
         except Exception as e:
             logger.error("Worker '%s' failed: %s", worker_name, e)
             failed = WorkerHandle(
                 id=worker_id, worker_name=worker_name, status="failed", error=str(e),
             )
-            self._workers[-1] = failed
+            self._workers[worker_id] = failed
             return failed
 
     def list_workers(self, *, status: str = "all") -> list[WorkerHandle]:
         """查询 Worker 列表，可按状态过滤。"""
+        workers = list(self._workers.values())
         if status == "all":
-            return list(self._workers)
-        return [w for w in self._workers if w.status == status]
+            return workers
+        return [w for w in workers if w.status == status]
 
     async def send_message(self, worker_id: str, message: str) -> WorkerHandle:
         """向已完成的 Worker 发送追加消息（继续执行）。"""
-        original = next((w for w in self._workers if w.id == worker_id), None)
+        original = self._workers.get(worker_id)
         if original is None:
             raise KeyError(f"Worker not found: {worker_id}")
 

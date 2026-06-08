@@ -49,18 +49,18 @@ class OrchestratorEngine(Agent):
 
     async def run(self, user_message: str) -> AsyncGenerator[AgentEvent, None]:
         """启动协调者 Agent Loop 处理用户任务。"""
+        if len(user_message) > _MAX_USER_MESSAGE_LENGTH:
+            raise ValueError(
+                f"User message too long: {len(user_message)} chars "
+                f"(max {_MAX_USER_MESSAGE_LENGTH})"
+            )
+
         # Lazy imports — 避免 agents ↔ orchestrator 循环依赖
         from agent_framework.agents.agent_loop import AgentLoop
         from agent_framework.orchestrator.coordinator_prompt import build_coordinator_prompt
         from agent_framework.orchestrator.coordinator_tools import create_coordinator_tools
         from agent_framework.orchestrator.worker_agent import WorkerManager
         from agent_framework.tools.registry import ToolRegistry
-
-        if len(user_message) > _MAX_USER_MESSAGE_LENGTH:
-            raise ValueError(
-                f"User message too long: {len(user_message)} chars "
-                f"(max {_MAX_USER_MESSAGE_LENGTH})"
-            )
 
         # 创建 WorkerManager
         worker_manager = WorkerManager(
