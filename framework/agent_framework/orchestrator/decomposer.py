@@ -37,11 +37,10 @@ _MAX_PROMPT_LENGTH = 10_000
 class Decomposer:
     """调用 LLM 将用户消息分解为 SubTask 列表（DAG）。"""
 
-    _MAX_SUBTASKS = 20
-
-    def __init__(self, adapter: ILLMAdapter, *, model: str) -> None:
+    def __init__(self, adapter: ILLMAdapter, *, model: str, max_subtasks: int = 20) -> None:
         self._adapter = adapter
         self._model = model
+        self._max_subtasks = max_subtasks
 
     async def decompose(
         self, user_message: str, worker_registry: WorkerRegistry,
@@ -116,9 +115,9 @@ class Decomposer:
                     "Failed to parse any subtask from <decomposition> block — likely malformed XML"
                 )
             return None
-        if len(subtasks) > self._MAX_SUBTASKS:
+        if len(subtasks) > self._max_subtasks:
             raise ValueError(
-                f"Too many subtasks: {len(subtasks)} (max {self._MAX_SUBTASKS})"
+                f"Too many subtasks: {len(subtasks)} (max {self._max_subtasks})"
             )
         return subtasks
 

@@ -140,6 +140,19 @@ class TestParseResponse:
         with pytest.raises(ValueError, match="Subtask prompt too long"):
             decomposer._parse_response(xml)
 
+    def test_custom_max_subtasks(self) -> None:
+        """自定义 max_subtasks 生效。"""
+        decomposer = Decomposer(_make_mock_adapter_with_text(""), model="mock", max_subtasks=2)
+        xml = (
+            '<decomposition>\n'
+            '<subtask id="1" worker="researcher" depends_on="">\n  A\n</subtask>\n'
+            '<subtask id="2" worker="researcher" depends_on="">\n  B\n</subtask>\n'
+            '<subtask id="3" worker="researcher" depends_on="">\n  C\n</subtask>\n'
+            '</decomposition>'
+        )
+        with pytest.raises(ValueError, match="Too many subtasks"):
+            decomposer._parse_response(xml)
+
 
 # ---------------------------------------------------------------------------
 # TestValidate — 验证逻辑
