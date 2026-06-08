@@ -5,7 +5,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
+from types import MappingProxyType
 from typing import Literal
+
+
+PLAN_PROGRESS_PREFIX = "当前计划进度："
 
 
 class DriftLevel(Enum):
@@ -31,12 +35,12 @@ class PlanSnapshot:
     plan_source: Literal["llm_generated", "caller_injected", "none"]  # 计划来源类型：LLM 生成、调用注入、无
 
 
-_VALID_TRANSITIONS: dict[str, list[str]] = {
-    "pending": ["in_progress"],
-    "in_progress": ["completed", "blocked"],
-    "completed": [],
-    "blocked": ["in_progress"],
-}
+_VALID_TRANSITIONS = MappingProxyType({
+    "pending": ("in_progress",),
+    "in_progress": ("completed", "blocked"),
+    "completed": (),
+    "blocked": ("in_progress",),
+})
 
 
 @dataclass(frozen=True)
@@ -61,6 +65,8 @@ class PlanningState:
             PlanItem(id=i.id, action=i.action, status=new_status) if i.id == item_id else i
             for i in self.items
         ]
+        # blocked 保留 drift_count：阻塞解除后继续追踪偏离；
+        # 其他状态转换（completed 等）重置，因为步骤已推进。
         new_drift = self.drift_count if new_status == "blocked" else 0
         new_focus = item_id if new_status == "in_progress" else self.current_focus
         return PlanningState(
@@ -114,7 +120,7 @@ class PlanningState:
         """
         格式化计划进度，用于注入到 LLM 提示中。
         """
-        lines = ["当前计划进度："]
+        lines = [PLAN_PROGRESS_PREFIX]
         for item in self.items:
             lines.append(f"  {item.id}. [{item.status}] {item.action}")
         return "\n".join(lines)

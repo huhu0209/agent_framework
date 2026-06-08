@@ -39,7 +39,7 @@ class TestHasWorkers:
 
 class TestDescribeForLLM:
     def test_describe_empty(self):
-        assert "无可用 Worker" in WorkerRegistry().describe_for_llm()
+        assert "无" in WorkerRegistry().describe_for_llm()
 
     def test_describe_with_workers(self):
         registry = WorkerRegistry()

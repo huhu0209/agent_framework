@@ -27,7 +27,7 @@ class WorkerRegistry:
         当前 Worker 数量较少，无需额外排序。
         """
         if not self._workers:
-            return "无可用 Worker"
+            return "可用 Worker 列表：无"
         lines = ["可用 Worker 列表："]
         for spec in self._workers.values():
             lines.append(f"- {spec.name}: {spec.description}")

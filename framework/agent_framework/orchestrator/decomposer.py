@@ -35,6 +35,8 @@ _DECOMPOSE_SYSTEM_PROMPT = (
 class Decomposer:
     """调用 LLM 将用户消息分解为 SubTask 列表（DAG）。"""
 
+    _MAX_SUBTASKS = 20
+
     def __init__(self, adapter: ILLMAdapter, *, model: str) -> None:
         self._adapter = adapter
         self._model = model
@@ -84,7 +86,7 @@ class Decomposer:
             return None
         inner = match.group(1)
         subtask_pattern = re.compile(
-            r'<subtask\s+id="(\d+)"\s+worker="([^"]+)"\s+depends_on="([^"]*)">\s*(.*?)\s*</subtask>',
+            r'<subtask\s+id="([^"]+)"\s+worker="([^"]+)"\s+depends_on="([^"]*)">\s*(.*?)\s*</subtask>',
             re.DOTALL,
         )
         subtasks: list[SubTask] = []
@@ -101,7 +103,17 @@ class Decomposer:
                 prompt=m.group(4).strip(),
                 depends_on=depends_on,
             ))
-        return subtasks if subtasks else None
+        if not subtasks:
+            if "<subtask" in inner:
+                raise ValueError(
+                    "Failed to parse any subtask from <decomposition> block — likely malformed XML"
+                )
+            return None
+        if len(subtasks) > self._MAX_SUBTASKS:
+            raise ValueError(
+                f"Too many subtasks: {len(subtasks)} (max {self._MAX_SUBTASKS})"
+            )
+        return subtasks
 
     def _validate(
         self, subtasks: list[SubTask], registry: WorkerRegistry,

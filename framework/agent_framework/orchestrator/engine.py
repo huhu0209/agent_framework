@@ -14,14 +14,14 @@ import logging
 from typing import TYPE_CHECKING, AsyncGenerator, Literal
 
 from agent_framework.agents.base import Agent, AgentEvent
-
-logger = logging.getLogger(__name__)
 from agent_framework.llm.base import ILLMAdapter
 from agent_framework.tools.router import ToolRouter
 from agent_framework.tools.types import ToolUseContext
 
 if TYPE_CHECKING:
     from agent_framework.orchestrator.worker_registry import WorkerRegistry
+
+logger = logging.getLogger(__name__)
 
 
 class OrchestratorEngine(Agent):
@@ -60,7 +60,7 @@ class OrchestratorEngine(Agent):
         而简短但语义复杂的请求可能被标为 simple。
         当前阶段优先零延迟、零成本；未来可引入关键词或 LLM 辅助判断。
         """
-        return "complex" if len(task) > self._complexity_threshold else "simple"
+        return "complex" if len(task.strip()) > self._complexity_threshold else "simple"
 
     async def run(self, user_message: str) -> AsyncGenerator[AgentEvent, None]:
         """执行编排流程：评估复杂度 → 路由到合适的执行路径。"""
@@ -183,6 +183,11 @@ class OrchestratorEngine(Agent):
         )
 
     def _synthesize(self, user_message: str, results: list[dict]) -> str:
-        """合成 Worker 输出：拼接非空 output。"""
-        outputs = [r["output"] for r in results if r.get("output")]
-        return "\n\n".join(outputs)
+        """合成 Worker 输出：拼接非空 output，附带 Worker 标识以便溯源。"""
+        parts = []
+        for r in results:
+            output = r.get("output")
+            if output:
+                worker = r.get("worker", "unknown")
+                parts.append(f"[{worker}]\n{output}")
+        return "\n\n".join(parts)

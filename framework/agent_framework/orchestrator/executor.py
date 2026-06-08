@@ -118,9 +118,9 @@ class DAGExecutor:
         text = ""
         async for event in agent.run(prompt):
             if event.type == "done":
-                for block in event.data.get("content", []):
+                for block in (event.data or {}).get("content", []):
                     if isinstance(block, dict) and block.get("type") == "text":
                         text += block.get("text", "")
             elif event.type == "error":
-                raise RuntimeError(event.data.get("error", "Unknown worker error"))
+                raise RuntimeError((event.data or {}).get("error", "Unknown worker error"))
         return text or ""

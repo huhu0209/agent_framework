@@ -3,9 +3,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Callable
+from typing import TYPE_CHECKING, Protocol
 
 from agent_framework.agents.base import Agent
+
+if TYPE_CHECKING:
+    from agent_framework.llm.base import ILLMAdapter
+    from agent_framework.tools.router import ToolRouter
+    from agent_framework.tools.types import ToolUseContext
+
+
+class WorkerFactory(Protocol):
+    def __call__(
+        self, *, adapter: ILLMAdapter, model: str, router: ToolRouter, ctx: ToolUseContext,
+    ) -> Agent: ...
 
 
 @dataclass
@@ -14,7 +25,7 @@ class WorkerSpec:
 
     name: str
     description: str
-    factory: Callable[..., Agent]
+    factory: WorkerFactory
 
 
 @dataclass

@@ -7,9 +7,14 @@ from agent_framework.orchestrator.planner import (
     PlanItem,
     PlanSnapshot,
     PlanningState,
+    PLAN_PROGRESS_PREFIX,
     parse_plan_response,
 )
-from agent_framework.prompts.templates import DRIFT_WARN_TEMPLATE, PLAN_GENERATION_INSTRUCTION
+from agent_framework.prompts.templates import (
+    DRIFT_WARN_PREFIX,
+    DRIFT_WARN_TEMPLATE,
+    PLAN_GENERATION_INSTRUCTION,
+)
 
 
 class PlanningSession:
@@ -91,7 +96,7 @@ class PlanningSession:
         return (drift_text, plan_text)
 
     def is_plan_context_text(self, text: str) -> bool:
-        return text.startswith("当前计划进度：") or text.startswith("[偏离提醒]")
+        return text.startswith(PLAN_PROGRESS_PREFIX) or text.startswith(DRIFT_WARN_PREFIX)
 
     @staticmethod
     def plan_instruction_prompt() -> str:
