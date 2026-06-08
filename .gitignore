@@ -40,3 +40,4 @@ frontend/coverage/
 .playwright-mcp/
 .planning/
 docs/
+.superpowers/
