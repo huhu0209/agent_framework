@@ -2,6 +2,22 @@ import { useState } from 'react'
 import { useChatStore } from '../store'
 import type { SessionInfo } from '../types'
 
+function SessionSkeleton() {
+  const widths = ['75%', '60%', '80%', '55%', '70%']
+  return (
+    <div className="px-2 py-1 space-y-1">
+      {widths.map((w, i) => (
+        <div key={i} className="px-3 py-2.5">
+          <div
+            className="h-4 rounded shimmer"
+            style={{ width: w, backgroundColor: 'var(--surface-sand)' }}
+          />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function SessionItem({
   session,
   isActive,
@@ -165,6 +181,7 @@ export function SessionSidebar() {
   const deleteSession = useChatStore((s) => s.deleteSession)
   const renameSession = useChatStore((s) => s.renameSession)
   const newSession = useChatStore((s) => s.newSession)
+  const sessionsLoading = useChatStore((s) => s.sessionsLoading)
 
   if (!sidebarOpen) return null
 
@@ -202,23 +219,29 @@ export function SessionSidebar() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-2">
-        {sessions.map((session) => (
-          <SessionItem
-            key={session.session_id}
-            session={session}
-            isActive={session.session_id === sessionId}
-            onSelect={() => switchSession(session.session_id)}
-            onDelete={() => deleteSession(session.session_id)}
-            onRename={(title) => renameSession(session.session_id, title)}
-          />
-        ))}
-        {sessions.length === 0 && (
-          <p
-            className="text-center text-xs py-8"
-            style={{ color: 'var(--text-tertiary)' }}
-          >
-            暂无会话记录
-          </p>
+        {sessionsLoading ? (
+          <SessionSkeleton />
+        ) : (
+          <>
+            {sessions.map((session) => (
+              <SessionItem
+                key={session.session_id}
+                session={session}
+                isActive={session.session_id === sessionId}
+                onSelect={() => switchSession(session.session_id)}
+                onDelete={() => deleteSession(session.session_id)}
+                onRename={(title) => renameSession(session.session_id, title)}
+              />
+            ))}
+            {sessions.length === 0 && (
+              <p
+                className="text-center text-xs py-8"
+                style={{ color: 'var(--text-tertiary)' }}
+              >
+                暂无会话记录
+              </p>
+            )}
+          </>
         )}
       </div>
     </aside>
