@@ -6,6 +6,7 @@ import pytest
 
 from agent_framework.skills.registry import SkillRegistry
 from agent_framework.skills.tool import create_load_skill_spec
+from agent_framework.skills.types import SkillDocument, SkillManifest, SkillSource
 from agent_framework.tools.types import ToolUseContext
 
 
@@ -74,3 +75,33 @@ class TestLoadSkillHandler:
         result = await spec.handler({"name": "deploy"}, ctx)
         assert result.is_error
         assert "未配置" in result.content
+
+
+@pytest.mark.asyncio
+class TestLoadSkillTrustCheck:
+    async def test_untrusted_skill_gets_marker(self):
+        manifest = SkillManifest(
+            name="mcp-tool",
+            description="MCP tool",
+            path=Path("/tmp"),
+            source=SkillSource.MCP,
+        )
+        registry = SkillRegistry([])
+        registry._documents["mcp-tool"] = SkillDocument(
+            manifest=manifest, body="body"
+        )
+        spec = create_load_skill_spec()
+        ctx = _make_ctx(registry)
+
+        result = await spec.handler({"name": "mcp-tool"}, ctx)
+        assert not result.is_error
+        assert "[untrusted]" in result.content
+
+    async def test_trusted_skill_no_marker(self, tmp_path):
+        registry = _make_registry_with_skill(tmp_path)
+        spec = create_load_skill_spec()
+        ctx = _make_ctx(registry)
+
+        result = await spec.handler({"name": "deploy"}, ctx)
+        assert not result.is_error
+        assert "[untrusted]" not in result.content

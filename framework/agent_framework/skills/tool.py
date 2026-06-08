@@ -17,7 +17,14 @@ async def _handle_load_skill(args: dict, ctx: ToolUseContext) -> ToolResult:
         return ToolResult(content="请指定 skill 名称", is_error=True)
 
     result = registry.load_full_text(name)
-    return ToolResult(content=result.content, is_error=result.is_error)
+    if result.is_error:
+        return ToolResult(content=result.content, is_error=True)
+
+    content = result.content
+    if not registry.is_trusted(name):
+        content = f"[untrusted] {content}"
+
+    return ToolResult(content=content, is_error=False)
 
 
 def create_load_skill_spec() -> ToolSpec:
