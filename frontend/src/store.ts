@@ -128,10 +128,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   loadSessions: async () => {
-    const res = await fetch(`${API_BASE}/api/v1/sessions`)
-    if (res.ok) {
-      const sessions = await res.json()
-      set({ sessions })
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/sessions`)
+      if (res.ok) {
+        const data = await res.json()
+        const sessions = Array.isArray(data) ? data : []
+        set({ sessions })
+      }
+    } catch {
+      // network error — keep existing sessions list
     }
   },
 
@@ -150,7 +155,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   deleteSession: async (id: string) => {
-    await fetch(`${API_BASE}/api/v1/sessions/${id}`, { method: 'DELETE' })
+    const res = await fetch(`${API_BASE}/api/v1/sessions/${id}`, { method: 'DELETE' })
+    if (!res.ok) return
     const { sessions, sessionId } = get()
     const next = sessions.filter((s) => s.session_id !== id)
     set({ sessions: next })
@@ -160,11 +166,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   renameSession: async (id: string, title: string) => {
-    await fetch(`${API_BASE}/api/v1/sessions/${id}`, {
+    const res = await fetch(`${API_BASE}/api/v1/sessions/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ title }),
     })
+    if (!res.ok) return
     set((s) => ({
       sessions: s.sessions.map((sess) =>
         sess.session_id === id ? { ...sess, title } : sess,

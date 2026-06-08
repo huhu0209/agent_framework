@@ -148,7 +148,6 @@ function SessionItem({
               <line x1="3" y1="4" x2="13" y2="4" />
               <line x1="5" y1="4" x2="5.5" y2="13" />
               <line x1="10.5" y1="4" x2="10" y2="13" />
-              <path d="M2 4h12" />
               <path d="M5.5 1h5" />
             </svg>
           </button>
@@ -177,7 +176,6 @@ export function SessionSidebar() {
         minWidth: '280px',
         backgroundColor: 'var(--bg-parchment)',
         borderRight: '1px solid var(--border-cream)',
-        transition: 'width 200ms ease-in-out, min-width 200ms ease-in-out',
       }}
     >
       <div className="px-3 pt-3 pb-2">
