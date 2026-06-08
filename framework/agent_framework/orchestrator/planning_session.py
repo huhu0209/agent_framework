@@ -42,7 +42,7 @@ class PlanningSession:
             return 0
         return self._state.drift_count
 
-    def create_from_items(self, items: list[PlanItem], source: str) -> None:
+    def create_from_items(self, items: list[PlanItem], source: PlanSource) -> None:
         self._state = PlanningState(
             items=[PlanItem(id=i.id, action=i.action, status=i.status) for i in items],
             current_focus=None,
