@@ -1,11 +1,17 @@
 """Slash Commands 系统。"""
 
-from agent_framework.commands.router import CommandRouter
-from agent_framework.commands.types import CommandSource, ResolvedCommand, SlashCommand
+from agent_framework.commands.dispatcher import CommandDispatcher
+from agent_framework.commands.types import (
+    CommandAction,
+    CommandCategory,
+    CommandResult,
+    SlashCommand,
+)
 
 __all__ = [
-    "CommandRouter",
-    "CommandSource",
-    "ResolvedCommand",
+    "CommandDispatcher",
+    "CommandAction",
+    "CommandCategory",
+    "CommandResult",
     "SlashCommand",
 ]

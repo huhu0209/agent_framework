@@ -2,21 +2,25 @@
 
 from __future__ import annotations
 
-from agent_framework.commands.types import CommandSource, ResolvedCommand, SlashCommand
+from agent_framework.commands.types import (
+    CommandAction,
+    CommandCategory,
+    CommandResult,
+    SlashCommand,
+)
 
 
 def register(builtins: dict[str, SlashCommand]) -> None:
     builtins["status"] = SlashCommand(
         name="status",
         description="显示 agent 状态",
-        source=CommandSource.BUILTIN,
-        handler=handler,
+        category=CommandCategory.QUERY,
+        handler=_handler,
     )
 
 
-def handler(_args: str) -> ResolvedCommand:
-    return ResolvedCommand(
-        is_command=True,
-        content="agent 状态查询（未实现）",
-        source=CommandSource.BUILTIN,
+def _handler(_args: str) -> CommandResult:
+    return CommandResult(
+        action=CommandAction.SHOW_STATUS,
+        message="Agent 运行中",
     )

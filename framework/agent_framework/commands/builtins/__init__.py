@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from agent_framework.commands.builtins import clear, help, status
+from agent_framework.commands.builtins import clear, compact, config, help, status
 from agent_framework.commands.types import SlashCommand
 from agent_framework.skills.registry import SkillRegistry
 
@@ -14,4 +14,6 @@ def register_all(
 ) -> None:
     help.register(builtins, skill_registry=skill_registry)
     clear.register(builtins)
+    compact.register(builtins)
     status.register(builtins)
+    config.register(builtins)
