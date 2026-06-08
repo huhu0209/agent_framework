@@ -36,6 +36,7 @@ class SessionManager:
         self._ttl = ttl
         self._storage_dir = storage_dir
         self._cleanup_task: asyncio.Task | None = None  # type: ignore[type-arg]
+        self._session_list_cache: list[dict] | None = None
 
     def start_cleanup(self) -> None:
         if self._cleanup_task is None or self._cleanup_task.done():
@@ -54,6 +55,7 @@ class SessionManager:
             self._append_history(sid, title or "新会话")
         session = ChatSession(session_id=sid, agent_loop=agent_loop, transcript_writer=writer)
         self._sessions[sid] = session
+        self._invalidate_list_cache()
         return session
 
     def get(self, session_id: str) -> ChatSession | None:
@@ -141,10 +143,13 @@ class SessionManager:
                 lines.append(json.dumps(entry, ensure_ascii=False))
         with open(history_path, "w", encoding="utf-8") as f:
             f.write("\n".join(lines) + "\n")
+        self._invalidate_list_cache()
         return updated
 
     def list_sessions(self) -> list[dict]:
-        """列出所有历史会话。"""
+        """列出所有历史会话（带缓存）。"""
+        if self._session_list_cache is not None:
+            return self._session_list_cache
         if not self._storage_dir:
             return []
         history_path = self._storage_dir / "history.jsonl"
@@ -161,10 +166,16 @@ class SessionManager:
                 if transcript_path.exists():
                     sessions.append(entry)
         sessions.reverse()  # 最新的在前
+        self._session_list_cache = sessions
         return sessions
+
+    def _invalidate_list_cache(self) -> None:
+        """使 session 列表缓存失效。"""
+        self._session_list_cache = None
 
     def delete_session(self, session_id: str) -> bool:
         """删除会话及其 transcript。"""
+        self._invalidate_list_cache()
         self.remove(session_id)
         if not self._storage_dir:
             return False
