@@ -731,4 +731,102 @@ No issues found. Clean component with proper overflow handling and consistent st
 
 ---
 
-*Report completed: 2026-06-09 — Phase 14, Plan 01 (ESLint baseline + full file review)*
+## 跨层问题
+
+以下 Frontend 审查发现的问题与 Backend/Framework 层存在关联。每个主题列出 Frontend issue 和对应的 Backend/Framework issue（来自 `REVIEW-BACKEND.md` 和 `REVIEW-FRAMEWORK.md`），说明跨层关联的具体表现。
+
+参照方向：FRNT → BKND/FRMW（仅标注 Frontend 发现中与 Backend/Framework 有关的问题，不反向扩展）。
+
+### 主题 1：SSE 数据流验证缺失（前端 → 后端）
+
+Frontend 的 SSE 解析层和 Backend 的 SSE 生成层之间缺少统一的数据验证边界。前端信任后端发送的所有 SSE 事件数据，后端在异常时直接将内部信息发送给前端。
+
+| 层 | Issue | 描述 | 严重性 |
+|----|-------|------|--------|
+| Frontend | FRNT-SEC-01 | SSE 事件数据 `JSON.parse` 后无 schema 验证，直接传递给渲染层 | HIGH |
+| Frontend | FRNT-LOGIC-02 | `JSON.parse(eventData)` 无 try-catch，畸形 JSON 导致流式响应静默终止 | HIGH |
+| Frontend | FRNT-LOGIC-01 | `res.body!` 非空断言，response body 为 null 时运行时崩溃 | HIGH |
+| Backend | BKND-SEC-05 | SSE error event 中 `str(exc)` 直接泄露异常信息给客户端 | HIGH |
+| Backend | BKND-ARCH-09 | `_map_to_sse` 对非 tool_use/end_turn 的 stop reason 静默丢弃，客户端无反馈 | MEDIUM |
+
+**跨层表现：** Backend 的 `event_stream()` generator 在异常时发送 `_sse("error", {"error": str(exc)})`，将内部异常信息直接暴露给前端。前端 `store.ts` 的 SSE 解析器（`sendViaSse` 函数）收到这个 error event 后，`vizEventToBlock` 将 `payload.error` 渲染为 `error` 类型的 block 显示在聊天界面中。这意味着 Backend 的信息泄露（BKND-SEC-05）直接被 Frontend 展示给用户。同时，Frontend 对 SSE event data 不做任何 schema 验证（FRNT-SEC-01），如果 Backend 发送格式变更或异常数据，前端要么静默失败（FRNT-LOGIC-02），要么渲染未验证的内容。
+
+**修复建议：** 两层都需要改进。Backend 应在 SSE error event 中使用通用错误消息替代 `str(exc)`。Frontend 应为 SSE 事件 payload 添加运行时验证（至少验证 `payload` 是对象、关键字段是 string 类型），并在 `JSON.parse` 处添加 try-catch 以处理畸形数据。
+
+### 主题 2：类型定义一致性（前端 ↔ 后端）
+
+Frontend 的 `types.ts` 中定义的 `AgentBlock` 类型与 Backend 的消息模型（`UserMessage`、`AgentMessage`）之间存在隐式映射，通过 `store.ts` 的 `toFrontendBlocks` 函数实现类型转换，但缺少显式的类型契约。
+
+| 层 | Issue | 描述 | 严重性 |
+|----|-------|------|--------|
+| Frontend | FRNT-ARCH-02 | `toFrontendBlocks` 使用不安全的类型断言（`b.type as string`、`b.text as string`），无验证 | MEDIUM |
+| Frontend | FRNT-ARCH-06 | `AgentBlockInit` 类型冗长，可读性差 | LOW |
+| Backend | BKND-ARCH-02 | `Message` union 缺少 discriminated validator，反序列化时依赖隐式顺序匹配 | LOW |
+| Backend | BKND-DEAD-02 | `UserMessage`/`AgentMessage`/`ErrorMessage` 模型仅用于 API 响应，内部消息使用 dict | LOW |
+
+**跨层表现：** Backend 内部将消息存储为 `dict`（BKND-DEAD-02），API 响应时通过 Pydantic `HistoryResponse` 序列化为 JSON。Frontend 收到 JSON 后，`toFrontendBlocks` 将 Backend 的 `type: "text"` / `type: "tool_use"` 映射为 Frontend 的 `kind: "text_response"` / `kind: "tool_call"`。这个映射是隐式的：如果 Backend 的 block type 命名变更（例如 `"text"` → `"text_block"`），前端的 `toFrontendBlocks` 会 fallback 到 `JSON.stringify(b)` 将整个对象序列化为文本显示（FRNT-ARCH-02 line 11）。两层的类型转换没有共享 schema 或 OpenAPI 驱动的类型生成。
+
+**修复建议：** 引入共享的类型契约——可以是 OpenAPI schema 自动生成前端类型，或者在 API 文档中明确 block type 的枚举值。短期可以为 `toFrontendBlocks` 添加运行时校验和更明确的 fallback 策略。
+
+### 主题 3：Markdown 渲染安全链（前端 → 后端）
+
+Frontend 的 `react-markdown` 渲染链将 Backend 返回的 LLM 响应内容作为 markdown 渲染，缺少显式的 HTML 消毒。安全依赖于 `react-markdown` v10 的默认行为（不渲染原始 HTML），但这是隐式的。
+
+| 层 | Issue | 描述 | 严重性 |
+|----|-------|------|--------|
+| Frontend | FRNT-SEC-02 | `react-markdown` 未配置 `rehype-sanitize`，HTML 消毒依赖库的隐式默认行为 | HIGH |
+| Frontend | FRNT-SEC-04 | `MarkdownAnchor` 的 `href` 未验证，依赖 React 阻止 `javascript:` URI | LOW |
+| Backend | BKND-SEC-05 | SSE error event 泄露 `str(exc)`，错误信息被前端渲染为 chat block | HIGH |
+
+**跨层表现：** Backend 的 `event_stream()` 在异常时将 `str(exc)` 发送给 Frontend。如果异常信息中包含 HTML 或 markdown 语法（例如包含 `<script>` 标签的错误消息），Frontend 的 `TextResponseBlock` 通过 `react-markdown` 渲染。虽然 `react-markdown` v10 默认不渲染原始 HTML，但 `str(exc)` 中的内容可能包含精心构造的 markdown 链接（`[text](javascript:...)`）——这被 React 的 JSX 渲染阻止（FRNT-SEC-04），但安全边界是隐式的。如果未来添加 `rehype-raw` 插件以支持 HTML 渲染，XSS 风险会立即变为现实。
+
+**修复建议：** Frontend 添加 `rehype-sanitize` 作为纵深防御，明确配置允许的 HTML 元素和属性。在代码中添加注释文档化：严禁添加 `rehype-raw` 除非同时配置 `rehype-sanitize`。Backend 应使用通用错误消息替代 `str(exc)`。
+
+### 主题 4：CORS 与 API 配置（前端 ↔ 后端）
+
+Frontend 的 `API_BASE` 配置与 Backend 的 CORS 策略存在配置一致性风险。如果 `API_BASE` 指向不同源的地址，需要 Backend 的 CORS 策略允许跨域请求。
+
+| 层 | Issue | 描述 | 严重性 |
+|----|-------|------|--------|
+| Frontend | — | `API_BASE` 通过 `import.meta.env.VITE_API_BASE` 配置，默认为空字符串（同源） | — |
+| Backend | BKND-SEC-01 | CORS `allow_methods=["*"]` 和 `allow_headers=["*"]` 过于宽松 | MEDIUM |
+| Backend | BKND-SEC-06 | 所有 API 端点无认证，任意客户端可访问 | HIGH |
+
+**跨层表现：** Frontend 的所有 API 调用（`store.ts` 中的 `fetch` 调用）都不带认证 header——既无 API key 也无 session token。这与 Backend 所有端点无认证（BKND-SEC-06）形成"无认证全链路"。当前开发阶段，Frontend 和 Backend 通常运行在同一主机（`API_BASE` 为空或 `localhost`），CORS 不是问题。但部署时如果 Frontend 和 Backend 分离部署，`API_BASE` 指向不同源的 Backend，Backend 的 CORS 配置（BKND-SEC-01 的 wildcard methods/headers）虽然能工作，但过于宽松。
+
+**修复建议：** 部署前应统一配置。Backend 收紧 CORS 为实际使用的方法和 headers。引入认证机制后，Frontend 的 `fetch` 调用需要附加认证 header（与 BKND-SEC-06 的修复同步）。
+
+### 主题 5：错误处理策略碎片化（前端 → 后端 → 框架）
+
+Frontend 的错误处理与 Backend/Framework 层的错误传播策略不一致。Frontend 多处静默吞掉错误（无用户反馈），Backend 的 SSE 层直接暴露内部异常，Framework 层则多处 `try-except-pass` 静默吞异常。
+
+| 层 | Issue | 描述 | 严重性 |
+|----|-------|------|--------|
+| Frontend | FRNT-LOGIC-03 | `deleteSession` 无 try-catch，网络错误导致 unhandled rejection | MEDIUM |
+| Frontend | FRNT-LOGIC-04 | `loadSessions` 错误静默吞掉，用户无反馈 | MEDIUM |
+| Frontend | FRNT-LOGIC-05 | `switchSession` 错误静默吞掉，用户无反馈 | MEDIUM |
+| Backend | BKND-SEC-05 | SSE error 中 `str(exc)` 直接泄露给客户端 | HIGH |
+| Backend | BKND-SEC-02 | Redis 连接失败静默吞掉（`except Exception` + warning only） | MEDIUM |
+| Framework | FRMW-SEC-09, FRMW-SEC-11, FRMW-SEC-12, FRMW-SEC-17 | 多处 `try-except-pass` 静默吞异常 | HIGH/MEDIUM |
+
+**跨层表现：** 三层的错误处理形成了一个"信息衰减链"：Framework 层部分异常被 `try-except-pass` 静默吞掉，永远不会传播到 Backend；Backend 收到的异常中，SSE error event 又将内部细节直接暴露给 Frontend；Frontend 收到错误后，大部分场景下静默吞掉（`catch {}`），用户看不到任何反馈。结果是：某些错误在 Framework 层就消失了，某些错误在 Frontend 层消失了，用户只在某些特定路径下（SSE 流式中的 error block）能看到错误信息。整个错误传播链缺乏统一的策略。
+
+**修复建议：** 引入分层错误处理策略：(1) Framework 层：结构化错误事件（`LoopEvent(type="error")`）替代 `try-except-pass`；(2) Backend 层：区分已知异常和未知异常，返回用户友好的错误消息 + correlation ID；(3) Frontend 层：添加全局错误状态（如 `errorToast`），在 `deleteSession`/`loadSessions`/`switchSession` 等操作中显示用户可见的错误反馈。
+
+---
+
+## Quality Checklist
+
+按 ROADMAP Phase 14 的成功标准逐项验证（per D-01 调整）：
+
+| # | 成功标准 | 状态 |
+|---|---------|------|
+| 1 | REVIEW-FRONTEND.md 产出，覆盖所有审查维度（死代码、逻辑漏洞、设计问题、安全问题） | GREEN — 31 个 issue 覆盖 4 个维度（1 DEAD + 10 LOGIC + 17 ARCH + 4 SEC），20/20 文件全部审查 |
+| 2 | React 组件树完整审查（props drilling、re-render 问题、zustand store 使用） | GREEN — 12 个组件全部审查，发现 props 类型问题（FRNT-ARCH-13）、re-render 风险（FRNT-ARCH-11, FRNT-ARCH-15）、zustand store 设计问题（FRNT-ARCH-01, FRNT-ARCH-03） |
+| 3 | PixiJS 资源管理审查 — N/A（当前前端无 PixiJS 代码，per D-01） | N/A — 当前前端为 Chat UI（zustand + react-markdown + highlight.js + @tanstack/react-virtual），ROADMAP 中的 PixiJS/WebSocket 代码已不存在 |
+| 4 | WebSocket 客户端安全审查 — N/A（当前前端无 WebSocket 代码，per D-01） | N/A — 当前前端通过 HTTP fetch + SSE 与后端通信，无 WebSocket 客户端代码 |
+| 5 | 跨层问题标注（与 REVIEW-FRAMEWORK.md、REVIEW-BACKEND.md 交叉参照） | GREEN — 5 个跨层主题，引用 FRMW-SEC-09~12,17 / FRMW-ARCH-02,14,20 / BKND-SEC-01,02,05,06 / BKND-ARCH-02,09 / BKND-DEAD-02 等具体 issue ID |
+
+---
+
+*Report completed: 2026-06-09 — Phase 14, Plan 01 (ESLint baseline + full file review) + Plan 02 (cross-layer + quality)*
