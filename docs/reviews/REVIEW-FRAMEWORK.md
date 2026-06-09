@@ -728,23 +728,28 @@ Four ruff scan categories were run against `framework/agent_framework/` (excludi
 
 ## agents/
 
-*(pending manual review — Plan 02)*
+逐文件审查范围：6 个源文件，~1135 行（agent_loop.py 469 行、reflection.py 223 行、plan_and_solve.py 201 行、sub_agent.py 93 行、config.py 104 行、base.py 24 行）。
+模块职责：ReAct Agent 主循环、反思 Agent、规划-求解 Agent、子 Agent、Agent 配置化。
 
 ### CRITICAL
 
-*(pending)*
+*(none found)*
 
 ### HIGH
 
 #### FRMW-SEC-08: agent_loop.py 中 logger 未定义导致运行时 NameError
 
-**Description:** `agent_loop.py:288` 使用 `logger.debug(...)` 但文件中没有 `logging.getLogger(__name__)` 声明。当 memory flush 的 except 分支触发时，会抛出 `NameError: name 'logger' is not defined`，掩盖原始异常。
+**Description:** `agent_loop.py:288` 使用 `logger.debug("语义记忆提取失败（best-effort）", exc_info=True)` 但文件中没有 `import logging` 和 `logging.getLogger(__name__)` 声明。当 `SemanticExtractor.extract_from_messages()` 抛出异常时，except 分支（行 287-288）触发，会先抛出 `NameError: name 'logger' is not defined`，掩盖原始异常。ruff F821 已检测此问题。
 
 **File Location:** `framework/agent_framework/agents/agent_loop.py:288`
 
-**Impact:** Memory flush 失败时不仅无法记录日志，还会抛出未处理的 NameError。虽然外层有 try-except，但这违反了错误处理的意图。
+**Impact:** Memory flush 的语义记忆提取失败时，原始异常被 NameError 掩盖。外层 `except Exception`（行 291）捕获的是 NameError 而非原始异常，`compact_failures` 计数器递增但无法记录真实的失败原因。连续 3 次后 compaction 被 circuit breaker 禁用，用户无感知。
 
-**Fix Suggestion:** 在文件顶部添加 `import logging` 和 `logger = logging.getLogger(__name__)`。
+**Fix Suggestion:** 在文件顶部（`import asyncio` 后）添加：
+```python
+import logging
+logger = logging.getLogger(__name__)
+```
 
 **Priority:** HIGH
 **Related:** FRMW-02 (逻辑漏洞)
@@ -753,13 +758,13 @@ Four ruff scan categories were run against `framework/agent_framework/` (excludi
 
 #### FRMW-DEAD-04: agent_loop.py 导入未使用的 dataclasses.field
 
-**Description:** `dataclasses.field` 被导入但未使用。文件中的 `@dataclass` 装饰器不需要 `field`。
+**Description:** `agent_loop.py:9` 导入 `from dataclasses import dataclass, field`，但 `field` 在整个文件中从未使用。文件中唯一的 `@dataclass` 是 `LoopEvent`（行 56），它使用 `plan: PlanSnapshot | None = None` 作为默认值，不需要 `field()`。
 
 **File Location:** `framework/agent_framework/agents/agent_loop.py:9`
 
 **Impact:** 代码噪音。
 
-**Fix Suggestion:** 移除 `field` 从 import 中。
+**Fix Suggestion:** 改为 `from dataclasses import dataclass`。
 
 **Priority:** HIGH
 **Related:** FRMW-01 (死代码检测)
@@ -768,13 +773,13 @@ Four ruff scan categories were run against `framework/agent_framework/` (excludi
 
 #### FRMW-DEAD-05: config.py、sub_agent.py 导入未使用的 Agent 类
 
-**Description:** `agents/config.py:9` 和 `agents/sub_agent.py:6` 都导入了 `agent_framework.agents.base.Agent` 但未使用。`Agent` 是一个空文件（0 行），本身就是一个 stub。
+**Description:** `agents/config.py:9` 和 `agents/sub_agent.py:6` 都导入了 `agent_framework.agents.base.Agent` 但未使用。`config.py` 中的 `agent_from_config()` 返回 `AgentLoop`（非 `Agent`），类型注解也没用 `Agent`。`sub_agent.py` 中的 `run_subagent()` 没有返回类型注解引用 `Agent`。`base.py` 中 `Agent` 是一个 ABC（24 行，含 `AgentEvent` dataclass 和 `Agent` 抽象类），不是空文件——但这两个文件确实没使用它。
 
 **File Location:** `framework/agent_framework/agents/config.py:9`, `framework/agent_framework/agents/sub_agent.py:6`
 
-**Impact:** 依赖一个空文件中的空类，增加了不必要的 coupling。
+**Impact:** 增加了不必要的 coupling 到 `base.py`。如果 `Agent` ABC 将来被移除或重命名，这两个文件的 import 会失败。
 
-**Fix Suggestion:** 移除 `Agent` 的 import。如果 `Agent` 类被设计为未来基类，应在 `base.py` 中实现后再导入。
+**Fix Suggestion:** 移除 `Agent` 的 import。`config.py` 中 `agent_from_config` 返回 `AgentLoop` 已足够。`sub_agent.py` 不需要类型注解。
 
 **Priority:** HIGH
 **Related:** FRMW-01 (死代码检测)
@@ -783,26 +788,237 @@ Four ruff scan categories were run against `framework/agent_framework/` (excludi
 
 #### FRMW-DEAD-06: reflection.py 导入未使用的 typing.Any
 
-**Description:** `agents/reflection.py` 导入了 `typing.Any` 但从未使用。
+**Description:** `agents/reflection.py:9` 导入了 `from typing import Any, AsyncGenerator`，但 `Any` 在文件中从未使用。文件中所有类型注解都使用了具体类型（`str`、`dict[str, int]`、`ReflectionVerdict` 等）。
 
 **File Location:** `framework/agent_framework/agents/reflection.py:9`
 
 **Impact:** 代码噪音。
 
-**Fix Suggestion:** 移除未使用的 import。
+**Fix Suggestion:** 改为 `from typing import AsyncGenerator`。
 
 **Priority:** HIGH
 **Related:** FRMW-01 (死代码检测)
 
 ---
 
+#### FRMW-ARCH-14: AgentLoop.__init__ 19 个参数，构造器过于复杂
+
+**Description:** `AgentLoop.__init__` 接受 19 个参数（行 69-91），是全框架参数最多的构造器（PLR0913 排名第一）。参数分为多个类别：(1) 核心依赖（adapter, model, router, ctx），(2) 执行控制（max_steps, system_prompt），(3) 计划管理（drift_warn, drift_abort），(4) 上下文压缩（compact_adapter, compact_keep_turns, compact_trigger_pct），(5) 记忆集成（memory_flush_enabled, semantic_extractor），(6) 工具/技能扩展（skill_dirs, hook_manager, task_runner, enable_subagent, team_manager），(7) 权限（profile）。构造器体（行 92-164）长达 73 行，包含大量条件初始化逻辑。
+
+**File Location:** `framework/agent_framework/agents/agent_loop.py:69-164`
+
+**Impact:** (1) 构造器难以正确调用——19 个关键字参数中哪些必填、哪些有默认值、哪些互相关联，需要阅读整个签名才能理解。(2) 构造器承担了过多初始化逻辑：skill 注册、memory store 创建、sub-agent spec 注册、plan instruction 注入等。(3) 测试时需要构造大量 mock 依赖。
+
+**Fix Suggestion:** 引入配置对象模式，将相关参数分组：
+```python
+@dataclass
+class AgentLoopConfig:
+    max_steps: int = 10
+    system_prompt: str = "..."
+    compact: CompactConfig | None = None
+    memory: MemoryConfig | None = None
+    skills: SkillConfig | None = None
+    ...
+```
+构造器只接受核心依赖（adapter, model, router, ctx）+ config 对象。
+
+**Priority:** HIGH
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-ARCH-15: AgentLoop.run() C901 复杂度 30，单方法 175 行
+
+**Description:** `AgentLoop.run()` 方法（行 295-469）是全框架最复杂的函数（C901=30，行数 175）。方法包含：(1) 消息初始化分支（resume vs fresh），(2) SessionStart hook，(3) plan 注入，(4) 主循环（最多 max_steps 轮），循环内包含：(4a) task notification drain，(4b) team notification drain，(4c) plan context 注入，(4d) context compaction + LLM 调用，(4e) 5 个 stop_reason 分支（END_TURN, MAX_TOKENS, STOP_SEQUENCE, TOOL_USE, fallback），(4f) tool execution + drift detection。
+
+**File Location:** `framework/agent_framework/agents/agent_loop.py:295-469`
+
+**Impact:** (1) 难以理解完整执行流程——阅读者需要跟踪 5 层嵌套的 if/for。(2) 难以单独测试某个 stop_reason 分支。(3) 添加新的 stop_reason 或集成新的子系统（如新的 hook 点）需要修改这个巨型方法。(4) 多个子系统（task_runner, team_manager, planning）的通知 drain 逻辑内联在主循环中，职责不清。
+
+**Fix Suggestion:** 拆分为多个私有方法：
+- `_init_messages(user_message, resume)` — 消息初始化
+- `_drain_notifications()` — 统一的通知 drain（task + team）
+- `_inject_plan_context()` — 计划上下文注入
+- `_handle_stop_reason(result, step)` — stop_reason 分流
+- `_execute_tool_calls(result, step)` — 工具调用执行 + drift
+主循环 `run()` 只保留 `for step in range(...)` 和上述方法的编排。
+
+**Priority:** HIGH
+**Related:** FRMW-03 (设计问题)
+
+---
+
 ### MEDIUM
 
-*(pending)*
+#### FRMW-LOGIC-11: AgentLoop.run() 中 plan context 注入使用 pop(i) 反向遍历会消息列表
+
+**Description:** `agent_loop.py:367-373` 中，plan context 注入逻辑在 `_messages` 列表上做反向遍历查找旧 plan 消息，找到后用 `pop(i)` 删除。这个操作在 `for step in range(1, max_steps + 1)` 循环内，每轮都执行。(1) 反向遍历搜索是 O(n) 操作，长对话中每轮都遍历整个消息列表。(2) `pop(i)` 修改了正在迭代的列表，虽然这里是 `range` 而非直接遍历列表，但 `break` 后只删除一个，逻辑正确。(3) 依赖 `self._planning.is_plan_context_text()` 做内容匹配——如果用户消息恰好包含计划文本模式，会被误删。
+
+**File Location:** `framework/agent_framework/agents/agent_loop.py:367-373`
+
+**Impact:** (1) 每轮循环遍历整个消息列表查找 plan context，性能随对话长度线性下降。(2) 字符串匹配可能误删用户消息——虽然 `is_plan_context_text` 检查特定标记（如 `<plan-context>`），但如果标记出现在用户原始输入中，消息会被误删。
+
+**Fix Suggestion:** (1) 使用独立变量追踪 plan context 消息的索引，避免每轮遍历。(2) 为 plan context 消息添加唯一标记（如 UUID），避免内容匹配。
+
+**Priority:** MEDIUM
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-LOGIC-12: AgentLoop._maybe_compact 中 flush 和 compact 并行执行但异常处理不一致
+
+**Description:** `agent_loop.py:262-269` 中，当 `_flush_extractor` 存在时，使用 `asyncio.gather(flush_coro, compact(...), return_exceptions=True)` 并行执行 flush 和 compact。`return_exceptions=True` 意味着 flush 的异常也会被包装为返回值而非抛出。(1) 代码只检查 `result`（compact 结果）是否为 Exception，完全不处理 flush 的异常——如果 flush 失败，返回的 `_` 被忽略。(2) 如果 compact 成功但 flush 抛出异常，`_compact_failures` 被重置为 0（行 274），掩盖了 flush 的问题。
+
+**File Location:** `framework/agent_framework/agents/agent_loop.py:262-274`
+
+**Impact:** flush 失败被完全静默——记忆不会被持久化，但不会影响 compaction。这可能是有意设计（best-effort flush），但缺乏日志记录使得问题难以追踪。
+
+**Fix Suggestion:** 检查 flush 结果并记录日志：
+```python
+flush_result, compact_result = await asyncio.gather(...)
+if isinstance(flush_result, Exception):
+    logger.warning("Memory flush 失败（best-effort）: %s", flush_result)
+```
+
+**Priority:** MEDIUM
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-LOGIC-13: ReflectionAgent 循环次数 = max_improvement_rounds + 1，语义含混
+
+**Description:** `reflection.py:117` 中循环条件为 `range(self.max_improvement_rounds + 1)`，总执行次数 = max_improvement_rounds + 1（默认 3 次：1 次初始执行 + 2 次改进）。但 `max_improvement_rounds` 的命名暗示"最大改进次数"，实际行为是"初始执行 + N 次改进"——总 LLM 调用次数 = (N+1) * (1 次执行 + 1 次评估) = 2*(N+1)。默认配置下 6 次 LLM 调用。
+
+**File Location:** `framework/agent_framework/agents/reflection.py:117`
+
+**Impact:** 命名与行为不一致可能导致调用方误解总成本。`max_improvement_rounds=2` 实际产生 6 次 LLM 调用（3 次执行 + 3 次评估），不是 4 次。
+
+**Fix Suggestion:** 重命名为 `max_total_rounds` 或在 docstring 中明确说明总轮次数。
+
+**Priority:** MEDIUM
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-ARCH-16: ReflectionAgent 和 PlanAndSolveAgent 都内部创建新 AgentLoop 实例
+
+**Description:** `ReflectionAgent._collect_loop_output`（行 175-198）和 `PlanAndSolveAgent._collect_loop_output`（行 160-173）都在内部创建新的 `AgentLoop` 实例。这意味着：(1) 每次创建的 AgentLoop 不继承父 AgentLoop 的 memory、planning、skill、hook 等状态——这些新实例使用默认 system_prompt，没有记忆索引，没有技能注册。(2) 每次执行都创建新的 `_messages` 列表，不复用对话历史。(3) `PlanAndSolveAgent` 对每个 plan step 创建独立的 AgentLoop（行 84-90），step 之间通过 `step_outputs` 字符串列表传递结果，丢失了完整的消息上下文。
+
+**File Location:** `framework/agent_framework/agents/reflection.py:177-183`, `framework/agent_framework/agents/plan_and_solve.py:84-90`
+
+**Impact:** (1) 反思 Agent 的改进轮次从零开始，不继承前一轮的工具调用结果。LLM 无法看到之前调用过的工具返回。(2) Plan-and-Solve 的每个 step 是独立上下文，前序步骤的完整对话历史被压缩为文本摘要（`step_outputs`），信息损失严重。(3) 两个 Agent 类型都无法利用父 AgentLoop 的 compact、memory flush、semantic extraction 等高级功能。
+
+**Fix Suggestion:** 为 ReflectionAgent 和 PlanAndSolveAgent 添加配置参数，允许传入共享的 AgentLoop 或至少继承关键的 context 状态（如 system_prompt、skill_registry、hook_manager）。
+
+**Priority:** MEDIUM
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-ARCH-17: PlanAndSolveAgent._is_step_failed 的失败检测过于粗糙
+
+**Description:** `plan_and_solve.py:152-158` 中 `_is_step_failed` 仅检查两个条件：(1) 输出为空或空白，(2) 输出包含 `"[子代理错误]"` 字符串。这意味着只有完全无输出或显式错误标记才被识别为失败。如果 Agent 产生了看起来合理但实际错误的输出（如代码有 bug、推理有误），`_is_step_failed` 不会检测到，plan 会继续执行后续步骤。
+
+**File Location:** `framework/agent_framework/agents/plan_and_solve.py:152-158`
+
+**Impact:** 计划执行的质量保障完全依赖最终结果的审查，中间步骤的错误不会被捕获。如果中间步骤产出了错误但非空的结果，后续步骤基于错误信息继续执行，错误会累积。
+
+**Fix Suggestion:** (1) 添加更多失败模式检测：包含 `"error"` 或 `"failed"` 等关键词（但需要避免误报）。(2) 或引入 LLM-as-judge 在每个 step 后评估输出质量（类似 ReflectionAgent 的 `_reflect`）。(3) 当前的简单检测作为 minimum viable 方案是可接受的，但应在文档中明确说明限制。
+
+**Priority:** MEDIUM
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-LOGIC-14: PlanAndSolveAgent replan 后重置 i=0 但不清理已完成的 plan items
+
+**Description:** `plan_and_solve.py:104-116` 中，当 step 失败触发 replan 时（行 114-116），`step_outputs = []` 和 `i = 0` 重置了执行进度，但 `self._planning.create_from_items(new_plan, "llm_generated")` 会用新的 plan items 替换旧的。然而 `self._planning` 对象被创建时 `allow_replan=False`（行 49-53），这限制了 planning session 的 replan 能力。但这里 `create_from_items` 直接替换了整个 plan，绕过了 `allow_replan` 的限制。
+
+**File Location:** `framework/agent_framework/agents/plan_and_solve.py:49-53,104-116`
+
+**Impact:** (1) replan 后所有已完成的 step 输出被丢弃，即使某些步骤的输出是正确的。(2) `allow_replan=False` 与实际行为不一致——PlanAndSolveAgent 确实支持 replan（通过直接调用 `create_from_items`），但 PlanningSession 的 `allow_replan=False` 可能限制了其他方法的行为。(3) 如果新计划生成失败（行 110-117 的 `if new_plan:` 不成立），继续使用旧计划但不重置 `i`，可能导致跳过后续步骤。
+
+**Fix Suggestion:** replan 时应保留已完成的 step 输出（或至少提供选项）。`PlanningSession` 的 `allow_replan` 参数应反映实际行为。
+
+**Priority:** MEDIUM
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-SEC-18: run_subagent 共享 ToolUseContext 导致状态泄漏
+
+**Description:** `sub_agent.py:38-46` 中 `run_subagent` 直接使用传入的 `ctx: ToolUseContext` 创建子 AgentLoop。这意味着子 agent 和父 agent 共享同一个 `ctx.extra`、`ctx.app_state`、`ctx.message_history` 字典。如果子 agent 修改了 `ctx.extra`（如添加/修改 key），修改会影响父 agent 的后续执行。
+
+**File Location:** `framework/agent_framework/agents/sub_agent.py:39-46`
+
+**Impact:** 子 agent 的副作用会泄漏到父 agent。例如，子 agent 可能修改 `ctx.extra["memory_dir"]` 或 `ctx.extra["planning_session"]`，导致父 agent 行为异常。当前 `create_run_subagent_spec` 的 handler（行 66-75）直接传递 `ctx` 给子 agent，没有隔离。
+
+**Fix Suggestion:** 在 `run_subagent` 中创建 `ctx` 的浅拷贝：`child_ctx = ctx.model_copy(update={"extra": {**ctx.extra}})`，确保子 agent 的 `extra` 修改不影响父 agent。
+
+**Priority:** MEDIUM
+**Related:** FRMW-04 (安全审查)
+
+---
+
+#### FRMW-DEAD-13: agent_loop.py 导入 Path 但 skill_dirs 参数类型已内联
+
+**Description:** `agent_loop.py:10` 导入 `from pathlib import Path`，在文件中用于 `skill_dirs: list[Path] | None`（行 86）和 `Path(memory_dir)`（行 145, 159, 281）。`Path` 实际被使用，这个 import 不是死代码——CONCERNS.md 中记录的 "Path import 缺失" 问题在当前代码中已不存在（已正常导入）。
+
+**File Location:** `framework/agent_framework/agents/agent_loop.py:10`
+
+**Impact:** 无——Path 导入正常且被使用。CONCERNS.md 中的 "Path import 缺失" bug 已被修复。
+
+**Fix Suggestion:** 无需修改。
+
+**Priority:** MEDIUM
+**Related:** FRMW-01 (死代码检测)
+
+---
 
 ### LOW
 
-*(pending)*
+#### FRMW-ARCH-18: Agent ABC 的 run() 返回 AsyncGenerator[AgentEvent, None] 但无类型别名
+
+**Description:** `base.py:23` 中 `Agent.run()` 的返回类型为 `AsyncGenerator[AgentEvent, None]`，这是一个复杂的泛型类型注解。项目中所有 Agent 子类都重复这个注解。可以定义 `AgentRunResult = AsyncGenerator[AgentEvent, None]` 类型别名简化签名。
+
+**File Location:** `framework/agent_framework/agents/base.py:23`
+
+**Impact:** 轻微的代码可读性问题。
+
+**Fix Suggestion:** 在 base.py 中定义类型别名。
+
+**Priority:** LOW
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-ARCH-19: ReflectionAgent._collect_loop_output 手动解析 content blocks
+
+**Description:** `reflection.py:186-197` 中 `_collect_loop_output` 手动遍历 `event.data.get("content", [])` 查找 text block。这段解析逻辑与 `agent_loop.py` 的 `_extract_text` 重复，且使用 `dict` 操作（`block.get("type")`）而非类型化的 ContentBlock 对象。这是因为 LoopEvent.data 中的 content 被 `_serialize_content` 序列化为 dict。
+
+**File Location:** `framework/agent_framework/agents/reflection.py:186-197`
+
+**Impact:** 代码重复，且使用 dict 而非类型化对象降低了类型安全性。
+
+**Fix Suggestion:** 在 LoopEvent 或 AgentEvent 中添加 `extract_text()` 辅助方法，封装 content block 遍历逻辑。
+
+**Priority:** LOW
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-LOGIC-15: config.py 中 parse_agent_config 的 tools 参数解析脆弱
+
+**Description:** `config.py:53` 中 `tools_raw = meta.get("tools", "")` 然后 `tools_raw.split(",")` 解析工具列表。这意味着工具名不能包含逗号（否则被错误分割），且无法处理引号包裹的工具名。此外 `tools_raw` 为空字符串时 `[t.strip() for t in "".split(",") if t.strip()]` 返回空列表而非 `None`——只有 `if not tools_raw` 时才返回 None，但这检查的是原始字符串，如果 frontmatter 中 `tools: ""` 则 `tools_raw == ""` 为真，返回 None，行为正确。
+
+**File Location:** `framework/agent_framework/agents/config.py:53`
+
+**Impact:** 工具名中包含逗号会被错误分割。当前所有内置工具名都不含逗号，无实际影响。
+
+**Fix Suggestion:** 如果需要支持复杂工具名，改用 YAML 列表语法（`tools: [tool1, tool2]`），`parse_frontmatter` 已支持列表解析。
+
+**Priority:** LOW
+**Related:** FRMW-02 (逻辑漏洞)
 
 ---
 
