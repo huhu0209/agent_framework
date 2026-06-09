@@ -1024,13 +1024,44 @@ if isinstance(flush_result, Exception):
 
 ## teams/
 
-*(pending manual review — Plan 03)*
+逐文件审查范围：4 个源文件，~345 行（manager.py 117 行、bus.py 74 行、tools.py 119 行、types.py 38 行）。
+模块职责：持久化队友管理、JSONL 文件消息总线、团队工具（spawn/send/read/broadcast）。
 
 ### CRITICAL
 
-*(pending)*
+*(none found)*
 
 ### HIGH
+
+#### FRMW-LOGIC-23: bus.py read_inbox 非原子读写（read + clear），崩溃时消息丢失
+
+**Description:** `MessageBus.read_inbox()`（bus.py:38-68）执行两个操作：(1) 读取整个 JSONL 文件内容（行 42），(2) 使用 write-to-temp + os.replace 原子清零文件（行 53-66）。虽然清零步骤已使用原子写入模式（tempfile + os.replace），但"读取"和"清零"之间不是原子的：(1) 进程在读取消息后、清零前崩溃 → 重新启动后消息仍在（可重新读取，不丢失但可能重复处理）。(2) 另一个进程/线程在清零前写入新消息 → 清零会丢失新消息。(3) 当前实现已从 CONCERNS.md 记载的更原始的 `path.write_text("")` 改进为原子清零，但"读-清"两步操作的整体原子性仍然缺失。
+
+**File Location:** `framework/agent_framework/teams/bus.py:38-68`
+
+**Impact:** (1) 崩溃恢复场景下消息可能被重复处理（读到但未清零，重启后再次读取）。(2) 并发写入场景下新消息可能被清零操作覆盖。(3) 当前框架为单进程 asyncio 模型，并发写入风险较低，但重复处理是真实的风险。
+
+**Fix Suggestion:** (1) 使用 rename-based atomic swap：先 rename 旧文件到 .bak，再创建空文件，从 .bak 读取消息。这样读取和清零在文件系统层面原子化。(2) 或在清零前将消息序列化到内存，清零失败时可恢复。
+
+**Priority:** HIGH
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-SEC-21: bus.py inbox 文件存储在可预测路径，无完整性保护
+
+**Description:** `MessageBus.__init__()`（bus.py:18-20）将 inbox 文件存储在 `<team_dir>/inbox/` 目录下，文件名为 `<name>.jsonl`。任何有文件系统访问权限的进程都可以：(1) 读取所有队友的消息（无加密）。(2) 修改或删除消息（无完整性校验）。(3) 注入伪造消息（无签名验证）。`send()` 方法（行 22-36）直接以 `json.dumps()` 追加 JSON 行，没有消息签名或 HMAC。
+
+**File Location:** `framework/agent_framework/teams/bus.py:18-20,29-35`
+
+**Impact:** 在本地单用户场景下风险较低（依赖文件系统权限）。但在多用户环境或不受信任的文件系统上，消息可被篡改或注入。如果 team 通信包含敏感信息（如 API key、代码片段），风险更高。
+
+**Fix Suggestion:** (1) 文档说明 team 目录需要适当的文件权限。(2) 如需保护消息完整性，可对每条消息添加 HMAC 签名（`hmac-sha256(key, message)`），读取时验证。(3) 或使用 SQLite 的 WAL 模式替代 JSONL 文件，获得更好的并发控制和事务保证。
+
+**Priority:** HIGH
+**Related:** FRMW-04 (安全审查)
+
+---
 
 #### FRMW-DEAD-07: manager.py 导入未使用的 Agent 类
 
@@ -1064,9 +1095,80 @@ if isinstance(flush_result, Exception):
 
 ---
 
+#### FRMW-ARCH-29: manager._loop 空闲超时后不发送通知给 lead agent
+
+**Description:** `TeamManager._loop()`（manager.py:94-96）在空闲超时后直接设置 `TeammateStatus.SHUTDOWN` 并 break 退出循环。break 后的 `self.notifications.put_nowait()`（行 114-116）只发送 `status="shutdown"` 通知。但 lead agent 没有收到"队友因空闲超时关闭"的明确信号——通知的 `status` 是通用的 `"shutdown"`，不区分是空闲超时还是主动关闭请求。
+
+**File Location:** `framework/agent_framework/teams/manager.py:94-96,114-116`
+
+**Impact:** lead agent 无法知道队友是正常关闭还是超时退出。如果 lead agent 需要重新 spawn 空闲超时的队友，它无法区分这种情况与主动关闭。
+
+**Fix Suggestion:** 在 `TeamNotification` 中添加 `reason` 字段，区分 `idle_timeout`、`shutdown_request`、`error` 等关闭原因。
+
+**Priority:** MEDIUM
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-LOGIC-24: tools.py _broadcast 访问 manager 私有属性 _configs
+
+**Description:** `create_team_tools()` 中的 `_broadcast` handler（tools.py:60）通过 `team_manager._configs.keys()` 获取所有队友名称列表。这直接访问了 `TeamManager` 的私有属性 `_configs`，违反了封装原则。如果 `TeamManager` 内部数据结构变更（如从 dict 改为 list），`tools.py` 也需要修改。
+
+**File Location:** `framework/agent_framework/teams/tools.py:60`
+
+**Impact:** 模块间耦合通过私有属性实现。如果 `_configs` 被重命名或类型变更，broadcast 工具会静默失败或抛出 AttributeError。
+
+**Fix Suggestion:** 在 `TeamManager` 上添加 `list_teammate_names() -> list[str]` 公共方法，返回所有队友名称。`_broadcast` handler 调用此方法而非直接访问私有属性。
+
+**Priority:** MEDIUM
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-ARCH-30: manager._loop 每轮创建新 AgentLoop 实例
+
+**Description:** `TeamManager._loop()`（manager.py:75-82）在循环外部创建 `AgentLoop` 实例，该实例在循环的整个生命周期中复用。但 AgentLoop 的 `_messages` 列表会在多轮 inbox 处理中累积——每次处理 inbox 后，消息历史不清理。虽然 `loop.run(prompt, resume=True)` 使用 `resume=True`，但长期运行的队友可能积累大量对话历史，导致 context 超出 LLM 窗口限制。
+
+**File Location:** `framework/agent_framework/teams/manager.py:75-82`
+
+**Impact:** 长期运行的队友在多轮消息处理后，对话历史会不断增长，最终触发 compaction 或超出 token 限制。如果 compaction 未配置（`AgentLoop` 构造时未传入 `compact_adapter`），消息将无限增长。
+
+**Fix Suggestion:** (1) 在 AgentLoop 构造时传入 compact 配置（`compact_adapter`、`compact_trigger_pct`）。(2) 或在每轮 inbox 处理后重置 `_messages`（创建新的 AgentLoop 实例）。
+
+**Priority:** MEDIUM
+**Related:** FRMW-03 (设计问题)
+
+---
+
 ### LOW
 
-*(pending)*
+#### FRMW-ARCH-31: bus.py send() 使用 time.time() 作为时间戳，精度和单调性不保证
+
+**Description:** `MessageBus.send()`（bus.py:27）使用 `time.time()` 作为消息时间戳。`time.time()` 返回系统墙钟时间，受 NTP 调整或系统时间变更影响。如果系统时钟被回拨，消息的时间戳可能出现非单调递增。
+
+**File Location:** `framework/agent_framework/teams/bus.py:27`
+
+**Impact:** 消息排序依赖文件中的行顺序而非时间戳，所以时间戳非单调不影响功能。时间戳主要用于调试和日志。
+
+**Fix Suggestion:** 如需保证时间戳单调性，可使用 `time.monotonic()` 或 `time.time_ns()`。但当前使用场景下无需修改。
+
+**Priority:** LOW
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-ARCH-32: types.py TeamMessage 使用 dataclass(frozen=True) 但 from_ 字段名不符合 Python 命名习惯
+
+**Description:** `TeamMessage`（types.py:26-32）使用 `from_: str` 字段名避免与 Python 关键字 `from` 冲突。但 `bus.py:33` 在 JSON 序列化时使用 `"from_": msg.from_`，而 `bus.py:49` 在反序列化时使用 `TeamMessage(**data)`。如果外部系统或 MCP 集成使用 `from` 而非 `from_` 作为 JSON key，反序列化会因缺少 `from_` key 而失败。
+
+**File Location:** `framework/agent_framework/teams/types.py:28`, `framework/agent_framework/teams/bus.py:33,49`
+
+**Impact:** 内部系统一致性无问题。但 `from_` 在 JSON 中不是标准字段名——如果消息需要与其他系统互操作，可能需要映射。
+
+**Fix Suggestion:** 在 `TeamMessage` 上添加 `to_dict()` 方法，将 `from_` 映射为 `from`；在反序列化时做反向映射。或接受当前命名（内部使用，无互操作需求）。
+
+**Priority:** LOW
+**Related:** FRMW-03 (设计问题)
 
 ---
 
@@ -1490,13 +1592,59 @@ if isinstance(flush_result, Exception):
 
 ## tasks/
 
-*(pending manual review — Plan 04)*
+逐文件审查范围：4 个源文件，~576 行（manager.py 249 行、runner.py 120 行、tools.py 148 行、types.py 46 行）。
+模块职责：持久化任务 DAG（创建/更新/依赖管理）、后台异步执行（TaskRunner）、任务工具（4 个 ToolSpec）。
 
 ### CRITICAL
 
-*(pending)*
+*(none found)*
 
 ### HIGH
+
+#### FRMW-ARCH-33: TaskManager._apply_changes 复杂变异逻辑（字段更新 + 依赖管理 + 批量写入）
+
+**Description:** `TaskManager._apply_changes()`（manager.py:185-226）在一个方法中承担了三项职责：(1) 字段更新（行 186-195）：更新 subject、description、owner、status 等简单字段。(2) 双向依赖管理（行 197-221）：维护 `blocked_by`/`blocks` 的双向关系，为每个依赖任务创建更新并添加到 `pending_writes`。(3) 批量写入（行 223-224）：将所有 `pending_writes` 中的任务写入磁盘。方法的 McCabe 复杂度为 C901=11（ruff 已检测）。`pending_writes` 列表在 `_lock` 上下文中填充并逐个写入——如果中间某个 `_write()` 失败（磁盘满、权限错误），已写入的依赖关系更新不可回滚，未写入的依赖关系缺失，导致 DAG 不一致。
+
+**File Location:** `framework/agent_framework/tasks/manager.py:185-226`
+
+**Impact:** (1) 任何一步写入失败都导致双向依赖不一致（如 A 依赖 B，B.blocks 包含 A，但 A.blocked_by 不包含 B 的反向关系缺失）。(2) 方法复杂度高，难以测试所有错误路径。(3) 每个依赖任务都需要单独读取和写入文件（行 204-210），O(n) 磁盘 I/O。
+
+**Fix Suggestion:** (1) 将 `_apply_changes` 拆分为 `_update_fields()` + `_update_dependencies()` + `_flush_writes()`。(2) 使用事务模式：先计算所有变更，全部写入临时文件，最后原子 rename。(3) 或使用 SQLite 事务替代 JSON 文件存储。
+
+**Priority:** HIGH
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-LOGIC-25: manager.py pending_writes 类型标注错误 list[tuple[Task]] vs 实际 list[Task]
+
+**Description:** `manager.py:199` 中 `pending_writes: list[Task] = []` — 注解为 `list[Task]`，实际代码中 `pending_writes.append(dataclasses.replace(dep_task, ...))` 添加的是 `Task` 对象。CONCERNS.md 记载原类型标注为 `list[tuple[Task]]`，当前代码已修正为 `list[Task]`。但 `for dep_task in pending_writes`（行 223）的使用方式与 `list[Task]` 一致，类型标注正确。
+
+**File Location:** `framework/agent_framework/tasks/manager.py:199`
+
+**Impact:** CONCERNS.md 中记录的 `list[tuple[Task]]` 类型错误已在当前代码中修正为 `list[Task]`。标注正确，无需修改。
+
+**Fix Suggestion:** 无需修改。更新 CONCERNS.md 标记此问题已修正。
+
+**Priority:** HIGH
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-ARCH-34: TaskManager 每次操作扫描所有 task JSON 文件，无内存索引
+
+**Description:** `TaskManager` 的以下方法都通过 `_load_all()` 扫描整个 tasks 目录：(1) `count_active()`（行 158-162）— 每次 `create()` 前调用检查活跃任务数。(2) `_find_in_progress()`（行 164-168）— 每次 `update(status=IN_PROGRESS)` 前调用检查是否有其他 IN_PROGRESS 任务。(3) `_clear_dependency()`（行 228-242）— 任务完成时清理所有依赖。`_load_all()`（行 139-146）使用 `self._dir.glob("task_*.json")` 遍历所有文件并逐个读取 JSON。在 `MAX_ACTIVE_TASKS=12` 限制下影响可控，但每次 `update()` 至少触发 2 次 `_load_all()`（一次 `_find_in_progress` + 一次 `_clear_dependency`），每次都是全量磁盘扫描。
+
+**File Location:** `framework/agent_framework/tasks/manager.py:139-146,158-168,228-242`
+
+**Impact:** 每次 `update()` 操作的磁盘 I/O 量与任务总数成正比。在 `MAX_ACTIVE_TASKS=12` 限制下，最多扫描 12 个文件，性能影响可接受。但 `_lock` 持有期间的全量扫描会阻塞其他操作。
+
+**Fix Suggestion:** (1) 在 `TaskManager.__init__` 中加载所有任务到内存 dict，后续操作直接查询内存。(2) 写入时同步更新内存索引。(3) 这将消除 `_load_all()` 的重复调用，使所有查询 O(1)。
+
+**Priority:** HIGH
+**Related:** FRMW-03 (设计问题)
+
+---
 
 #### FRMW-DEAD-10: runner.py 导入未使用的 Agent 类
 
@@ -1530,11 +1678,110 @@ if isinstance(flush_result, Exception):
 
 ### MEDIUM
 
-*(pending)*
+#### FRMW-LOGIC-26: _clear_dependency 中间失败导致不一致状态
+
+**Description:** `TaskManager._clear_dependency()`（manager.py:228-242）在任务完成时清理所有依赖它的任务的 `blocked_by` 列表。方法先收集所有需要更新的任务到 `pending_clears`（行 229-237），然后逐个 `_write()`（行 238-242）。每个 `_write()` 都有独立的 try-except，失败时只记录 warning。这意味着部分依赖清理成功、部分失败时，DAG 的 `blocked_by` 关系不一致——有些任务的 `blocked_by` 中仍包含已完成任务的 ID。
+
+**File Location:** `framework/agent_framework/tasks/manager.py:228-242`
+
+**Impact:** 依赖关系不一致可能导致任务永远无法开始（`blocked_by` 中包含已完成的任务 ID，但任务状态看起来仍被阻塞）。不过 `blocked_by` 的语义是"等待列表"，实际是否执行由 `_find_in_progress()` 控制，不直接依赖 `blocked_by` 是否清空。
+
+**Fix Suggestion:** (1) 将所有 `_write()` 调用放在一个事务中——先写临时文件，最后原子 rename。(2) 或在 `_write()` 失败时重试一次，仍然失败则标记整个 `_clear_dependency` 操作为部分失败。
+
+**Priority:** MEDIUM
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-ARCH-35: manager._write 使用同步 JSON 写入，在 async lock 内阻塞事件循环
+
+**Description:** `TaskManager._write()`（manager.py:111-123）使用 `path.write_text(json.dumps(...))` 进行同步文件写入。所有调用 `_write()` 的方法（`create()`、`update()`、`_apply_changes()`）都在 `async with self._lock:` 上下文中执行。`asyncio.Lock` 是协程级别的锁，不阻塞事件循环——但锁内执行的同步文件 I/O 会阻塞事件循环。这意味着在写入 task JSON 文件期间，整个事件循环被阻塞。
+
+**File Location:** `framework/agent_framework/tasks/manager.py:111-123`
+
+**Impact:** 在 `MAX_ACTIVE_TASKS=12` 限制下，每个 JSON 文件很小（通常 < 1KB），写入时间可忽略。但如果 tasks 目录在 NFS 或慢速磁盘上，阻塞时间可能不可忽略。
+
+**Fix Suggestion:** 使用 `asyncio.to_thread()` 包装 `_write()` 调用，或使用 `aiofiles` 异步写入。注意：`asyncio.Lock` 已经保证了协程级互斥，异步化不会引入新的竞争。
+
+**Priority:** MEDIUM
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-LOGIC-27: runner.py _execute 只处理 done 和 error 事件，忽略 max_steps
+
+**Description:** `TaskRunner._execute()`（runner.py:64-81）中的 `_run_loop()` 内部函数只处理 `event.type == "done"` 和 `event.type == "error"` 两种事件。但 `AgentLoop.run()` 可能 yield `max_steps` 类型的事件（当达到最大步数限制时）。如果 AgentLoop 达到 max_steps=30 限制，`_run_loop()` 不会处理 `max_steps` 事件，`_execute()` 会在 `asyncio.wait_for` 超时后以 `TimeoutError` 结束，而不是以正常完成结束。
+
+**File Location:** `framework/agent_framework/tasks/runner.py:64-81`
+
+**Impact:** 达到 max_steps 限制的后台任务会被标记为 TIMEOUT 而非 COMPLETED，即使 Agent 已经产生了有效的部分输出。任务描述中会显示"超时"而非"达到最大步数"，误导用户。
+
+**Fix Suggestion:** 添加 `event.type == "max_steps"` 分支，将任务标记为 COMPLETED（因为 Agent 已完成 max_steps 内的工作），而非等待超时。
+
+**Priority:** MEDIUM
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-ARCH-36: tools.py create_task_tools 的 handler 不验证输入参数类型
+
+**Description:** `create_task_tools()` 中的 `handle_update` handler（tools.py:37-54）直接从 `args` 字典提取值传给 `task_manager.update()`，不验证参数类型。例如，`args.get("add_blocked_by")` 期望 `list[str]`，但如果 LLM 传了 `str` 类型（如 `"1,2,3"`），会直接传给 `_apply_changes()`，在 `for dep_id in changes.get("add_blocked_by", [])` 中按字符迭代（`"1"`, `","`, `"2"`, ...），创建错误的依赖关系。
+
+**File Location:** `framework/agent_framework/tasks/tools.py:44-47`
+
+**Impact:** LLM 生成的 tool call 参数可能不符合 schema 定义的类型。ToolValidator（`tools/validator.py`）会检查类型，但不检查参数是否在 schema 的 properties 中定义（参见 FRMW-LOGIC-07）。如果 validator 未拦截类型错误，handler 会收到错误类型的参数。
+
+**Fix Suggestion:** 在 handler 中添加类型断言（`isinstance(args["add_blocked_by"], list)`），或依赖 ToolValidator 的类型检查（但需确保 validator 对所有参数都验证，参见 FRMW-LOGIC-07）。
+
+**Priority:** MEDIUM
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-SEC-22: manager._path 不验证 task_id 中的路径遍历字符
+
+**Description:** `TaskManager._path()`（manager.py:103-106）验证 `task_id` 为纯数字（`task_id.isdigit()`），否则抛出 `TaskNotFoundError`。这正确阻止了路径遍历攻击（`../../etc/passwd` 会被 `isdigit()` 拒绝）。但如果未来 `task_id` 格式变更（如允许字母数字混合），`isdigit()` 检查可能需要更新。当前实现是安全的。
+
+**File Location:** `framework/agent_framework/tasks/manager.py:103-106`
+
+**Impact:** 当前无安全风险。`isdigit()` 检查足够严格。
+
+**Fix Suggestion:** 无需修改。当前验证足够。
+
+**Priority:** MEDIUM
+**Related:** FRMW-04 (安全审查)
+
+---
 
 ### LOW
 
-*(pending)*
+#### FRMW-ARCH-37: types.py RuntimeTask 是可变 dataclass，不适合跨协程共享
+
+**Description:** `RuntimeTask`（types.py:39-45）使用 `@dataclass`（无 `frozen=True`），`status`、`output`、`error` 字段在 `_execute()` 运行过程中被修改（runner.py:67-81）。修改发生在 `asyncio.Task` 内部，通过 `self._notifications.put_nowait(rt)` 传递到主循环。由于 Python GIL 和 asyncio 单线程模型，并发修改不会导致数据竞争。但如果 `RuntimeTask` 被多个协程同时读取和修改（如通知队列中的任务被主循环读取的同时，另一个协程仍在运行），理论上可能出现不一致。
+
+**File Location:** `framework/agent_framework/tasks/types.py:39-45`
+
+**Impact:** 在当前单线程 asyncio 模型下无实际影响。但如果迁移到多线程或使用 `run_in_executor`，可变 dataclass 可能导致竞争条件。
+
+**Fix Suggestion:** 将 `_execute()` 中的状态修改改为创建新的 `RuntimeTask` 实例（不可变模式），而非就地修改。或将 `RuntimeTask` 改为 `frozen=True` dataclass。
+
+**Priority:** LOW
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-ARCH-38: tools.py handle_list 使用 status_mark dict 硬编码状态标记
+
+**Description:** `handle_list` handler（tools.py:61-68）使用硬编码的 `status_mark` dict 将 `TaskStatus` 枚举映射到显示字符（`" "`、`">"`、`"x"`、`"!"`、`"-"`、`"d"`）。如果 `TaskStatus` 枚举添加新值，`status_mark` 不会自动更新，新状态会显示为 `"?"`（行 71 的 `get` 默认值）。
+
+**File Location:** `framework/agent_framework/tasks/tools.py:61-71`
+
+**Impact:** 轻微——新状态会显示 `"?"`，不影响功能但降低可读性。
+
+**Fix Suggestion:** 将 `status_mark` 移到 `TaskStatus` 枚举上作为类方法或属性，或添加 `__missing__` 处理。
+
+**Priority:** LOW
+**Related:** FRMW-03 (设计问题)
 
 ---
 
