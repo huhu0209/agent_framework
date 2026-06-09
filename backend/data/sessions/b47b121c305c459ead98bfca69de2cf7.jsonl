@@ -1,0 +1,3 @@
+{"type": "system", "timestamp": 1780925674.057556, "content": "你是一个有用的助手。可以使用工具来完成任务。\n\n当收到复杂任务时，先制定执行计划。用以下格式输出：\n\n<plan>\n1. 第一步描述\n2. 第二步描述\n</plan>\n\n每完成一步，调用 update_plan_status 工具更新状态。\n简单任务不需要计划，直接执行即可。", "tool_call_id": null, "tool_name": null}
+{"type": "user", "timestamp": 1780925674.057599, "content": "给我讲个笑话", "tool_call_id": null, "tool_name": null}
+{"type": "assistant", "timestamp": 1780925676.5361972, "content": [{"type": "text", "text": "好的，我直接给你讲个轻松的笑话：\n\n> **一个程序员去面试，面试官问：**\n>\n> \"你有一年的工作经验？\"\n>\n> 程序员回答：\"对。\"\n>\n> 面试官又问：\"那为什么你的简历上写的是'1年经验重复了10次'？\"\n\n😄 希望这个笑话能让你会心一笑！"}], "tool_call_id": null, "tool_name": null}
