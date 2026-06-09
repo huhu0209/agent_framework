@@ -66,8 +66,41 @@ class SessionManager:
             session.created_at = time.time()
         return session
 
-    def get_messages(self, session_id: str) -> list[dict] | None:
-        """获取 session 的消息列表，支持从 transcript 恢复。"""
+    def get_messages(
+        self,
+        session_id: str,
+        *,
+        limit: int | None = None,
+        before: float | None = None,
+    ) -> tuple[list[dict], bool, str | None] | None:
+        """获取消息，支持分页。返回 (messages, has_more, next_cursor) 或 None。"""
+        all_messages = self._get_all_messages(session_id)
+        if all_messages is None:
+            return None
+
+        if limit is None:
+            return all_messages, False, None
+
+        # 按时间排序（新 → 旧），取最新的 limit+1 条来判断 has_more
+        sorted_msgs = sorted(all_messages, key=lambda m: m.get("timestamp", 0), reverse=True)
+
+        if before is not None:
+            sorted_msgs = [m for m in sorted_msgs if m.get("timestamp", 0) < before]
+
+        has_more = len(sorted_msgs) > limit
+        page = sorted_msgs[:limit]
+
+        # 恢复时间正序（旧 → 新）
+        page.reverse()
+
+        next_cursor = None
+        if has_more and page:
+            next_cursor = str(page[0].get("timestamp", 0))
+
+        return page, has_more, next_cursor
+
+    def _get_all_messages(self, session_id: str) -> list[dict] | None:
+        """三层查找：内存 → Redis → JSONL。"""
         # 1. 内存
         session = self._sessions.get(session_id)
         if session is not None:

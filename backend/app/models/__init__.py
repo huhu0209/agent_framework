@@ -46,6 +46,8 @@ Message = UserMessage | AgentMessage | ErrorMessage
 class HistoryResponse(BaseModel):
     session_id: str
     messages: list[Message]
+    has_more: bool = False
+    next_cursor: str | None = None
 
 
 class RenameRequest(BaseModel):

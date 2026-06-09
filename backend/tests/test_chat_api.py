@@ -350,10 +350,13 @@ def test_get_messages_from_memory(client: TestClient) -> None:
     sid = res.headers["X-Session-Id"]
 
     sm = client.app.state.session_manager
-    messages = sm.get_messages(sid)
-    assert messages is not None
+    result = sm.get_messages(sid)
+    assert result is not None
+    messages, has_more, next_cursor = result
     assert len(messages) >= 1
     assert messages[0]["role"] == "user"
+    assert has_more is False
+    assert next_cursor is None
 
 
 def test_get_messages_from_transcript(client_with_storage: TestClient) -> None:
@@ -365,8 +368,9 @@ def test_get_messages_from_transcript(client_with_storage: TestClient) -> None:
     sm.remove(sid)
     assert sm.get(sid) is None
 
-    messages = sm.get_messages(sid)
-    assert messages is not None
+    result = sm.get_messages(sid)
+    assert result is not None
+    messages, _, _ = result
     assert any(m["role"] == "user" for m in messages)
 
 
@@ -412,3 +416,28 @@ def test_list_sessions_cache_invalidated_on_create(client_with_storage: TestClie
 
     client_with_storage.post("/api/v1/chat", json={"message": "second"})
     assert sm._session_list_cache is None
+
+
+def test_get_history_with_pagination(client_with_storage: TestClient) -> None:
+    """GET /chat/{id}?limit=1 应返回 has_more=true 和分页消息。"""
+    res = client_with_storage.post("/api/v1/chat", json={"message": "hello"})
+    sid = res.headers["X-Session-Id"]
+
+    res = client_with_storage.get(f"/api/v1/chat/{sid}?limit=1")
+    assert res.status_code == 200
+    data = res.json()
+    assert "has_more" in data
+    assert data["has_more"] is True
+    assert len(data["messages"]) == 1
+
+
+def test_get_history_without_pagination(client_with_storage: TestClient) -> None:
+    """不传 limit 时返回全部消息（向后兼容）。"""
+    res = client_with_storage.post("/api/v1/chat", json={"message": "hello"})
+    sid = res.headers["X-Session-Id"]
+
+    res = client_with_storage.get(f"/api/v1/chat/{sid}")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["has_more"] is False
+    assert len(data["messages"]) >= 1

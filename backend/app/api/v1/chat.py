@@ -152,12 +152,24 @@ async def create_chat(req: ChatRequest, request: Request):
 # ---------------------------------------------------------------------------
 
 @router.get("/chat/{session_id}", response_model=HistoryResponse)
-async def get_history(session_id: str, request: Request) -> HistoryResponse:
+async def get_history(
+    session_id: str,
+    request: Request,
+    limit: int | None = None,
+    before: str | None = None,
+) -> HistoryResponse:
     sm = request.app.state.session_manager
-    messages = sm.get_messages(session_id)
-    if messages is None:
+    before_ts = float(before) if before else None
+    result = sm.get_messages(session_id, limit=limit, before=before_ts)
+    if result is None:
         raise HTTPException(404, "session not found")
-    return HistoryResponse(session_id=session_id, messages=messages)
+    messages, has_more, next_cursor = result
+    return HistoryResponse(
+        session_id=session_id,
+        messages=messages,
+        has_more=has_more,
+        next_cursor=next_cursor,
+    )
 
 
 # ---------------------------------------------------------------------------

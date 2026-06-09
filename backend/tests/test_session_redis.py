@@ -48,8 +48,9 @@ def test_get_messages_caches_to_redis_after_cold_read(sm_with_redis: SessionMana
     assert sm.get(sid) is None
 
     # 冷读 — 应从 JSONL 读取并回填 Redis
-    messages = sm.get_messages(sid)
-    assert messages is not None
+    result = sm.get_messages(sid)
+    assert result is not None
+    messages, _, _ = result
     assert any(m["role"] == "user" for m in messages)
 
     # 验证 Redis 已缓存
@@ -72,8 +73,9 @@ def test_get_messages_hits_redis_cache(sm_with_redis: SessionManager, rdb) -> No
     jsonl_path.unlink()
 
     # 第二次应从 Redis 命中
-    messages = sm.get_messages(sid)
-    assert messages is not None
+    result = sm.get_messages(sid)
+    assert result is not None
+    messages, _, _ = result
     assert any(m["role"] == "user" for m in messages)
 
 
