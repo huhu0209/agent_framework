@@ -527,47 +527,157 @@ HTTP Request (PATCH /api/v1/sessions/{session_id})
 
 ---
 
-## Issue Summary
+## 审查汇总
 
-| Count | Severity | Category |
-|-------|----------|----------|
-| 0 | CRITICAL | — |
-| 5 | HIGH | SEC-04, SEC-05, SEC-06, LOGIC-01, LOGIC-02 |
-| 8 | MEDIUM | SEC-01, SEC-02, SEC-03, ARCH-01, ARCH-04, ARCH-05, ARCH-06, ARCH-07 |
-| 4 | MEDIUM (continued) | LOGIC-03, LOGIC-04, LOGIC-06, ARCH-09, ARCH-10 |
-| 5 | LOW | DEAD-01, ARCH-02, ARCH-03, ARCH-08, ARCH-11, LOGIC-05, DEAD-02 |
+### Issue 总数
 
-### By Category
+**25 个 issue** 覆盖 6 个有实质代码的文件（约 706 行），7 个 scaffold 空文件已确认跳过。
 
-**Security (SEC):** 6 issues
-- SEC-01 (MEDIUM): CORS wildcard methods/headers
-- SEC-02 (MEDIUM): Redis connection error silently swallowed
-- SEC-03 (MEDIUM): API key stored as plain string
-- SEC-04 (HIGH): session_id path parameter not validated
-- SEC-05 (HIGH): Exception message leaked to client
-- SEC-06 (HIGH): No authentication on any endpoint
+### 按严重性分布
 
-**Logic (LOGIC):** 6 issues
-- LOGIC-01 (HIGH): TTL eviction race condition with task cancellation
-- LOGIC-02 (HIGH): Non-atomic JSONL read-write
-- LOGIC-03 (MEDIUM): Cache invalidation under concurrent access
-- LOGIC-04 (MEDIUM): Lazy import in method body
-- LOGIC-05 (LOW): TTL refresh on every get() access
-- LOGIC-06 (MEDIUM): Accessing private method from another module
+| 严重性 | 数量 | 占比 | Issue 列表 |
+|--------|------|------|-----------|
+| CRITICAL | 0 | 0% | — |
+| HIGH | 6 | 24% | BKND-SEC-04, BKND-SEC-05, BKND-SEC-06, BKND-LOGIC-01, BKND-LOGIC-02, BKND-ARCH-06 |
+| MEDIUM | 12 | 48% | BKND-SEC-01, BKND-SEC-02, BKND-SEC-03, BKND-ARCH-01, BKND-ARCH-04, BKND-ARCH-05, BKND-ARCH-07, BKND-ARCH-09, BKND-ARCH-10, BKND-LOGIC-03, BKND-LOGIC-04, BKND-LOGIC-06 |
+| LOW | 7 | 28% | BKND-DEAD-01, BKND-DEAD-02, BKND-ARCH-02, BKND-ARCH-03, BKND-ARCH-08, BKND-ARCH-11, BKND-LOGIC-05 |
 
-**Architecture (ARCH):** 11 issues
-- ARCH-01 (MEDIUM): create_chat complexity (ruff C901)
-- ARCH-02 (LOW): Message union lacks discriminator
-- ARCH-03 (LOW): SESSION_ID_RE lowercase-only
-- ARCH-04 (MEDIUM): SessionManager mixes I/O with state management
-- ARCH-05 (MEDIUM): redis_client typed as Any
-- ARCH-06 (MEDIUM): Shared ToolUseContext across AgentLoop instances
-- ARCH-07 (MEDIUM): Missing working_dir configuration
-- ARCH-08 (LOW): Synchronous I/O in async context
-- ARCH-09 (MEDIUM): Silent drop of non-tool-use step events
-- ARCH-10 (MEDIUM): Accessing framework private attribute
-- ARCH-11 (LOW): before parameter type mismatch
+### 按文件分布
 
-**Dead Code (DEAD):** 2 issues
-- DEAD-01 (LOW): Unused Field import (ruff F401)
-- DEAD-02 (LOW): Message models not used for internal handling
+| 文件 | 行数 | Issue 数 | HIGH | MEDIUM | LOW |
+|------|------|----------|------|--------|-----|
+| main.py | 55 | 2 | 0 | 2 | 0 |
+| config/__init__.py | 21 | 1 | 0 | 1 | 0 |
+| models/__init__.py | 64 | 3 | 0 | 0 | 3 |
+| services/agent_factory.py | 40 | 2 | 1 | 1 | 0 |
+| services/session.py | 318 | 8 | 2 | 5 | 1 |
+| api/v1/chat.py | 208 | 7 | 2 | 4 | 1 |
+| (ruff 基线跨文件) | — | 2 | 0 | 1 | 1 |
+
+**注：** BKND-DEAD-01 和 BKND-ARCH-01 由 ruff 自动扫描发现，分别在 models/ 和 chat.py 中有交叉引用。BKND-SEC-04 在 services/ 和 chat.py 中均有讨论。
+
+### 按类型分布
+
+| 类型 | 数量 | 说明 |
+|------|------|------|
+| BKND-SEC-* | 6 | 安全问题（CORS、认证、信息泄露、输入验证） |
+| BKND-ARCH-* | 11 | 设计问题（复杂度、SRP 违反、类型安全、耦合） |
+| BKND-LOGIC-* | 6 | 逻辑漏洞（竞态条件、非原子操作、缓存一致性） |
+| BKND-DEAD-* | 2 | 死代码（未使用 import、未使用模型） |
+
+### BKND-01~05 需求追踪矩阵
+
+| 需求 ID | 需求描述 | 对应 Issue |
+|---------|---------|-----------|
+| BKND-01 | 死代码检测 | BKND-DEAD-01 ~ BKND-DEAD-02 (2 个), ruff F 基线 1 个 |
+| BKND-02 | 逻辑漏洞审查 | BKND-LOGIC-01 ~ BKND-LOGIC-06 (6 个) |
+| BKND-03 | 设计问题审查 | BKND-ARCH-01 ~ BKND-ARCH-11 (11 个), ruff C901/PLR0913 基线 2 个 |
+| BKND-04 | 安全漏洞审查 | BKND-SEC-01 ~ BKND-SEC-06 (6 个), ruff S 基线 0 个 |
+| BKND-05 | 审查报告产出 | 本文件 — 含 ruff 基线 + scaffold 确认 + 5 个文件章节 + 数据流追踪 + 审查汇总 + 跨层问题 |
+
+### CONCERNS.md 覆盖检查
+
+CONCERNS.md 记录的两个 Backend 相关问题：
+
+| CONCERNS.md 条目 | 报告对应 | 状态 |
+|-----------------|---------|------|
+| "Backend is entirely scaffold (zero implementation)" | Scaffold 文件确认章节 — 7 个空文件已确认，6 个文件有实质代码 | CONCERNS.md 过时（v0.0.3 后已有实现） |
+| "No tests for backend" | 审查范围排除 tests/ (Per D-11)，但确认 backend/app/ 已有可测试代码 | 已知缺失，非本 phase 范围 |
+
+### 优先修复建议（TOP 6 HIGH）
+
+以下 6 个 HIGH 级 issue 涉及安全或数据完整性，建议优先修复：
+
+1. **BKND-SEC-06**: 所有 API 端点无认证 — 当前开发阶段可接受，部署前必须添加
+2. **BKND-SEC-05**: 异常消息泄露到客户端 — 用通用错误消息替换 `str(exc)`
+3. **BKND-SEC-04**: `session_id` 路径参数未验证 — 添加 `SESSION_ID_RE` 校验到所有端点
+4. **BKND-LOGIC-01**: TTL 驱逐竞态条件 — 活跃会话驱逐前检查 task 状态
+5. **BKND-LOGIC-02**: JSONL 非原子读写 — 改用 temp file + `os.replace` 模式
+6. **BKND-ARCH-06**: 共享 ToolUseContext — 每次 `create_loop()` 创建新实例
+
+---
+
+## 跨层问题
+
+以下 Backend 审查发现的问题与 Framework 层（`agent_framework/`）存在关联。每个主题列出 Backend issue 和对应的 Framework issue（来自 `REVIEW-FRAMEWORK.md`），说明跨层关联的具体表现。
+
+参照方向：BKND → FRMW（仅标注 Backend 发现中与 Framework 有关的问题，不反向扩展）。
+
+### 主题 1：API Key 管理策略不一致
+
+Backend 的 `config/__init__.py` 将 API key 存储为普通 `str`，而 Framework 的 provider 层已在内部处理 key 的使用方式。两层之间缺少统一的密钥保护策略。
+
+| 层 | Issue | 描述 | 严重性 |
+|----|-------|------|--------|
+| Backend | BKND-SEC-03 | `llm_api_key` 存储为 plain `str`，未使用 `SecretStr` | MEDIUM |
+| Framework | FRMW-SEC-02~06 (patterns) | 多个 provider 导入未使用符号，但 `_api_key` 以 plain string 存储在 provider 实例中 | MEDIUM (pattern) |
+
+**跨层表现：** Backend 的 `Settings.llm_api_key` (str) 通过 `AgentFactory` 传递给 Framework 的 `create_adapter()`，最终以 `self._api_key` 存储在 provider 实例中。两层都以 plain string 形式持有密钥，无统一的 `SecretStr` 或 secret reference 模式。如果在任何一层意外序列化或日志记录 Settings/Provider 对象，密钥都会泄露。
+
+**修复建议：** Backend 改用 `SecretStr`，Framework 的 `create_adapter` 接受 `SecretStr` 并在内部调用 `get_secret_value()` 传给 provider。
+
+### 主题 2：错误处理策略不匹配
+
+Backend SSE 层直接将异常信息发送给客户端，而 Framework 层使用结构化的 `LoopEvent(type="error")` 进行错误传播。两层之间缺少统一的错误边界。
+
+| 层 | Issue | 描述 | 严重性 |
+|----|-------|------|--------|
+| Backend | BKND-SEC-05 | SSE error event 中 `str(exc)` 直接泄露给客户端 | HIGH |
+| Backend | BKND-SEC-02 | Redis 连接失败被静默吞掉（`except Exception` + warning only） | MEDIUM |
+| Framework | FRMW-SEC-09, FRMW-SEC-11, FRMW-SEC-12, FRMW-SEC-17 | 多处 `try-except-pass` 静默吞异常（teams/, tasks/, viz/, tools/） | HIGH/MEDIUM |
+
+**跨层表现：** Framework 的 `AgentLoop.run()` 在异常时 yield `LoopEvent(type="error", ...)` 结构化事件。Backend 的 `event_stream()` generator 捕获 `Exception` 并用 `str(exc)` 构建客户端响应——这会绕过 Framework 的结构化错误处理，直接暴露内部实现细节。同时，Framework 层多处 `try-except-pass` 模式意味着某些异常在 Framework 内部就被静默，永远不会传播到 Backend 层。
+
+**修复建议：** Backend 的 `event_stream()` 应区分已知异常类型（LLM 超时、Tool 执行错误等）和未知异常。对已知异常返回用户友好的错误消息，对未知异常返回通用错误 + correlation ID。Framework 层的 `try-except-pass` 应改为 log + re-raise 或 log + 返回结构化错误事件。
+
+### 主题 3：同步 I/O 在 async 上下文中
+
+Backend 和 Framework 都存在同步文件 I/O 阻塞事件循环的问题，但表现形式不同。
+
+| 层 | Issue | 描述 | 严重性 |
+|----|-------|------|--------|
+| Backend | BKND-ARCH-08 | `_append_history` 同步写 JSONL，在 async 端点中阻塞事件循环 | LOW |
+| Backend | BKND-LOGIC-02 | `update_title` / `delete_session` 同步读写 JSONL（非原子 + 阻塞） | HIGH |
+| Framework | FRMW-ARCH-20 | memory/ 全模块使用同步 I/O 阻塞事件循环 | HIGH |
+| Framework | FRMW-SEC-13 | `result_truncator.py` 同步文件 I/O | HIGH |
+| Framework | FRMW-ARCH-35 | `TaskManager._write` 同步 JSON 写入在 async lock 内 | MEDIUM |
+
+**跨层表现：** Backend 的 `SessionManager` 直接调用同步文件读写（`open()`, `Path.read_text()`, `Path.write_text()`），部分调用已通过 `asyncio.to_thread()` 包装（chat.py 中的 Redis 操作），但 `_append_history` 和 `update_title`/`delete_session` 未包装。Framework 层的 memory 子系统、teams/bus.py、tools/context/result_truncator.py 也有同样的同步 I/O 问题。这形成了一个从 Framework 到 Backend 的连续同步 I/O 链条——Backend 通过 `TranscriptReader`/`TranscriptWriter` 调用 Framework 的 transcript 模块，而 transcript 模块本身也使用同步 I/O（参见 FRMW-ARCH-20 相关的 memory 层问题）。
+
+**修复建议：** 两层统一使用 `asyncio.to_thread()` 包装文件 I/O，或引入 `aiofiles`。Backend 应优先修复 `update_title` 和 `delete_session`（HIGH），Framework 应优先修复 memory 层（FRMW-ARCH-20）。
+
+### 主题 4：AgentLoop 参数传递不完整
+
+Backend 的 `AgentFactory.create_loop()` 仅传递 4 个参数给 `AgentLoop.__init__`，而 Framework 的 `AgentLoop` 支持 19 个参数（参见 FRMW-ARCH-14 PLR0913）。
+
+| 层 | Issue | 描述 | 严重性 |
+|----|-------|------|--------|
+| Backend | BKND-ARCH-07 | `create_loop` 未设置 `working_dir` 和其他框架特性配置 | MEDIUM |
+| Backend | BKND-ARCH-06 | 共享 `ToolUseContext` 实例导致潜在跨会话状态泄漏 | MEDIUM → HIGH |
+| Framework | FRMW-ARCH-14 | `AgentLoop.__init__` 19 个参数，构造器过于复杂 | HIGH |
+| Framework | FRMW-SEC-18 | `run_subagent` 共享 `ToolUseContext` 导致状态泄漏 | HIGH |
+
+**跨层表现：** Backend 的 `AgentFactory.create_loop()` 只传 `adapter`, `model`, `router`, `ctx` 四个参数。未配置的参数包括：`working_dir`（默认 `"."` — 文件工具可访问任意路径）、`hook_manager`、`task_runner`、`team_manager`、`skill_dirs`、`enable_subagent` 等。同时，所有 `create_loop()` 调用共享同一个 `ToolUseContext` 实例（BKND-ARCH-06），Framework 层的 `run_subagent` 也有同样的共享上下文问题（FRMW-SEC-18）。
+
+`working_dir` 默认值 `"."` 尤其值得关注：Framework 的 `file_tools.py` 虽然有 `safe_path()` 函数，但 CONCERNS.md 和 Phase 12 审查均确认 `file_tools.py` 未调用 `safe_path()`（参见 FRMW-SEC-14 相关讨论）。这意味着 Backend 未设置 `working_dir` + Framework 未调用 `safe_path()` = 文件工具可访问进程 CWD 下的任意文件。
+
+**修复建议：** Backend 应在 `create_loop()` 中设置 `ctx.working_dir` 为显式沙箱目录。Framework 应引入 builder 模式或 config dataclass 替代 19 参数构造器（FRMW-ARCH-14 修复建议），并确保 `file_tools.py` 调用 `safe_path()`。
+
+### 主题 5：私有属性跨层访问
+
+Backend 直接访问 Framework 的私有方法和属性，形成脆弱的跨层耦合。
+
+| 层 | Issue | 描述 | 严重性 |
+|----|-------|------|--------|
+| Backend | BKND-ARCH-10 | `getattr(loop, '_system_prompt_text', None)` 访问 Framework 私有属性 | MEDIUM |
+| Backend | BKND-LOGIC-06 | `sm._redis_set_messages` 从 api 层访问 SessionManager 私有方法 | MEDIUM |
+| Framework | FRMW-LOGIC-24 | teams/tools.py `_broadcast` 访问 manager 私有属性 `_configs` | MEDIUM |
+| Framework | FRMW-LOGIC-34 | commands/help.py 直接访问 registry 私有属性 `_documents` | HIGH |
+
+**跨层表现：** Backend 的 `chat.py` 使用 `getattr(loop, '_system_prompt_text', None)` 读取 Framework `AgentLoop` 的私有属性，用于 `TranscriptConsumer` 的初始化。这种访问方式在属性被重命名时会静默降级为 `None`，不会报错但会导致 transcript 缺少 system prompt 信息。Framework 内部也存在同样的私有属性访问模式（`_configs`, `_documents`），说明这是一个系统性的封装边界问题。
+
+**修复建议：** Framework 应在 `AgentLoop` 上暴露公共 `system_prompt_text` 属性（property），或通过工厂方法的返回值传递。Backend 应调用 SessionManager 的公共方法而非私有方法 `_redis_set_messages`。
+
+---
+
+*Report completed: 2026-06-09 — Phase 13, Plan 01 (file review) + Plan 02 (summary + cross-layer)*
