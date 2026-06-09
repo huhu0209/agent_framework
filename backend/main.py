@@ -24,7 +24,13 @@ async def lifespan(app: FastAPI):
     settings = Settings()
     factory = AgentFactory.from_settings(settings)
     storage_dir = Path(__file__).parent / "data" / "sessions"
-    rdb = redis_lib.Redis.from_url(settings.redis_url, decode_responses=True)
+    rdb = None
+    try:
+        rdb = redis_lib.Redis.from_url(settings.redis_url, decode_responses=True)
+        rdb.ping()
+    except Exception:
+        logger.warning("Redis unavailable, caching disabled")
+        rdb = None
     sm = SessionManager(storage_dir=storage_dir, redis_client=rdb)
     sm.start_cleanup()
 
@@ -33,7 +39,8 @@ async def lifespan(app: FastAPI):
     yield
     sm.cancel_all()
     sm.stop_cleanup()
-    rdb.close()
+    if rdb:
+        rdb.close()
 
 
 app = FastAPI(title="Agent Chat", lifespan=lifespan)
