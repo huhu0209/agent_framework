@@ -99,6 +99,89 @@ Four ruff scan categories were run against `framework/agent_framework/` (excludi
 
 ---
 
+## 审查汇总
+
+### Issue 总数
+
+**133 个 issue** 覆盖 16 个模块（其中 15 个有审查结果，ruff 基线覆盖全模块自动扫描）。
+
+### 按严重性分布
+
+| 严重性 | 数量 | 占比 |
+|--------|------|------|
+| CRITICAL | 0 | 0% |
+| HIGH | 51 | 38.3% |
+| MEDIUM | 61 | 45.9% |
+| LOW | 21 | 15.8% |
+
+### 按模块分布
+
+| 模块 | 文件数 | 总行数 | Issue 数 | HIGH | MEDIUM | LOW |
+|------|--------|--------|----------|------|--------|-----|
+| llm/ | 10 | 2,765 | 19 | 6 | 8 | 5 |
+| tools/ | 12 | 1,511 | 21 | 6 | 10 | 5 |
+| agents/ | 6 | 1,135 | 17 | 6 | 8 | 3 |
+| tasks/ | 4 | 576 | 12 | 5 | 5 | 2 |
+| memory/ | 9 | 944 | 10 | 2 | 6 | 2 |
+| teams/ | 4 | 345 | 9 | 3 | 4 | 2 |
+| safety/ | 4 | 315 | 9 | 4 | 3 | 2 |
+| orchestrator/ | ~5 | ~400 | 6 | 3 | 3 | 0 |
+| a2a/ | 3 | 476 | 6 | 3 | 3 | 0 |
+| viz/ | ~3 | ~200 | 5 | 2 | 3 | 0 |
+| hooks/ | ~2 | ~100 | 4 | 2 | 2 | 0 |
+| commands/ | ~2 | ~100 | 4 | 3 | 1 | 0 |
+| transcript/ | ~3 | ~200 | 4 | 3 | 1 | 0 |
+| skills/ | ~2 | ~200 | 4 | 2 | 2 | 0 |
+| prompts/ | ~2 | ~100 | 3 | 1 | 2 | 0 |
+
+### 按类型分布
+
+| 类型 | 数量 | 说明 |
+|------|------|------|
+| FRMW-ARCH-* | 51 | 架构/设计问题（高耦合、参数过多、同步 I/O） |
+| FRMW-LOGIC-* | 38 | 逻辑漏洞（错误处理、状态泄漏、竞态条件） |
+| FRMW-SEC-* | 31 | 安全问题（注入、认证、信息泄漏） |
+| FRMW-DEAD-* | 13 | 死代码（未使用导入、未引用变量） |
+
+### 跨模块重复 Issue（共享根因）
+
+以下 issue 分布在多个模块中，根因相同，建议统一修复：
+
+| 共享根因 | 相关 Issue | 影响模块 |
+|----------|-----------|----------|
+| 同步文件 I/O 阻塞事件循环 | FRMW-SEC-13, FRMW-ARCH-20, FRMW-ARCH-35 | tools/, memory/, tasks/ |
+| try-except-pass 静默吞异常 | FRMW-SEC-09, FRMW-SEC-11, FRMW-SEC-12, FRMW-SEC-17 | teams/, tasks/, viz/, tools/ |
+| 未使用 import（代码噪音） | FRMW-DEAD-01~13, FRMW-SEC-02~06 | llm/, tools/, agents/, teams/, orchestrator/ |
+| 模块级全局可变状态 | FRMW-ARCH-09, FRMW-ARCH-51 | tools/, viz/ |
+| 私有属性跨模块访问 | FRMW-LOGIC-24, FRMW-LOGIC-34 | teams/, commands/ |
+
+### FRMW-01~05 需求追踪矩阵
+
+| 需求 ID | 需求描述 | 对应 Issue |
+|---------|---------|-----------|
+| FRMW-01 | 死代码检测 | FRMW-DEAD-01 ~ FRMW-DEAD-13 (13 个), ruff F 基线 32 个 |
+| FRMW-02 | 逻辑漏洞审查 | FRMW-LOGIC-01 ~ FRMW-LOGIC-38 (38 个) |
+| FRMW-03 | 设计问题审查 | FRMW-ARCH-01 ~ FRMW-ARCH-51 (51 个), ruff C901/PLR0913 基线 17 个 |
+| FRMW-04 | 安全漏洞审查 | FRMW-SEC-01 ~ FRMW-SEC-31 (31 个), ruff S 基线 7 个 |
+| FRMW-05 | 综合报告汇总 | 本文件 — 含 ruff 基线 + 16 模块章节 + 审查汇总 |
+
+### 优先修复建议（TOP 10 HIGH）
+
+以下 HIGH 级 issue 影响范围最广或风险最高，建议优先修复：
+
+1. **FRMW-ARCH-20**: memory/ 全模块同步 I/O — 影响所有使用记忆功能的 Agent
+2. **FRMW-ARCH-14 + ARCH-15**: AgentLoop 构造器/运行方法复杂度过高 — 影响所有 Agent 行为
+3. **FRMW-LOGIC-05**: ASK 权限决策返回 error — HITL 系统完全失效
+4. **FRMW-SEC-08**: logger 未定义导致 NameError — memory flush 失败时掩盖原始异常
+5. **FRMW-LOGIC-06**: _CRITICAL_TOOLS 始终为空 — 安全模型高危工具拒绝机制失效
+6. **FRMW-SEC-30**: WebSocket 无认证 — 任何本地客户端可接收所有事件
+7. **FRMW-SEC-25**: Skill 内容注入 — 恶意 SKILL.md 可注入 system prompt
+8. **FRMW-SEC-16**: MCP 子进程继承全部环境变量 — API key 泄漏风险
+9. **FRMW-SEC-28**: Prompt injection via profile — 用户内容不转义
+10. **FRMW-ARCH-33**: _apply_changes 复杂变异 — tasks/ 模块核心方法维护困难
+
+---
+
 ## llm/
 
 ### CRITICAL
@@ -1620,7 +1703,7 @@ if isinstance(flush_result, Exception):
 
 ### HIGH
 
-#### FRMW-SEC-13: A2AServer._verify_auth 使用时间常量比较 API key
+#### FRMW-SEC-23: A2AServer._verify_auth 使用时间常量比较 API key
 
 **Description:** `_verify_auth()`（server.py:78-95）通过 `value.decode() == expected` 比较客户端发送的 API key 与预期值。Python 的 `==` 对字符串执行短路比较——第一个不匹配字符即返回 `False`，这使得攻击者可通过响应时间差异进行时序攻击（timing attack），逐字符推断正确的 API key。
 
@@ -1697,7 +1780,7 @@ if isinstance(flush_result, Exception):
 
 ---
 
-#### FRMW-SEC-14: A2AServer agent-card 端点不鉴权
+#### FRMW-SEC-24: A2AServer agent-card 端点不鉴权
 
 **Description:** `_verify_auth()`（server.py:78-95）在所有 HTTP 请求前执行，包括 `GET /.well-known/agent-card`。这意味着 agent-card 端点也需要 API key 才能访问。虽然这提供了额外的信息保护（防止未授权方发现 Agent 能力），但在 A2A 协议设计中，agent-card 通常是公开的发现端点（类似 OpenAPI spec），不需要鉴权。
 
@@ -1744,7 +1827,7 @@ if isinstance(flush_result, Exception):
 
 ---
 
-#### FRMW-SEC-15: SkillRegistry 无 skill 内容验证，恶意 SKILL.md 可注入任意 system prompt
+#### FRMW-SEC-25: SkillRegistry 无 skill 内容验证，恶意 SKILL.md 可注入任意 system prompt
 
 **Description:** `_scan_dir()`（registry.py:135-186）读取 SKILL.md 文件后直接解析并存储，不验证内容安全性。恶意 SKILL.md 可以包含：(1) 旨在劫持 LLM 行为的 prompt injection 文本。(2) 误导 LLM 执行危险工具调用的指令。(3) 隐藏在 markdown 注释中的恶意指令。`SkillSource` 枚举区分了 USER/PROJECT/BUNDLED/MCP 来源，但 `_scan_dir()` 中所有来源都标记为 `SkillSource.USER`（行 174），来源标签未用于安全过滤。
 
@@ -1808,7 +1891,7 @@ if isinstance(flush_result, Exception):
 
 ### HIGH
 
-#### FRMW-SEC-16: HookManager._execute_command 使用 bash -c 执行用户配置的命令
+#### FRMW-SEC-26: HookManager._execute_command 使用 bash -c 执行用户配置的命令
 
 **Description:** `_execute_command()`（manager.py:120-121）通过 `asyncio.create_subprocess_exec("bash", "-c", config.command)` 执行 hook 命令。`config.command` 来自 JSON 配置文件（`load_from_json()`），内容完全由用户控制。虽然 `trusted` flag 在 `fire()` 中阻止非信任工作区的 hook 执行（manager.py:97-98），但 `load_from_json()` 不验证命令内容（如检查路径是否存在、是否在 PATH 中）。如果 JSON 配置文件被恶意修改（如通过 git 合并攻击），攻击者可注入任意 shell 命令。
 
@@ -2097,7 +2180,7 @@ if isinstance(flush_result, Exception):
 
 ---
 
-#### FRMW-SEC-17: dispatcher.py skill loading 使用 str.replace 替换 $ARGUMENTS，不转义用户输入
+#### FRMW-SEC-27: dispatcher.py skill loading 使用 str.replace 替换 $ARGUMENTS，不转义用户输入
 
 **Description:** `_try_load_skill()`（dispatcher.py:78）使用 `body.replace("$ARGUMENTS", args)` 将用户输入直接替换到 skill 正文中。`args` 来自用户输入（`/skill_name args`），不经过任何转义或验证。如果用户输入包含特殊字符（如 `</skill>`、`<skill name="...">`），可能破坏 skill XML 结构，注入恶意指令到 LLM prompt。
 
@@ -2161,7 +2244,7 @@ if isinstance(flush_result, Exception):
 
 ### HIGH
 
-#### FRMW-SEC-18: PromptAssembler 不转义用户注入的 profile 内容，允许 prompt injection
+#### FRMW-SEC-28: PromptAssembler 不转义用户注入的 profile 内容，允许 prompt injection
 
 **Description:** `PromptAssembler.render()`（assembler.py:81-84）将所有 `PromptBlock.content` 直接拼接为 system prompt，不转义任何内容。如果 `AgentProfile.soul`、`agents_rules`、`identity`、`user_context` 中包含 prompt injection 文本（如 `"Ignore all previous instructions and ..."`），这些文本会直接注入到 LLM 的 system prompt 中。虽然 profile 内容通常由开发者控制（来自 `.md` 文件），但 `user_context` 可能包含用户输入。
 
@@ -2255,7 +2338,7 @@ if isinstance(flush_result, Exception):
 
 ---
 
-#### FRMW-SEC-19: transcript 文件包含完整对话内容，可能泄露敏感信息
+#### FRMW-SEC-29: transcript 文件包含完整对话内容，可能泄露敏感信息
 
 **Description:** `TranscriptConsumer`（consumer.py）录制完整的 agent loop 事件，包括 user message（行 28-32）、assistant content blocks（行 36-39）、tool call 和 tool result（行 41-51）。转录文件以 JSONL 格式存储在本地文件系统（默认路径由调用方指定），无加密。如果对话中包含 API key、密码等敏感信息（如用户通过 chat 传递认证信息），这些信息会以明文形式持久化到磁盘。
 
@@ -2304,7 +2387,7 @@ if isinstance(flush_result, Exception):
 
 ### HIGH
 
-#### FRMW-SEC-20: ws_server.py WebSocket 无认证，任何客户端可连接并接收所有事件
+#### FRMW-SEC-30: ws_server.py WebSocket 无认证，任何客户端可连接并接收所有事件
 
 **Description:** `serve_ws()`（ws_server.py:19-24）启动 WebSocket 服务端，不验证客户端身份。任何能连接到 `ws://localhost:8765` 的客户端都可以：(1) 订阅所有 EventBus 事件（包含完整的 tool call 输入/输出）。(2) 发送 `start_team`/`stop_team` 控制命令（虽然 MVP 阶段只返回确认，但未来可能执行实际操作）。虽然默认绑定 `localhost`，在同一台机器上运行的其他进程（包括恶意软件）可以连接。
 
@@ -2319,7 +2402,7 @@ if isinstance(flush_result, Exception):
 
 ---
 
-#### FRMW-SEC-21: ws_server.py start_team 命令不验证 agent 配置内容
+#### FRMW-SEC-31: ws_server.py start_team 命令不验证 agent 配置内容
 
 **Description:** `_handle_start_team()`（ws_server.py:72-77）接收 `cmd.get("agent", {})` 配置但完全不验证其内容。虽然当前是 MVP（只记录日志并返回确认），但如果未来实现真正的 agent 启动逻辑，恶意客户端可以注入任意 agent 配置（如修改 model 参数、注入恶意 system prompt）。
 
