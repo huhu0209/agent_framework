@@ -125,6 +125,12 @@ Plans:
 
 **Requirements:** FRNT-01, FRNT-02, FRNT-03, FRNT-04, FRNT-05
 
+**Plans:** 2 plans
+
+Plans:
+- [ ] 14-01-PLAN.md — ESLint 自动扫描基线 + 全文件人工审查 + 审查汇总
+- [ ] 14-02-PLAN.md — 跨层交叉参照 + 质量检查 + 用户验证
+
 **Scope:**
 - 使用静态分析工具检测未使用的组件、函数、import、变量
 - 审查 React 状态管理逻辑、副作用处理、错误边界
