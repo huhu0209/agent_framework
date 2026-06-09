@@ -15,6 +15,7 @@ from app.services.agent_factory import AgentFactory
 from app.services.session import SessionManager
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 ALLOWED_ORIGINS = os.getenv("APP_CORS_ORIGINS", "http://localhost:30001").split(",")
 
