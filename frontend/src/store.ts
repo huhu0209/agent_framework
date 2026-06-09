@@ -23,9 +23,9 @@ export function resetIdCounter() {
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''
 
-const inflightRequests = new Map<string, Promise<ChatMessage[]>>()
+const inflightRequests = new Map<string, Promise<{ messages: ChatMessage[], hasMore: boolean }>>()
 
-async function fetchMessages(id: string): Promise<ChatMessage[]> {
+async function fetchMessages(id: string): Promise<{ messages: ChatMessage[], hasMore: boolean }> {
   const existing = inflightRequests.get(id)
   if (existing) return existing
 
@@ -33,13 +33,14 @@ async function fetchMessages(id: string): Promise<ChatMessage[]> {
     const res = await fetch(`${API_BASE}/api/v1/chat/${id}`)
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
-    return data.messages.map((m: Record<string, unknown>, i: number) => ({
+    const messages: ChatMessage[] = data.messages.map((m: Record<string, unknown>, i: number) => ({
       id: `restored-${i}-${Date.now()}`,
       role: m.role as MessageRole,
       timestamp: (m.timestamp as number) ?? Date.now(),
       ...(m.content ? { content: m.content as string } : {}),
       ...(m.blocks ? { blocks: toFrontendBlocks(m.blocks as Record<string, unknown>[]) } : {}),
     }))
+    return { messages, hasMore: data.has_more ?? false }
   })()
 
   inflightRequests.set(id, promise)
@@ -103,6 +104,9 @@ interface ChatStore {
   sessionsLoading: boolean
   switchingSession: boolean
   messageCache: Map<string, ChatMessage[]>
+  hasMore: boolean
+  loadingOlder: boolean
+  loadOlderMessages: () => Promise<void>
   sendMessage: (text: string) => Promise<void>
   addSystemMessage: (text: string) => void
   loadSessions: () => Promise<void>
@@ -125,6 +129,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   sessionsLoading: false,
   switchingSession: false,
   messageCache: new Map(),
+  hasMore: false,
+  loadingOlder: false,
 
   addSystemMessage: (text: string) => {
     const msg: ChatMessage = {
@@ -202,10 +208,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
     set({ switchingSession: true })
     try {
-      const messages = await fetchMessages(id)
+      const { messages, hasMore } = await fetchMessages(id)
       const cache = new Map(get().messageCache)
       cache.set(id, messages)
-      set({ messages, sessionId: id, streamingMessage: null, switchingSession: false, messageCache: cache })
+      set({ messages, sessionId: id, streamingMessage: null, switchingSession: false, messageCache: cache, hasMore })
     } catch {
       set({ switchingSession: false })
     }
@@ -258,12 +264,36 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   prefetchSession: async (id: string) => {
     if (get().messageCache.has(id)) return
     try {
-      const messages = await fetchMessages(id)
+      const { messages } = await fetchMessages(id)
       const cache = new Map(get().messageCache)
       cache.set(id, messages)
       set({ messageCache: cache })
     } catch {
       // prefetch failure is silent
+    }
+  },
+
+  loadOlderMessages: async () => {
+    const { sessionId, messages, loadingOlder } = get()
+    if (!sessionId || loadingOlder || messages.length === 0) return
+    const oldestTs = messages[0].timestamp / 1000
+    set({ loadingOlder: true })
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/chat/${sessionId}?limit=50&before=${oldestTs}`)
+      if (!res.ok) { set({ loadingOlder: false }); return }
+      const data = await res.json()
+      const older: ChatMessage[] = data.messages.map((m: Record<string, unknown>, i: number) => ({
+        id: `old-${Date.now()}-${i}`,
+        role: m.role as MessageRole,
+        timestamp: (m.timestamp as number) ?? Date.now(),
+        ...(m.content ? { content: m.content as string } : {}),
+        ...(m.blocks ? { blocks: toFrontendBlocks(m.blocks as Record<string, unknown>[]) } : {}),
+      }))
+      if (older.length === 0) { set({ loadingOlder: false, hasMore: false }); return }
+      const all = [...older, ...get().messages]
+      set({ messages: all, hasMore: data.has_more ?? false, loadingOlder: false })
+    } catch {
+      set({ loadingOlder: false })
     }
   },
 }))

@@ -1,5 +1,6 @@
+import { useRef, useCallback } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { useChatStore } from '../store'
-import { useAutoScroll } from '../hooks/useAutoScroll'
 import { UserBubble } from './UserBubble'
 import { AgentResponse } from './AgentResponse'
 import { SystemNotification } from './SystemNotification'
@@ -20,7 +21,29 @@ export function MessageList() {
   const messages = useChatStore((s) => s.messages)
   const streamingMessage = useChatStore((s) => s.streamingMessage)
   const switchingSession = useChatStore((s) => s.switchingSession)
-  const { containerRef, onScroll } = useAutoScroll<HTMLDivElement>(messages)
+  const hasMore = useChatStore((s) => s.hasMore)
+  const loadingOlder = useChatStore((s) => s.loadingOlder)
+  const loadOlderMessages = useChatStore((s) => s.loadOlderMessages)
+
+  const parentRef = useRef<HTMLDivElement>(null)
+
+  const allItems = [...messages, ...(streamingMessage ? [streamingMessage] : [])]
+
+  const virtualizer = useVirtualizer({
+    count: allItems.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => 80,
+    overscan: 5,
+    getItemKey: (i) => allItems[i].id,
+  })
+
+  const handleScroll = useCallback(() => {
+    if (!parentRef.current) return
+    const { scrollTop } = parentRef.current
+    if (scrollTop < 100 && hasMore && !loadingOlder) {
+      loadOlderMessages()
+    }
+  }, [hasMore, loadingOlder, loadOlderMessages])
 
   if (switchingSession) {
     return (
@@ -34,24 +57,38 @@ export function MessageList() {
   }
 
   return (
-    <div ref={containerRef}
-      onScroll={onScroll}
+    <div
+      ref={parentRef}
+      onScroll={handleScroll}
       className="flex-1 overflow-y-auto px-4 py-4"
-      style={{ backgroundColor: 'var(--bg-parchment)' }}>
-      <div className="max-w-3xl mx-auto flex flex-col gap-4">
-        {messages.map((msg) => {
-          if (msg.role === 'user') {
-            return <UserBubble key={msg.id} message={msg} />
-          }
-          if (msg.role === 'agent') {
-            return <AgentResponse key={msg.id} message={msg} />
-          }
-          if (msg.role === 'system') {
-            return <SystemNotification key={msg.id} message={msg} />
-          }
-          return null
+      style={{ backgroundColor: 'var(--bg-parchment)' }}
+    >
+      {loadingOlder && (
+        <div className="text-center text-xs py-2" style={{ color: 'var(--text-tertiary)' }}>
+          加载更多...
+        </div>
+      )}
+      <div className="max-w-3xl mx-auto" style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+        {virtualizer.getVirtualItems().map((virtualItem) => {
+          const msg = allItems[virtualItem.index]
+          return (
+            <div
+              key={virtualItem.key}
+              data-testid="message-item"
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                transform: `translateY(${virtualItem.start}px)`,
+              }}
+            >
+              {msg.role === 'user' && <UserBubble message={msg} />}
+              {msg.role === 'agent' && <AgentResponse message={msg} />}
+              {msg.role === 'system' && <SystemNotification message={msg} />}
+            </div>
+          )
         })}
-        {streamingMessage && <AgentResponse key={streamingMessage.id} message={streamingMessage} />}
       </div>
     </div>
   )

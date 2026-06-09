@@ -53,6 +53,8 @@ beforeEach(() => {
     sessionsLoading: false,
     switchingSession: false,
     messageCache: new Map(),
+    hasMore: false,
+    loadingOlder: false,
   })
 })
 
