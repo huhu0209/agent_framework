@@ -398,21 +398,22 @@ Four ruff scan categories were run against `framework/agent_framework/` (excludi
 
 ## tools/
 
-*(pending manual review — Plan 02)*
+逐文件审查范围：12 个源文件，~1511 行。
+模块职责：工具注册、路由、执行、权限、参数校验、降级、MCP 集成、上下文压缩/截断/token 估算。
 
 ### CRITICAL
 
-*(pending)*
+*(none found)*
 
 ### HIGH
 
 #### FRMW-DEAD-03: token_counter.py 导入未使用的 AssistantMessage 和 UserMessage
 
-**Description:** `tools/context/token_counter.py` 导入了 `AssistantMessage` 和 `UserMessage` 但从未使用。
+**Description:** `tools/context/token_counter.py` 导入了 `AssistantMessage` 和 `UserMessage` 但从未使用。这两个类型在文件中没有任何引用点——`_count_message_chars` 使用 `isinstance` 匹配，直接从 `agent_framework.llm.types` 联合类型导入的 `Message` 已覆盖所有消息类型判断。
 
 **File Location:** `framework/agent_framework/tools/context/token_counter.py:6,16`
 
-**Impact:** 代码噪音，增加不必要的 import 解析。
+**Impact:** 代码噪音，增加不必要的 import 解析，误导阅读者认为这些类型在文件中被直接构造或引用。
 
 **Fix Suggestion:** 移除未使用的 import。
 
@@ -421,13 +422,307 @@ Four ruff scan categories were run against `framework/agent_framework/` (excludi
 
 ---
 
+#### FRMW-LOGIC-05: router.py ASK 权限决策返回 error 而非触发 HITL
+
+**Description:** `ToolRouter.dispatch()` 行 72-76 中，当 `PermissionPipeline.check()` 返回 `PermissionDecision.ASK` 时，dispatch 返回一个 `is_error=True` 的 ToolResult。这意味着 Agent 在面对需要用户确认的工具调用时，会收到"工具执行失败"的语义，而不是被引导去触发 Human-in-the-Loop (HITL) 交互。ASK 的设计意图应该是暂停执行、等待用户授权后继续，但当前实现等同于拒绝。
+
+**File Location:** `framework/agent_framework/tools/router.py:72-76`
+
+**Impact:** 权限管道的 ASK 决策永远不会生效——Agent 只会看到错误消息并尝试其他路径，不会暂停等待用户确认。这意味着所有"需要确认"的工具实际上都被静默拒绝了。
+
+**Fix Suggestion:** 引入 HITL 机制：ASK 决策时应抛出特定异常（如 `ToolConfirmationRequired`），由 AgentLoop 捕获并暂停执行等待用户输入，而非直接返回错误 ToolResult。或在 ToolResult 中增加 `requires_confirmation=True` 标记，让 AgentLoop 识别并处理。
+
+**Priority:** HIGH
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-ARCH-06: router.py 4 层职责混合（路由 + 权限 + hook + 降级）
+
+**Description:** `ToolRouter.dispatch()` 方法（行 58-156）承担了 4 项独立职责：(1) 权限检查（行 65-76），(2) PreToolUse hook 触发（行 78-98），(3) 工具执行 + 降级（行 100-135），(4) PostToolUse hook 触发（行 137-155）。这导致 dispatch 方法复杂度达 C901=18，且任何一层的变更都需要修改整个方法。
+
+**File Location:** `framework/agent_framework/tools/router.py:58-156`
+
+**Impact:** dispatch 方法难以测试——单元测试需要 mock 权限管道、hook 管理器、执行器、降级器 4 个依赖。任何一层的行为变更都可能意外影响其他层。
+
+**Fix Suggestion:** 将 dispatch 拆分为管道模式：`_check_permission() -> _run_pre_hooks() -> _execute_with_fallback() -> _run_post_hooks()`，dispatch 只负责编排管道调用。每步返回结构化中间结果（如 `PermissionDecision`、`HookResult`），下游步骤根据上游结果决定是否继续。
+
+**Priority:** HIGH
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-ARCH-07: _dispatch_agent 返回 hardcoded "not implemented" stub
+
+**Description:** `router.py:179-183` 中 `_dispatch_agent` 方法始终返回 `ToolResult(content="Agent 工具 '{name}' 未实现。子 Agent 支持尚未实现。", is_error=True)`。这是一个永久性 stub——方法签名存在但永远返回错误。如果 LLM 在 tool_use 中生成了 `agent__` 前缀的工具名，dispatch 会正确路由到这里，但用户只会看到晦涩的"未实现"错误，没有引导说明。
+
+**File Location:** `framework/agent_framework/tools/router.py:179-183`
+
+**Impact:** (1) 死代码路径——任何触发 agent__ 前缀的调用都会失败，浪费 token。(2) dispatch 方法中 `name.startswith("agent__")` 的分支增加了认知负担。(3) 如果 agent 功能未来实现，容易忘记更新这个方法。
+
+**Fix Suggestion:** 如果 agent 工具支持确实未实现，应在 registry 层面阻止注册 `agent__` 前缀的工具，或在前端 prompt 中明确告知 LLM 不使用该前缀。否则应添加 TODO 注释和 issue 跟踪。或者干脆移除这个分支，让未知工具统一走 `_dispatch_builtin` 返回"未知工具"。
+
+**Priority:** HIGH
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-LOGIC-06: _CRITICAL_TOOLS 全局集合始终为空，权限 DENY 第一级永远不会触发
+
+**Description:** `safety/permissions.py:40` 定义 `_CRITICAL_TOOLS: set[str] = set()`，这是一个模块级全局空集合。`PermissionPipeline.check()` 行 58 首先检查 `tool_name in _CRITICAL_TOOLS`，但由于集合始终为空，这个检查永远返回 False。整个 DENY 第一级形同虚设——没有任何 API 允许向 `_CRITICAL_TOOLS` 添加工具名。
+
+**File Location:** `framework/agent_framework/safety/permissions.py:40,58`
+
+**Impact:** 安全模型中设计的高危工具强制拒绝机制从未生效。如果未来添加了需要强制拒绝的高危工具（如 `execute_sql`、`delete_all`），没有标准化的方式将其标记为 CRITICAL。
+
+**Fix Suggestion:** (1) 将 `_CRITICAL_TOOLS` 改为可配置（通过 `PermissionPipeline.__init__` 参数或配置文件传入）。(2) 或者移除这个空集合，只保留 profile 级别的 `disallowed_tools` 做黑名单。(3) 如果保留，至少添加 `add_critical_tool()` 函数或类方法允许运行时注册。
+
+**Priority:** HIGH
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-SEC-13: result_truncator.py 使用同步文件 I/O 阻塞事件循环
+
+**Description:** `tools/context/result_truncator.py:33-35` 中 `truncate_if_needed` 使用 `os.makedirs()` 和 `open(dump_path, "w")` 进行同步文件写入。但这个函数被 `ToolExecutor.execute()` 在 `async` 上下文中调用（行 53），且 `ToolRouter.dispatch()` 也是异步的。当工具结果超过 20000 字符时，同步 I/O 会阻塞事件循环，影响其他并发任务。
+
+**File Location:** `framework/agent_framework/tools/context/result_truncator.py:33-35`
+
+**Impact:** 大型工具结果（如读取大文件、搜索返回大量结果）触发截断时会阻塞整个 asyncio 事件循环，直到文件写入完成。在并发 agent 场景下，一个 agent 的大结果会阻塞其他 agent 的执行。
+
+**Fix Suggestion:** 使用 `aiofiles` 异步文件 I/O，或将文件写入移到 `asyncio.to_thread()` 中执行。同时将 `truncate_if_needed` 改为 `async def truncate_if_needed()`。
+
+**Priority:** HIGH
+**Related:** FRMW-04 (安全审查)
+
+---
+
 ### MEDIUM
 
-*(pending)*
+#### FRMW-SEC-14: file_tools.py safe_path 调用完整但缺少符号链接 TOCTOU 说明
+
+**Description:** `file_tools.py` 的 `read_file`（行 20）和 `write_file`（行 39）都正确调用了 `safe_path(path, Path(ctx.working_dir))` 进行路径沙箱验证。`safe_path()` 实现使用了 `resolve()` 处理 `../../` 和符号链接绕过，修复完整。但存在一个理论上的 TOCTOU (Time-of-Check-Time-of-Use) 窗口：在 `safe_path()` 验证通过后、实际文件操作前，攻击者可能创建符号链接指向工作目录外。不过这需要精确时序控制，在当前 Agent 框架的威胁模型下风险极低。
+
+**File Location:** `framework/agent_framework/tools/builtin/file_tools.py:20-21,39-40`
+
+**Impact:** 在单用户本地运行场景下无实际风险。如果未来支持多用户并发或不受信任的文件系统操作，TOCTOU 可能被利用。
+
+**Fix Suggestion:** 当前实现足够安全。如需加强，可在 `safe_path` 后立即使用 `os.open(O_NOFOLLOW)` 打开文件描述符，在 fd 上操作而非路径。但这会增加实现复杂度，当前阶段不推荐。
+
+**Priority:** MEDIUM
+**Related:** FRMW-04 (安全审查)
+
+---
+
+#### FRMW-SEC-15: MCP _reject_sensitive_env_keys 覆盖不完整
+
+**Description:** `mcp/config.py:19-27` 中 `_BLOCKED_ENV_PATTERNS` 包含 7 个模式：`api_key`, `token`, `secret`, `password`, `credential`, `private_key`, `access_key`。validator 使用 `any(pattern in lowered for pattern in _BLOCKED_ENV_PATTERNS)` 做子串匹配。这意味着 `MY_TOKEN`、`API_KEY_V2` 等变体能被捕获。但以下模式未被覆盖：`auth`（如 `AUTHORIZATION`）、`session`（如 `SESSION_ID`）、`cookie`（如 `COOKIE_TOKEN`）、`bearer`（如 `BEARER_AUTH`）、`refresh`（如 `REFRESH_TOKEN`）、`jwt`（如 `JWT_SECRET`）。
+
+**File Location:** `framework/agent_framework/tools/mcp/config.py:19-27`
+
+**Impact:** MCP server 配置可以注入 `AUTHORIZATION`、`SESSION_ID`、`COOKIE` 等敏感环境变量，绕过当前的环境变量过滤。虽然 MCP server 本身是本地子进程，但如果恶意 MCP 配置被加载，敏感凭据可能泄露给第三方 MCP server 进程。
+
+**Fix Suggestion:** 扩展 `_BLOCKED_ENV_PATTERNS` 增加 `auth`、`session`、`cookie`、`bearer`、`refresh`、`jwt` 模式。或改用白名单机制：只允许配置中以 `MCP_` 前缀开头的环境变量。
+
+**Priority:** MEDIUM
+**Related:** FRMW-04 (安全审查)
+
+---
+
+#### FRMW-SEC-16: MCP transport.py 直接合并 env 继承全部系统环境变量
+
+**Description:** `mcp/transport.py:57` 中 `StdioTransport.connect()` 使用 `env = {**os.environ, **(self._env or {})}` 构建子进程环境变量。这意味着 MCP server 子进程继承了完整的系统环境——包括当前进程中所有环境变量（如 `OPENAI_API_KEY`、`ANTHROPIC_API_KEY`、`DATABASE_URL` 等）。虽然 `_reject_sensitive_env_keys` 会过滤用户在 config 中显式设置的敏感 key，但子进程自动继承的环境变量不受此限制。
+
+**File Location:** `framework/agent_framework/tools/mcp/transport.py:57`
+
+**Impact:** 如果安装了不受信任的 MCP server（如社区提供的第三方 server），该 server 的子进程可以通过读取环境变量获取宿主进程的所有 API key 和凭据。
+
+**Fix Suggestion:** 改为白名单机制：子进程只继承必要的环境变量（如 `PATH`、`HOME`、`TEMP`），加上 MCP config 中显式声明的 `env` 字段。或至少在文档中明确说明 MCP server 子进程继承全部环境变量的安全影响。
+
+**Priority:** MEDIUM
+**Related:** FRMW-04 (安全审查)
+
+---
+
+#### FRMW-ARCH-08: compactor.py 压缩操作每次额外消耗一次 LLM API 调用
+
+**Description:** `tools/context/compactor.py:126-156` 中 `_generate_summary` 每次压缩都会调用 `adapter.complete()` 发起一次完整的 LLM API 请求。这个调用使用 `max_tokens=8000`，每次消耗的 token 数等于序列化后的旧消息 + 8000 output token。对于长对话，序列化输入可能非常大。
+
+**File Location:** `framework/agent_framework/tools/context/compactor.py:126-156`
+
+**Impact:** (1) 每次 compaction 的 API 成本可能高于被节省的 token 成本（如果旧消息不多，摘要本身的开销可能大于节省的上下文空间）。(2) 增加了请求延迟——compaction 期间 Agent 循环被阻塞等待 LLM 响应。(3) 如果 LLM 调用失败（如 rate limit），compaction 失败且没有 fallback。
+
+**Fix Suggestion:** (1) 添加最小压缩阈值：只有当旧消息超过一定量时才触发 LLM 摘要（否则直接丢弃旧消息或使用简单截断）。(2) 为 `_generate_summary` 添加 try-except，LLM 调用失败时 fallback 到简单截断（只保留每条消息的前 N 个字符）。
+
+**Priority:** MEDIUM
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-ARCH-09: search_tools.py 模块级可变全局状态（_client 单例 + _semaphore）
+
+**Description:** `tools/builtin/search_tools.py` 在模块级定义了 `_client: AsyncTavilyClient | None = None`（行 16）和 `_semaphore: asyncio.Semaphore = asyncio.Semaphore(5)`（行 13）。(1) `_client` 使用 `global` 赋值在 `_get_client()` 中实现懒加载单例——模块级全局可变状态，多 Agent 实例共享同一个 client。(2) `_semaphore` 在模块导入时创建，但 `asyncio.Semaphore` 绑定到创建时的事件循环——如果在不同的 asyncio 事件循环中使用（如测试场景），semaphore 可能不工作。(3) `reset_client()` 通过 `global` 重置——如果两个 Agent 同时调用 `reset_client()` 和 `_get_client()`，存在竞态条件。
+
+**File Location:** `framework/agent_framework/tools/builtin/search_tools.py:13,16,21-27,30-33`
+
+**Impact:** (1) 全局单例导致测试难以隔离——一个测试重置 client 会影响其他测试。(2) 跨事件循环使用时 semaphore 可能抛 `RuntimeError: Task attached to a different loop`。(3) 多 Agent 实例共享同一个并发限制（5），而非每个 Agent 独立控制。
+
+**Fix Suggestion:** 将 `_client` 和 `_semaphore` 移入类中（如 `SearchToolProvider`），通过依赖注入传入 ToolSpec handler。消除模块级可变状态。
+
+**Priority:** MEDIUM
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-LOGIC-07: ToolValidator 不验证 unknown 参数和 enum 约束
+
+**Description:** `tools/validator.py` 的 `validate` 方法只检查两项：(1) required 字段是否存在（行 26-31），(2) 已提供参数的 type 是否匹配（行 34-49）。但它不验证：(1) 调用方传入的参数是否在 schema 的 properties 中定义（unknown 参数被静默忽略）。(2) enum 约束——`memory_tools.py` 的 `event_type` 参数定义了 `enum: ["决策", "偏好", "错误", "约定", "进展"]`，但 validator 不检查传入值是否在 enum 列表中。enum 验证由 handler 自己做（如 `handle_memory_write` 行 31 的 `EventType(raw_type)` 会抛 ValueError）。
+
+**File Location:** `framework/agent_framework/tools/validator.py:21-51`
+
+**Impact:** (1) LLM 生成的 tool call 可能包含拼写错误的参数名，validator 不会报错，handler 收到缺少必要参数的调用。(2) enum 约束不在 validator 层执行意味着每个 handler 都要自行验证 enum 值，违反 DRY 原则。
+
+**Fix Suggestion:** 在 validator 中添加 enum 检查：`if "enum" in prop_schema and value not in prop_schema["enum"]: return error`。对于 unknown 参数，至少记录 warning 或根据 strict 模式决定是否拒绝。
+
+**Priority:** MEDIUM
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-LOGIC-08: ToolUseContext.extra 的 dict[str, Any] 无类型安全
+
+**Description:** `tools/types.py:57` 中 `ToolUseContext.extra: dict[str, Any] = {}` 是一个完全无类型的字典。各个 handler 通过字符串 key 访问特定值（如 `ctx.extra.get("memory_dir")`、`ctx.extra.get("memory_store")`、`ctx.extra.get("planning_session")`），但没有任何类型检查或文档说明合法的 key 集合。如果 key 拼写错误（如 `"memoryDire"` 代替 `"memory_dir"`），运行时只会得到 `None`，不会报错。
+
+**File Location:** `framework/agent_framework/tools/types.py:57`
+
+**Impact:** handler 和调用方之间的接口契约完全靠约定维持，没有编译时检查。拼写错误的 key 导致 handler 静默进入 fallback 路径或返回错误。
+
+**Fix Suggestion:** 将 `extra` 改为结构化的 TypedDict 或 Pydantic model，明确定义所有合法 key 及其类型。如 `class ToolExtra(TypedDict, total=False): memory_dir: str; memory_store: MemoryStore; planning_session: PlanningSession`。
+
+**Priority:** MEDIUM
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-LOGIC-09: McpManager._register_tools 注册无 handler 的 ToolSpec
+
+**Description:** `mcp/config.py:109-124` 中 `_register_tools` 为 MCP 工具创建 ToolSpec 但不设置 `handler`（默认为 `None`）。这些 ToolSpec 注册到 registry 后，如果通过 `_dispatch_builtin` 调用（而非 `_dispatch_mcp`），`ToolExecutor.execute()` 会在行 25-29 返回"工具不可执行（无 handler）"。虽然 dispatch 通过 `name.startswith("mcp__")` 路由到 `_dispatch_mcp`，但如果有人直接调用 `registry.get("mcp__xxx")` 然后通过 executor 执行，会得到不明确的错误。
+
+**File Location:** `framework/agent_framework/tools/mcp/config.py:109-124`
+
+**Impact:** MCP 工具的 ToolSpec 与 builtin 工具的 ToolSpec 行为不一致——前者无 handler（依赖路由层分派），后者有 handler。这违反了 ToolSpec 的隐含契约（有 handler 就能执行）。
+
+**Fix Suggestion:** (1) 为 MCP 工具的 ToolSpec 设置一个 lambda handler 转发到 `_dispatch_mcp`，使 ToolSpec 自包含。(2) 或在 ToolSpec 中添加 `source: Literal["builtin", "mcp", "agent"]` 字段，明确标识工具来源。
+
+**Priority:** MEDIUM
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-SEC-17: MCP config.py shutdown 中 try-except-pass 静默吞异常
+
+**Description:** `mcp/config.py:95-102` 中 `McpManager.shutdown()` 的 except 分支使用 `except Exception: pass`，静默跳过单个 client 关闭失败。ruff S110 已标记此模式。在并发场景下，如果多个 MCP client 关闭失败，全部被静默忽略，可能导致子进程泄漏。
+
+**File Location:** `framework/agent_framework/tools/mcp/config.py:97-101`
+
+**Impact:** MCP server 子进程关闭失败时，进程可能继续运行（孤儿进程），占用资源且无法追踪。
+
+**Fix Suggestion:** 添加 `logger.debug` 记录关闭失败的原因和 server 名称。
+
+**Priority:** MEDIUM
+**Related:** FRMW-04 (安全审查)
+
+---
+
+#### FRMW-DEAD-12: memory_tools.py 导入 datetime 但可使用 dataclass 替代
+
+**Description:** `tools/builtin/memory_tools.py:7` 导入了 `datetime`，但 `datetime.now()` 仅用于获取当前时间戳传给 `EpisodicLogManager.append()`。该模块本身不需要 datetime 的复杂功能，但这是合理的标准库使用，不算真正的死代码。
+
+**File Location:** `framework/agent_framework/tools/builtin/memory_tools.py:7`
+
+**Impact:** 无实际影响。
+
+**Fix Suggestion:** 无需修改。
+
+**Priority:** MEDIUM
+**Related:** FRMW-01 (死代码检测)
+
+---
 
 ### LOW
 
-*(pending)*
+#### FRMW-ARCH-10: ToolDegrader 降级到 builtin 但不支持降级到 MCP 工具
+
+**Description:** `tools/degrader.py` 的 `_fallbacks` 映射只支持 `tool_name -> fallback_tool_name` 的简单映射。在 `ToolRouter.dispatch()` 行 113-117 中，降级时固定调用 `_dispatch_builtin`（行 114），这意味着降级目标只能是 builtin 工具。如果需要降级到 MCP 工具（如本地搜索工具失败时降级到 MCP 搜索服务），当前实现不支持。
+
+**File Location:** `framework/agent_framework/tools/degrader.py`, `framework/agent_framework/tools/router.py:113-117`
+
+**Impact:** 降级策略的范围受限于 builtin 工具。在当前只有 6 个 builtin 工具的场景下，实际影响很小。
+
+**Fix Suggestion:** 降级时使用 `dispatch(active_call, ctx)` 替代 `_dispatch_builtin`，让降级工具也能走完整的路由逻辑（包括 MCP 路由）。需要注意防止降级工具再次失败导致的无限递归。
+
+**Priority:** LOW
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-ARCH-11: registry.py subset() 静默跳过不存在的工具名
+
+**Description:** `tools/registry.py:29-35` 中 `subset(names)` 方法对传入的每个 name 调用 `self.get(name)`，如果返回 None 则静默跳过。调用方无法知道请求的工具中哪些不存在。
+
+**File Location:** `framework/agent_framework/tools/registry.py:29-35`
+
+**Impact:** 如果调用方期望的工具列表中有拼写错误，subset 会静默返回不完整的子集，不会报错。可能导致运行时缺少必要工具。
+
+**Fix Suggestion:** 添加 `strict` 参数：`subset(names, strict=False)` — 当 `strict=True` 时，遇到不存在的 name 抛出 `KeyError`。
+
+**Priority:** LOW
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-ARCH-12: compactor.py _serialize_for_summary 只提取 TextBlock
+
+**Description:** `tools/context/compactor.py:103-123` 中 `_serialize_for_summary` 对 `UserMessage` 和 `AssistantMessage` 只提取 `TextBlock`（行 112-114, 116-118），忽略了 `ToolUseBlock`、`ToolResultBlock` 等 content block。这意味着摘要 LLM 看不到工具调用和结果，只看到纯文本部分。
+
+**File Location:** `framework/agent_framework/tools/context/compactor.py:112-118`
+
+**Impact:** 如果对话中有大量工具调用（如 Agent 执行了多步 plan），摘要 LLM 只能看到 `[Assistant] ` 后面没有任何工具调用内容。摘要质量会下降——丢失了"Agent 做了什么"的关键信息。
+
+**Fix Suggestion:** 为 `ToolUseBlock` 提取 `name + input` 摘要，为 `ToolResultBlock` 提取 `content[:200]` 摘要。保持序列化简洁但信息完整。
+
+**Priority:** LOW
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-ARCH-13: ToolRouter.dispatch 中 PreHook 和 PostHook 使用不同的 name 变量
+
+**Description:** `router.py` 行 62 定义 `name = call.name`，行 79 定义 `active_call = call`。PreHook 阶段可能通过 `hr.updated_input` 创建新的 `active_call`（行 94-98），但 PostHook 阶段（行 138-155）使用的 `name` 仍是原始的 `call.name`，而非 `active_call.name`。虽然当前 PreHook 不修改 tool name（只修改 arguments），但这是一个潜在的一致性问题。
+
+**File Location:** `framework/agent_framework/tools/router.py:62,79,138`
+
+**Impact:** 当前无实际影响——PreHook 只修改 `updated_input`（参数），不修改工具名。但如果未来 PreHook 支持重定向工具名（将调用从工具 A 改到工具 B），PostHook 会使用错误的工具名。
+
+**Fix Suggestion:** 在创建 `active_call` 后更新 `name = active_call.name`，或在 PostHook 中统一使用 `active_call.name`。
+
+**Priority:** LOW
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-LOGIC-10: ToolResult.metadata 默认空 dict 共享引用问题
+
+**Description:** `tools/types.py:25` 中 `ToolResult.metadata: dict[str, Any] = {}`。由于 Pydantic BaseModel 的默认值在类定义时求值，如果多个 ToolResult 实例共享同一个默认 dict，修改一个实例的 metadata 可能影响其他实例。不过 Pydantic v2 的 `model_config` 默认行为会为每个实例创建独立的 dict，所以实际不会触发此问题。
+
+**File Location:** `framework/agent_framework/tools/types.py:25`
+
+**Impact:** Pydantic v2 已正确处理此场景，无实际影响。但如果迁移到其他框架或手写 dataclass，可能出现共享引用问题。
+
+**Fix Suggestion:** 可使用 `Field(default_factory=dict)` 替代 `= {}`，更明确地表达意图。但当前 Pydantic 行为正确，非必要修改。
+
+**Priority:** LOW
+**Related:** FRMW-02 (逻辑漏洞)
 
 ---
 
