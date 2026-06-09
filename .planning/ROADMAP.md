@@ -126,7 +126,7 @@ Plans:
 
 **Requirements:** FRNT-01, FRNT-02, FRNT-03, FRNT-04, FRNT-05
 
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 14-01-PLAN.md — ESLint 自动扫描基线 + 全文件人工审查 + 审查汇总
