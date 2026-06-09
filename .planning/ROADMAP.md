@@ -128,7 +128,7 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 14-01-PLAN.md — ESLint 自动扫描基线 + 全文件人工审查 + 审查汇总
+- [x] 14-01-PLAN.md — ESLint 自动扫描基线 + 全文件人工审查 + 审查汇总
 - [ ] 14-02-PLAN.md — 跨层交叉参照 + 质量检查 + 用户验证
 
 **Scope:**
