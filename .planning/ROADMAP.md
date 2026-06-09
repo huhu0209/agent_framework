@@ -97,6 +97,12 @@ Plans:
 
 **Requirements:** BKND-01, BKND-02, BKND-03, BKND-04, BKND-05
 
+**Plans:** 2 plans
+
+Plans:
+- [ ] 13-01-PLAN.md — ruff 自动扫描 + 逐文件人工审查 + 数据流追踪
+- [ ] 13-02-PLAN.md — 跨层交叉参照 + 报告汇总 + 质量检查 + 用户验证
+
 **Scope:**
 - 使用静态分析工具检测未使用的函数、类、import、变量
 - 审查 API 端点逻辑、数据验证、错误处理
