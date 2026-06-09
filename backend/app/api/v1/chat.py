@@ -98,6 +98,7 @@ async def create_chat(req: ChatRequest, request: Request):
         "content": req.message,
         "timestamp": time.time(),
     })
+    sm._redis_set_messages(session.session_id, session.messages)
 
     async def event_stream() -> AsyncGenerator[str, None]:
         loop = session.agent_loop
@@ -123,6 +124,7 @@ async def create_chat(req: ChatRequest, request: Request):
                         "blocks": content,
                         "timestamp": time.time(),
                     })
+                    sm._redis_set_messages(session.session_id, session.messages)
                     # 更新会话标题（取第一条用户消息前 50 字符）
                     if len(session.messages) <= 2:
                         sm.update_title(session.session_id, req.message[:50])

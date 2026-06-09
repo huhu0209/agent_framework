@@ -68,9 +68,15 @@ class SessionManager:
 
     def get_messages(self, session_id: str) -> list[dict] | None:
         """获取 session 的消息列表，支持从 transcript 恢复。"""
+        # 1. 内存
         session = self._sessions.get(session_id)
         if session is not None:
             return session.messages
+        # 2. Redis
+        cached = self._redis_get_messages(session_id)
+        if cached is not None:
+            return cached
+        # 3. JSONL 冷读 → 回填 Redis
         if not self._storage_dir:
             return None
         transcript_path = self._storage_dir / f"{session_id}.jsonl"
@@ -88,6 +94,7 @@ class SessionManager:
                 result.append({"role": "agent", "blocks": blocks, "timestamp": ev.timestamp})
             elif ev.type.value == "tool_result":
                 continue  # tool_result 不展示在历史中
+        self._redis_set_messages(session_id, result)
         return result
 
     def remove(self, session_id: str) -> None:
@@ -146,6 +153,8 @@ class SessionManager:
         with open(history_path, "w", encoding="utf-8") as f:
             f.write("\n".join(lines) + "\n")
         self._invalidate_list_cache()
+        if self._redis:
+            self._redis.delete(f"session:{session_id}:meta")
         return updated
 
     def list_sessions(self) -> list[dict]:
@@ -175,9 +184,36 @@ class SessionManager:
         """使 session 列表缓存失效。"""
         self._session_list_cache = None
 
+    def _redis_set_messages(self, session_id: str, messages: list[dict]) -> None:
+        """将消息列表写入 Redis Sorted Set。"""
+        if not self._redis:
+            return
+        key = f"session:{session_id}:messages"
+        pipe = self._redis.pipeline()
+        pipe.delete(key)
+        for msg in messages:
+            score = msg.get("timestamp", 0)
+            pipe.zadd(key, {json.dumps(msg, ensure_ascii=False): score})
+        pipe.expire(key, 86400)  # 24h TTL
+        pipe.execute()
+
+    def _redis_get_messages(self, session_id: str) -> list[dict] | None:
+        """从 Redis Sorted Set 读取消息。"""
+        if not self._redis:
+            return None
+        key = f"session:{session_id}:messages"
+        if not self._redis.exists(key):
+            return None
+        raw = self._redis.zrange(key, 0, -1)
+        if not raw:
+            return None
+        return [json.loads(item) for item in raw]
+
     def delete_session(self, session_id: str) -> bool:
         """删除会话及其 transcript。"""
         self._invalidate_list_cache()
+        if self._redis:
+            self._redis.delete(f"session:{session_id}:messages", f"session:{session_id}:meta")
         self.remove(session_id)
         if not self._storage_dir:
             return False
