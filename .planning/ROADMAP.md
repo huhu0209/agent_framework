@@ -53,6 +53,7 @@
 | 9. Backend 事件系统 | v0.0.3 | 3/3 | Complete | 2026-05-29 |
 | 10. Frontend Canvas 渲染 | v0.0.3 | 3/3 | Complete | 2026-05-30 |
 | 11. Frontend React 集成 | v0.0.3 | 3/3 | Complete | 2026-05-31 |
+| 12. Framework 代码审查 | v0.0.4 | 1/5 | In Progress | — |
 
 ---
 
@@ -69,7 +70,7 @@
 **Plans:** 5 plans
 
 Plans:
-- [ ] 12-01-PLAN.md — ruff 自动扫描基线 + llm/ 模块人工审查
+- [x] 12-01-PLAN.md — ruff 自动扫描基线 + llm/ 模块人工审查
 - [ ] 12-02-PLAN.md — tools/ + agents/ 模块逐文件人工审查
 - [ ] 12-03-PLAN.md — memory/ + safety/ + teams/ + tasks/ 模块逐文件人工审查
 - [ ] 12-04-PLAN.md — orchestrator/ + a2a/ + skills/ + hooks/ + commands/ + prompts/ + transcript/ + viz/ 模块人工审查
