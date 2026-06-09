@@ -40,11 +40,11 @@
 
 ### Framework 审查（agent_framework/）
 
-- [ ] **FRMW-01**: 检测框架层所有未使用的函数、类、import、变量、文件
-- [ ] **FRMW-02**: 查找框架层逻辑漏洞、竞态条件、错误处理缺陷
-- [ ] **FRMW-03**: 审查框架层不合理设计模式、违反原则、过度工程
-- [ ] **FRMW-04**: 审查框架层安全漏洞（注入、信息泄露、路径遍历等）
-- [ ] **FRMW-05**: 产出框架层审查报告（含优先级分级和修复建议）
+- [x] **FRMW-01**: 检测框架层所有未使用的函数、类、import、变量、文件
+- [x] **FRMW-02**: 查找框架层逻辑漏洞、竞态条件、错误处理缺陷
+- [x] **FRMW-03**: 审查框架层不合理设计模式、违反原则、过度工程
+- [x] **FRMW-04**: 审查框架层安全漏洞（注入、信息泄露、路径遍历等）
+- [x] **FRMW-05**: 产出框架层审查报告（含优先级分级和修复建议）
 
 ### Backend 审查（backend/）
 
@@ -52,7 +52,7 @@
 - [x] **BKND-02**: 查找后端逻辑漏洞、竞态条件、错误处理缺陷
 - [x] **BKND-03**: 审查后端不合理设计模式、违反原则、过度工程
 - [x] **BKND-04**: 审查后端安全漏洞（注入、信息泄露、认证问题等）
-- [ ] **BKND-05**: 产出后端审查报告（含优先级分级和修复建议）
+- [x] **BKND-05**: 产出后端审查报告（含优先级分级和修复建议）
 
 ### Frontend 审查（frontend/）
 
@@ -86,16 +86,16 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FRMW-01 | Phase 12 | Pending |
-| FRMW-02 | Phase 12 | Pending |
-| FRMW-03 | Phase 12 | Pending |
-| FRMW-04 | Phase 12 | Pending |
-| FRMW-05 | Phase 12 | Pending |
+| FRMW-01 | Phase 12 | Complete |
+| FRMW-02 | Phase 12 | Complete |
+| FRMW-03 | Phase 12 | Complete |
+| FRMW-04 | Phase 12 | Complete |
+| FRMW-05 | Phase 12 | Complete |
 | BKND-01 | Phase 13 | Complete |
 | BKND-02 | Phase 13 | Complete |
 | BKND-03 | Phase 13 | Complete |
 | BKND-04 | Phase 13 | Complete |
-| BKND-05 | Phase 13 | Pending |
+| BKND-05 | Phase 13 | Complete |
 | FRNT-01 | Phase 14 | Complete |
 | FRNT-02 | Phase 14 | Complete |
 | FRNT-03 | Phase 14 | Complete |

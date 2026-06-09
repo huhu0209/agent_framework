@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: v0.0.4
-milestone_name: 全面代码审查
-status: milestone_complete
-last_updated: 2026-06-09T14:24:25.789Z
-last_activity: 2026-06-09 -- Phase 14 Plan 02 complete, v0.0.4 all reviews done
+milestone: none
+milestone_name: none
+status: planning_next
+last_updated: 2026-06-09T22:30:00.000Z
+last_activity: 2026-06-09 -- v0.0.4 milestone archived, planning next
 progress:
-  total_phases: 3
-  completed_phases: 3
-  total_plans: 9
-  completed_plans: 18
-  percent: 100
-stopped_at: Milestone complete (Phase 14 was final phase)
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
+stopped_at: Milestone v0.0.4 archived
 ---
 
 # STATE.md
@@ -21,59 +21,38 @@ stopped_at: Milestone complete (Phase 14 was final phase)
 See: .planning/PROJECT.md (updated 2026-06-09)
 
 **Core value:** 可靠的 Agent 编排框架，提供安全、可测试、可扩展的基础设施
-**Current focus:** Milestone complete
+**Current focus:** Planning next milestone
 
-## Current Milestone
+## Milestone History
 
-**Milestone:** v0.0.4 — 全面代码审查
-**Status:** Milestone complete
-**Previous:** v0.0.3 shipped 2026-05-31 (9/9 plans, 964 tests)
-
-## Phase Progress
-
-Phase numbering continues from v0.0.3 (Phase 9-11).
-v0.0.4 starts at Phase 12.
-
-| Phase | Plans | Status |
-|-------|-------|--------|
-| 12. Framework 代码审查 | 5 plans | Complete |
-| 13. Backend 代码审查 | 2 plans | Complete |
+- **v0.0.1** — 彻底 Code Review (shipped 2026-05-29, 687 tests)
+- **v0.0.2** — Agent 扩展与编排 (shipped 2026-05-29, 812 tests)
+- **v0.0.3** — Agent 可视化平台 MVP (shipped 2026-05-31, 964 tests)
+- **v0.0.4** — 全面代码审查 (shipped 2026-06-09, 964 tests, 189 review issues)
 
 ## Current Position
 
-Phase: 14
+Phase: 15 (next)
 Plan: Not started
-Status: Phase 14 complete. All 3 review phases done. v0.0.4 milestone complete.
-Last activity: 2026-06-09
+Status: Milestone v0.0.4 archived. Planning next milestone.
 
-Progress: [██████████] 100%
+Progress: [----------] 0%
 
-## Performance Metrics
-
-**Velocity:**
+## Velocity
 
 - v0.0.1: 12 plans (5 phases, 17 days)
 - v0.0.2: 9 plans (3 phases, 1 day)
 - v0.0.3: 9 plans (3 phases, 3 days)
-- Total: 30 plans across 11 phases
-
-**Recent Trend:** Milestone v0.0.3 shipped. Starting v0.0.4 comprehensive code review.
-
-## Active Context
-
-- v0.0.3 shipped with 964 tests passing
-- 三个模块需要全面审查：agent_framework/, backend/, frontend/
-- v0.0.1 遗留 14 项技术债 (all LOW) 需重新评估
-- 前端单元测试仍然缺失
-- 代码审查范围：死代码、逻辑漏洞、不合理设计、安全问题
+- v0.0.4: 9 plans (3 phases, 1 day)
+- Total: 39 plans across 14 phases
 
 ## Deferred Items
 
 | Category | Item | Status |
 |----------|------|--------|
+| tech_debt | 189 review issues (64 HIGH, 90 MEDIUM, 35 LOW) | documented in review reports |
 | tech_debt | SEC-04~06, PERF-03~05, ARCH-01~12 | documented-only (LOW) |
-| tech_debt | v0.0.3 前端单元测试缺失 | v0.0.4 review target |
-| tech_debt | start_team/stop_team 仅接收确认 | v0.0.4 review target |
+| tech_debt | v0.0.3 前端单元测试缺失 | review target |
 | feature | EventBus topic 过滤机制 | deferred |
 | feature | 事件持久化到文件/数据库 | deferred |
 | feature | 多动物形象选择 | deferred |
