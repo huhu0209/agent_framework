@@ -9,6 +9,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from agent_framework.agents.agent_loop import AgentLoop
 from agent_framework.transcript import TranscriptWriter
@@ -31,10 +32,11 @@ class ChatSession:
 class SessionManager:
     """管理活跃 session 的生命周期，含 TTL 自动淘汰。"""
 
-    def __init__(self, ttl: float = SESSION_TTL, storage_dir: Path | None = None) -> None:
+    def __init__(self, ttl: float = SESSION_TTL, storage_dir: Path | None = None, redis_client: Any | None = None) -> None:
         self._sessions: dict[str, ChatSession] = {}
         self._ttl = ttl
         self._storage_dir = storage_dir
+        self._redis = redis_client
         self._cleanup_task: asyncio.Task | None = None  # type: ignore[type-arg]
         self._session_list_cache: list[dict] | None = None
 

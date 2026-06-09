@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     llm_api_key: str = ""
     llm_model: str = "claude-sonnet-4-20250514"
     llm_base_url: str | None = None
+    redis_url: str = "redis://localhost:6379/0"
 
     model_config = {"env_prefix": "APP_", "env_file": ".env"}
 

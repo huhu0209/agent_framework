@@ -5,6 +5,7 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import redis as redis_lib
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -23,7 +24,8 @@ async def lifespan(app: FastAPI):
     settings = Settings()
     factory = AgentFactory.from_settings(settings)
     storage_dir = Path(__file__).parent / "data" / "sessions"
-    sm = SessionManager(storage_dir=storage_dir)
+    rdb = redis_lib.Redis.from_url(settings.redis_url, decode_responses=True)
+    sm = SessionManager(storage_dir=storage_dir, redis_client=rdb)
     sm.start_cleanup()
 
     app.state.session_manager = sm
@@ -31,6 +33,7 @@ async def lifespan(app: FastAPI):
     yield
     sm.cancel_all()
     sm.stop_cleanup()
+    rdb.close()
 
 
 app = FastAPI(title="Agent Chat", lifespan=lifespan)
