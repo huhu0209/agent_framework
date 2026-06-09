@@ -199,6 +199,81 @@ Four ruff scan categories were run against `framework/agent_framework/` (excludi
 
 ### MEDIUM
 
+#### FRMW-LOGIC-01: normalize_messages 中 last.content 在 model_copy(update=...) 前已被 content=list(msg.content) 修改
+
+**Description:** `normalize_messages` 函数在合并同角色消息时（行 44-46），先做 `last.model_copy(update={"content": [*last.content, *msg.content]})`。虽然这里用了 `model_copy` 而非直接赋值（避免了 in-place mutation），但行 31 `msg.model_copy(update={"content": list(msg.content)})` 对每个新消息创建了 content 的浅拷贝。由于 Pydantic BaseModel 的 `content` 是 `list[ContentBlock]`，`list(msg.content)` 只拷贝引用，不拷贝 ContentBlock 对象本身。如果外部代码修改了 ContentBlock 的可变字段（如 `ToolUseBlock.input: dict`），会影响已规范化的消息。
+
+**File Location:** `framework/agent_framework/llm/transform/_normalize.py:31,45`
+
+**Impact:** 大部分 ContentBlock 是 frozen Pydantic model（不可变），但 `ToolUseBlock.input` 是 `dict[str, Any]`（可变）。如果调用方在规范化后修改了 input dict，规范化结果会意外改变。
+
+**Fix Suggestion:** `normalize_messages` 的浅拷贝行为在实际使用中尚未引发 bug（因为调用方通常不修改 input），但违反不可变性原则。如果严格遵循不可变性，应使用 `copy.deepcopy` 或确保 ContentBlock 的可变字段不被外部修改。
+
+**Priority:** MEDIUM
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-LOGIC-02: _pair_tool_results 插入位置可能错误
+
+**Description:** `_pair_tool_results` 函数在查找缺失 tool_result 的插入位置时，先找最后一个 ToolMessage 的位置（行 89-92），如果找不到，找最后一个 AssistantMessage 的位置（行 94-98）。但插入使用 `insert(insert_idx + 1 + j, placeholder)`，在找到最后一个 ToolMessage 后插入到其后方。如果消息序列是 `[AssistantMsg(tool_use), ToolMsg(A), AssistantMsg(tool_use), (missing B)]`，缺失的 B 会被插入到 A 后面而非第二个 AssistantMsg 后面。在严格协议要求下（tool_result 必须紧跟 tool_use），这可能导致 tool_result 和 tool_use 的配对关系不正确。
+
+**File Location:** `framework/agent_framework/llm/transform/_normalize.py:89-102`
+
+**Impact:** 当存在多个 tool_use 且部分缺失 tool_result 时，placeholder 的插入位置可能不够精确。但实际场景中，通常一个 assistant message 中的所有 tool_use 共享相同的 tool_result 消息，因此位置偏差通常不影响 API 行为。
+
+**Fix Suggestion:** 改为按 tool_use 的位置逐个插入缺失的 tool_result，确保每个 placeholder 紧跟其对应的 assistant message 中的 tool_use。
+
+**Priority:** MEDIUM
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-LOGIC-03: resilient.py stream() 传输阶段错误不触发重试
+
+**Description:** `ResilientLLMAdapter.stream()` 在重试循环中只捕获连接建立阶段的错误（获取 first_event）。一旦进入传输阶段（`yield first_event` + `async for event in stream`），如果发生 `LLMAdapterError`，会直接 record_failure 并 raise，不会重试。这意味着传输中途的网络断开（如 HTTP 连接超时）会导致整个流失败，无法通过重试恢复。
+
+**File Location:** `framework/agent_framework/llm/resilient.py:94-101`
+
+**Impact:** 流式传输中途失败时，调用方需要自行处理重试（重新发起完整请求）。对于长响应（大量 tool call 参数），中途失败的代价较高（已接收的 token 浪费）。
+
+**Fix Suggestion:** 流式传输中途失败的重试需要 checkpoint 机制（记录已接收位置），实现复杂度较高。当前行为可接受，但应在文档中明确说明流式传输的 retry 仅覆盖连接建立阶段。
+
+**Priority:** MEDIUM
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-LOGIC-04: CircuitBreaker HALF_OPEN 状态下 success_count 未在 CLOSED 状态重置
+
+**Description:** `CircuitBreaker.record_success()` 在 HALF_OPEN 状态下递增 `_success_count`，达到阈值后转为 CLOSED 并重置 `_failure_count` 和 `_success_count`。但在 CLOSED 状态下（行 227-228），`record_success()` 只重置 `_failure_count = 0`，不清除 `_success_count`。这意味着 `_success_count` 在从 HALF_OPEN 恢复到 CLOSED 后仍然保留之前的计数。但由于 CLOSED 状态下不检查 `_success_count`，这不影响功能正确性。
+
+**File Location:** `framework/agent_framework/llm/retry.py:217-228`
+
+**Impact:** `get_stats()` 在 CLOSED 状态下可能返回非零的 `success_count`，与直觉不符（closed 状态应该没有"探测成功"计数）。不影响状态转换正确性。
+
+**Fix Suggestion:** 在 CLOSED 状态的 `record_success()` 中也重置 `_success_count = 0`。
+
+**Priority:** MEDIUM
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-ARCH-05: _PROVIDER_MAP 使用字符串路径做动态 import
+
+**Description:** `resilient.py` 中的 `_PROVIDER_MAP` 使用 `"agent_framework.llm.providers.deepseek_provider.DeepSeekProvider"` 这样的字符串路径动态加载 Provider 类。如果模块路径重构（如重命名 provider 文件），`_PROVIDER_MAP` 中的路径会失效，导致运行时 `ImportError`。没有编译时检查。
+
+**File Location:** `framework/agent_framework/llm/resilient.py:137-141,144-150`
+
+**Impact:** 重构时容易遗漏更新 `_PROVIDER_MAP`。目前只有 3 个 provider，维护成本可控。
+
+**Fix Suggestion:** 改用静态导入 + 字典映射（`from .providers.deepseek_provider import DeepSeekProvider`），让 IDE 和类型检查器能发现路径变更。或添加单元测试验证所有 `_PROVIDER_MAP` 条目可正常加载。
+
+**Priority:** MEDIUM
+**Related:** FRMW-03 (设计问题)
+
+---
+
 #### FRMW-DEAD-01: _deepseek.py 导入 _openai.py 的两个内部函数但未使用
 
 **Description:** `llm/transform/_deepseek.py` 从 `._openai` 导入了 `_map_openai_stop_reason` 和 `_parse_openai_usage`，但两者都未使用。这可能是因为 DeepSeek 转换器有独立的实现（`_map_deepseek_stop_reason`、`_parse_deepseek_usage`），但复制代码时遗留了 OpenAI 版本的 import。
@@ -246,7 +321,78 @@ Four ruff scan categories were run against `framework/agent_framework/` (excludi
 
 ### LOW
 
-*(pending manual review — additional findings from Task 2)*
+#### FRMW-ARCH-01: OpenAI 与 DeepSeek Provider 大量代码重复
+
+**Description:** `openai_provider.py` 和 `deepseek_provider.py` 共享近乎相同的结构：`_build_request_body`、`_parse_response`、`_handle_error`、`complete`、`stream`、`health_check`、`close` 方法的实现几乎一致。两者都使用 `OpenAIStreamParser` 和 `parse_sse_lines`，错误处理逻辑完全相同。唯一的差异是 DeepSeek 额外做了 `_validate_no_image_blocks` 和 thinking 模式参数静默警告。
+
+**File Location:** `framework/agent_framework/llm/providers/openai_provider.py` (全文), `framework/agent_framework/llm/providers/deepseek_provider.py` (全文)
+
+**Impact:** 维护两份几乎相同的代码增加了 bug 风险 — 修复一个 provider 的 bug 时容易忘记同步另一个。当前约 160 行重复代码。
+
+**Fix Suggestion:** 提取 `OpenAICompatProvider` 基类，包含 `complete`/`stream`/`health_check`/`close` 的通用实现。`DeepSeekProvider` 继承它并添加 `_validate_no_image_blocks` 和 thinking 警告逻辑。
+
+**Priority:** LOW
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-ARCH-02: health_check 使用完整 API 调用（高成本健康检查）
+
+**Description:** 三个 Provider 的 `health_check` 都发送一个完整的 LLM API 调用（`/v1/messages` 或 `/chat/completions`），消耗 token 并增加延迟。对于频繁的健康检查（如 circuit breaker 探测），每次消耗 1 个 output token + 若干 input token。
+
+**File Location:** `framework/agent_framework/llm/providers/anthropic_provider.py:354-366`, `framework/agent_framework/llm/providers/openai_provider.py:207-219`, `framework/agent_framework/llm/providers/deepseek_provider.py:246-258`
+
+**Impact:** 每次 circuit breaker 探测消耗 API 配额。在高频探测场景下累积成本显著。
+
+**Fix Suggestion:** 改为 HEAD 请求或只检查 DNS + TCP 连接建立。如果 provider API 不支持 HEAD，可检查 `/v1/models` 等轻量端点。
+
+**Priority:** LOW
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-ARCH-03: AnthropicStreamParser 仅在 message_delta 输出 TOOL_USE_END
+
+**Description:** `AnthropicStreamParser.parse_event` 仅在 `message_delta` 事件中输出 `TOOL_USE_END` 事件，而不是在 `content_block_stop` 时。这意味着 tool call 的完整参数（包含 JSON 解析后的 input）要等到整个消息结束才可用。如果消息很长（大量 text 后跟 tool_use），调用方需要等待所有 content blocks 结束才能获得 tool call 的解析结果。
+
+**File Location:** `framework/agent_framework/llm/providers/anthropic_provider.py:210-244`
+
+**Impact:** 功能正确，但与 OpenAI 解析器的行为不一致 — OpenAI 解析器在 `finish_reason`（等价于 `message_delta`）时输出 TOOL_USE_END，两者行为实际一致。这是设计选择而非 bug。
+
+**Fix Suggestion:** 无需修改。如果需要更早获得 tool call 完整参数，可在 `content_block_stop` 时输出 TOOL_USE_END（需要缓冲 input_json_delta），但这会增加复杂度。
+
+**Priority:** LOW
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-DEAD-11: _openai.py 中 messages_to_openai 函数内运行时 import Message
+
+**Description:** `messages_to_openai` 在函数体内部使用 `from ..types import Message, SystemMessage, ToolMessage`，但 `Message` 类型实际未被使用。这个 import 语句在每次调用时都会执行（虽然 Python 会缓存模块）。此外，函数参数类型为 `list` 而非 `list[Message]`，缺少类型注解。
+
+**File Location:** `framework/agent_framework/llm/transform/_openai.py:19,33`
+
+**Impact:** 轻微 — `Message` 导入无用且函数签名类型不精确。
+
+**Fix Suggestion:** 移除 `Message` 导入，将参数类型改为 `list[Message]`。
+
+**Priority:** LOW
+**Related:** FRMW-01 (死代码检测)
+
+---
+
+#### FRMW-ARCH-04: StreamCollector.collect() 不验证完整性
+
+**Description:** `StreamCollector.collect()` 返回 CompletionResult 时不验证是否已收到 DONE 事件。如果调用方在流未结束时调用 `collect()`，会得到不完整的结果（可能缺少 tool calls 或 usage 数据）。`collect()` 是同步方法，没有 async 等待机制。
+
+**File Location:** `framework/agent_framework/llm/streaming.py:265-285`
+
+**Impact:** 如果使用不当（在流结束前调用），会返回不完整数据。但当前代码中 `collect()` 仅在流结束后调用，因此实际不影响正确性。
+
+**Fix Suggestion:** 添加 `assert self._done, "collect() called before stream ended"` 或在返回结果中标记 `incomplete=True`。
+
+**Priority:** LOW
+**Related:** FRMW-03 (设计问题)
 
 ---
 
