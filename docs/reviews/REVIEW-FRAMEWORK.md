@@ -1500,17 +1500,20 @@ if isinstance(flush_result, Exception):
 
 ## orchestrator/
 
-*(pending manual review — Plan 02)*
+逐文件审查范围：8 个源文件 + 1 个 __init__.py，~826 行（planner.py 171 行、engine.py 107 行、models.py 71 行、coordinator_prompt.py 34 行、coordinator_tools.py 156 行、planning_session.py 115 行、worker_agent.py 109 行、worker_registry.py 41 行、__init__.py 27 行）。
+模块职责：编排引擎（OrchestratorEngine）、规划器（PlanningSession + planner.py）、协调者工具（coordinator_tools.py）、Worker 管理（worker_agent.py + worker_registry.py）。
+
+**注意：** CONCERNS.md 记载 engine.py 为空文件、router.py 存在。当前代码中 engine.py 已实现为完整 OrchestratorEngine（107 行），router.py 已不存在。CONCERNS.md 条目已过时。
 
 ### CRITICAL
 
-*(pending)*
+*(none found)*
 
 ### HIGH
 
 #### FRMW-DEAD-08: worker_agent.py 导入未使用的 AgentEvent
 
-**Description:** `orchestrator/worker_agent.py` 导入了 `agent_framework.agents.base.AgentEvent` 但未使用。
+**Description:** `orchestrator/worker_agent.py` 导入了 `agent_framework.agents.base.AgentEvent` 但未使用。`_collect_output()` 直接解构 `event.type` 和 `event.data`，不引用 `AgentEvent` 类型。`AgentEvent` 仅在 TYPE_CHECKING guard 的 `Agent` Protocol 中定义，运行时 import 增加不必要的模块耦合。
 
 **File Location:** `framework/agent_framework/orchestrator/worker_agent.py:9`
 
@@ -1523,25 +1526,302 @@ if isinstance(flush_result, Exception):
 
 ---
 
+#### FRMW-ARCH-39: engine.py 使用 lazy imports 规避循环依赖，增加运行时开销
+
+**Description:** `OrchestratorEngine.run()` 方法（engine.py:59-63）在每次调用时执行 6 个 lazy import（`AgentLoop`、`build_coordinator_prompt`、`create_coordinator_tools`、`WorkerManager`、`ToolRegistry`）。这些 import 在模块首次加载后由 Python 缓存，不会重复解析，但 lazy import 的目的是规避 `agents ↔ orchestrator` 的循环依赖。如果循环依赖是架构问题，lazy import 只是临时绕行而非根本解决。
+
+**File Location:** `framework/agent_framework/orchestrator/engine.py:59-63`
+
+**Impact:** (1) 循环依赖表明模块间职责划分不够清晰。(2) 如果这些模块被重构为独立包，lazy import 可能失效。(3) 每次 `run()` 调用都执行 6 次 `import` 语句（虽然命中缓存），在高频调用场景下有微小的运行时开销。
+
+**Fix Suggestion:** (1) 将 `AgentLoop` 的 Protocol 接口提取到独立模块，消除循环依赖。(2) 或使用 TYPE_CHECKING + 运行时 import 的标准模式，将 lazy import 移到模块级（在函数首次调用时执行一次，后续使用缓存）。
+
+**Priority:** HIGH
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-ARCH-40: OrchestratorEngine.__init__ 参数过多（6 个参数），违反 PLR0913
+
+**Description:** `OrchestratorEngine.__init__` 接受 6 个参数（adapter、model、router、ctx、worker_registry、max_steps），ruff PLR0913 已检测（阈值为 5）。所有参数都以 `self.xxx` 存储为实例属性。参数多源于 OrchestratorEngine 承担了太多职责：既管理 Worker 生命周期（worker_registry），又配置 AgentLoop（adapter、model、router、ctx、max_steps），还负责构建 system prompt。
+
+**File Location:** `framework/agent_framework/orchestrator/engine.py:30-48`
+
+**Impact:** (1) 构造函数复杂，调用方需要传递大量参数。(2) 测试时需要 mock 多个依赖。(3) 新增编排功能时参数列表会继续膨胀。
+
+**Fix Suggestion:** 引入 `OrchestratorConfig` dataclass 封装配置参数（model、max_steps），将依赖注入简化为（config、adapter、router、ctx、worker_registry）。
+
+**Priority:** HIGH
+**Related:** FRMW-03 (设计问题)
+
+---
+
 ### MEDIUM
 
-*(pending)*
+#### FRMW-LOGIC-28: coordinator_tools.py _get_manager 使用 deferred import 且不做类型检查
+
+**Description:** `_get_manager()` 函数（coordinator_tools.py:19-24）在函数体内执行 `from agent_framework.orchestrator.worker_agent import WorkerManager`（每次调用都执行，Python 会缓存但仍有 dict lookup 开销）。更关键的是，函数返回 `WorkerManager | None`，当 `ctx.extra` 中没有 `worker_manager` 时返回 `None`。三个 handler 都检查了 `manager is None`，但 `_get_manager` 内部的 `isinstance(manager, WorkerManager)` 检查在每次调用时触发 deferred import，且 `WorkerManager` 在同一进程空间中应为单例——如果 `extra` 中的值不是 `WorkerManager` 实例，说明调用方的注入逻辑有 bug。
+
+**File Location:** `framework/agent_framework/orchestrator/coordinator_tools.py:19-24`
+
+**Impact:** 每次工具调用都执行 deferred import + isinstance 检查。如果 `extra["worker_manager"]` 被错误注入（如传入字符串），handler 会静默返回 `"WorkerManager not available"` 错误，而非提供具体的诊断信息。
+
+**Fix Suggestion:** 将 `WorkerManager` 的 import 移到模块顶层（coordinator_tools.py 不 import agent_loop，不存在循环依赖），并在 `_get_manager` 中为 `not isinstance` 的情况记录 warning 日志。
+
+**Priority:** MEDIUM
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-LOGIC-29: worker_agent.py send_message 用 spawn 重新创建 Worker，不保留原始上下文
+
+**Description:** `WorkerManager.send_message()`（worker_agent.py:98-108）向已完成的 Worker 发送追加消息时，调用 `self.spawn()` 重新创建一个全新的 Worker 实例（新的 `worker_id`）。原始 Worker 的 `agent.run()` 会话状态（system prompt、message history）完全丢失。followup_prompt 仅包含原始 output 文本 + 新 message，不包含原始 system prompt 或对话历史。
+
+**File Location:** `framework/agent_framework/orchestrator/worker_agent.py:98-108`
+
+**Impact:** Worker 的追加对话不延续原始上下文。例如，如果原始 Worker 在 system prompt 中被指示"使用 JSON 格式输出"，追加对话中 Worker 不会知道这个指令。这限制了 `send_message` 的实用性——它不能真正"继续"一个 Worker 的工作，只能基于输出文本进行新一轮对话。
+
+**Fix Suggestion:** (1) 在 `WorkerHandle` 中保存原始 prompt 和 system prompt，`send_message` 时重建完整上下文。(2) 或改为保持 Worker agent 实例不销毁，直接向其发送新消息（需要修改 `_collect_output` 支持增量收集）。
+
+**Priority:** MEDIUM
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-ARCH-41: models.py SubTask 和 SubTaskResult 已定义但无使用方
+
+**Description:** `models.py` 定义了 `SubTask`（行 32-38）和 `SubTaskResult`（行 42-49）两个 frozen dataclass，`__init__.py` 将它们 re-export。但 `OrchestratorEngine.run()` 使用 `spawn_worker`/`send_message`/`list_workers` 工具让 LLM 自路由编排，不使用 SubTask 进行任务分解。`SubTask`/`SubTaskResult` 似乎是为未来的 DAG 编排预留，当前未被任何代码引用。
+
+**File Location:** `framework/agent_framework/orchestrator/models.py:32-49`
+
+**Impact:** 死代码增加维护负担。`SubTask.depends_on` 字段的 DAG 逻辑未实现，如果未来需要，可能需要重新设计数据模型。
+
+**Fix Suggestion:** 标记为 `# TODO: future DAG orchestration` 或移除，待 DAG 编排需求明确时重新设计。
+
+**Priority:** MEDIUM
+**Related:** FRMW-03 (设计问题)
+
+---
 
 ### LOW
 
-*(pending)*
+*(none found)*
+
+---
+
+## a2a/
+
+逐文件审查范围：3 个源文件，~476 行（client.py 139 行、server.py 234 行、models.py 85 行）。
+模块职责：A2A (Agent-to-Agent) 协议实现，HTTP 客户端/服务端通信，任务生命周期管理。
+
+### CRITICAL
+
+*(none found)*
+
+### HIGH
+
+#### FRMW-SEC-13: A2AServer._verify_auth 使用时间常量比较 API key
+
+**Description:** `_verify_auth()`（server.py:78-95）通过 `value.decode() == expected` 比较客户端发送的 API key 与预期值。Python 的 `==` 对字符串执行短路比较——第一个不匹配字符即返回 `False`，这使得攻击者可通过响应时间差异进行时序攻击（timing attack），逐字符推断正确的 API key。
+
+**File Location:** `framework/agent_framework/a2a/server.py:91`
+
+**Impact:** 在低延迟本地网络中，时序攻击的实际风险极低。但如果 A2A 服务端暴露在公网，攻击者可通过大量请求统计分析推断 API key。
+
+**Fix Suggestion:** 使用 `hmac.compare_digest()` 替代 `==` 进行 key 比较，消除时序侧信道。
+
+**Priority:** HIGH
+**Related:** FRMW-04 (安全审查)
+
+---
+
+#### FRMW-LOGIC-30: A2AClient 无连接生命周期管理，httpx.AsyncClient 可能泄漏
+
+**Description:** `A2AClient.__init__`（client.py:35-39）创建了 `httpx.AsyncClient` 实例。虽然提供了 `aclose()` 方法（client.py:136-138），但类未实现 `__aenter__`/`__aexit__` 协议，不支持 `async with` 上下文管理。调用方如果忘记调用 `aclose()`，底层连接不会正确关闭。
+
+**File Location:** `framework/agent_framework/a2a/client.py:35-39`
+
+**Impact:** httpx.AsyncClient 维护连接池，未关闭会导致连接泄漏。在长期运行的服务中，累积的未关闭客户端可能导致文件描述符耗尽。
+
+**Fix Suggestion:** 实现 `__aenter__`/`__aexit__` 使 `A2AClient` 支持 `async with` 上下文管理，或至少实现 `__del__` 方法在 GC 时警告未关闭的客户端。
+
+**Priority:** HIGH
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-LOGIC-31: A2AClient.send_task_and_wait 超时后不取消服务端任务
+
+**Description:** `send_task_and_wait()`（client.py:69-96）在轮询超时后，构造一个本地 `A2ATask(status=FAILED)` 返回给调用方，但不调用 `cancel_task()` 通知服务端。服务端的任务可能仍在运行，消耗资源。
+
+**File Location:** `framework/agent_framework/a2a/client.py:69-96`
+
+**Impact:** 客户端认为任务失败，服务端任务仍在执行。如果 Agent 执行的是有副作用的操作（如写入文件、发送邮件），超时后这些操作仍会继续执行，可能导致不一致状态。
+
+**Fix Suggestion:** 在超时路径中添加 `try: await self.cancel_task(task_id) except Exception: pass`，尽力取消服务端任务。
+
+**Priority:** HIGH
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+### MEDIUM
+
+#### FRMW-LOGIC-32: A2AServer._execute_task event.data 访问可能失败
+
+**Description:** `_execute_task()`（server.py:180-181）通过 `event.data["text"]` 访问 done 事件的 data 字典。但 `AgentEvent.data` 的类型注解为 `dict[str, Any] | None`（即可能为 None），且 key `"text"` 不一定存在。如果 Agent 实现返回的 done 事件 data 中没有 `"text"` key，条件 `"text" in event.data` 为 False，result_parts 为空，任务状态被标记为 COMPLETED 但 result 为空字符串——调用方无法区分"Agent 无输出"和"Agent 输出格式不符合预期"。
+
+**File Location:** `framework/agent_framework/a2a/server.py:180-181`
+
+**Impact:** 某些 Agent 实现（如只返回 tool_use 不返回 text 的 Agent）可能导致 A2A 任务显示为 COMPLETED 但 result 为空。
+
+**Fix Suggestion:** 改为检查 `event.data.get("content", [])`（与 `worker_agent.py:_collect_output` 一致），从 content blocks 中提取 text，而非直接访问 `"text"` key。
+
+**Priority:** MEDIUM
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-ARCH-42: A2AServer 所有任务存储在内存 dict，无持久化和上限控制
+
+**Description:** `A2AServer._tasks`（server.py:40）使用普通 `dict[str, A2ATask]` 存储所有任务。服务重启后所有任务丢失。无大小限制，长时间运行后 `_tasks` 可能消耗大量内存。
+
+**File Location:** `framework/agent_framework/a2a/server.py:40`
+
+**Impact:** (1) 服务重启导致所有进行中任务丢失，客户端无法恢复。(2) 如果 A2A 服务端长期运行且任务量大（无 TTL/eviction 机制），内存持续增长。
+
+**Fix Suggestion:** (1) 添加任务上限（如 10000）和 TTL 过期清理（如已完成任务保留 1 小时后自动删除）。(2) 对于需要持久化的场景，使用 SQLite 或 Redis 存储。
+
+**Priority:** MEDIUM
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-SEC-14: A2AServer agent-card 端点不鉴权
+
+**Description:** `_verify_auth()`（server.py:78-95）在所有 HTTP 请求前执行，包括 `GET /.well-known/agent-card`。这意味着 agent-card 端点也需要 API key 才能访问。虽然这提供了额外的信息保护（防止未授权方发现 Agent 能力），但在 A2A 协议设计中，agent-card 通常是公开的发现端点（类似 OpenAPI spec），不需要鉴权。
+
+**File Location:** `framework/agent_framework/a2a/server.py:48-52`
+
+**Impact:** 当 `api_key` 配置时，外部 Agent 无法发现本 Agent 的能力（需要先获得 API key）。这可能是有意的设计决策，但与 A2A 协议的"公开发现"理念不一致。
+
+**Fix Suggestion:** (1) 如果 agent-card 应公开访问，将 auth 检查移到路由处理函数内部，跳过 agent-card 路径。(2) 如果当前行为是有意的（所有端点都需鉴权），在文档中明确说明。
+
+**Priority:** MEDIUM
+**Related:** FRMW-04 (安全审查)
+
+---
+
+### LOW
+
+*(none found)*
+
+---
+
+## skills/
+
+逐文件审查范围：5 个源文件，~424 行（registry.py 238 行、discovery.py 17 行、parser.py 53 行、tool.py 53 行、types.py 46 行）。
+模块职责：基于文件系统的技能注册、发现、解析和加载。
+
+### CRITICAL
+
+*(none found)*
+
+### HIGH
+
+#### FRMW-ARCH-43: SkillRegistry._maybe_refresh 每次 API 调用都 stat() 所有 skill 目录
+
+**Description:** `_maybe_refresh()`（registry.py:109-122）在每次公开 API 调用（`describe_available()`、`load_full_text()`、`get_manifest()`）时执行。方法遍历所有 `_dirs`，对每个目录调用 `d.stat().st_mtime`。如果有 3 个 skill 目录（personal + project + bundled），每次 skill 相关操作至少执行 3 次 `stat()` 系统调用。在 `describe_available()` 被 LLM 每次 agent loop 迭代调用的场景下（因为 skill 列表注入 system prompt），`stat()` 调用频率可能很高。
+
+**File Location:** `framework/agent_framework/skills/registry.py:109-122`
+
+**Impact:** 在大多数情况下 skill 目录不会变化，`stat()` 调用纯粹是开销。虽然单次 `stat()` 耗时极低（~0.01ms），但在高频调用场景下（如 agent loop 每步都重新渲染 system prompt），累积开销不可忽视。
+
+**Fix Suggestion:** 添加最小刷新间隔（如 5 秒），在间隔内跳过 `_maybe_refresh()` 检查：`if time.monotonic() - self._last_check < 5.0: return`。
+
+**Priority:** HIGH
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-SEC-15: SkillRegistry 无 skill 内容验证，恶意 SKILL.md 可注入任意 system prompt
+
+**Description:** `_scan_dir()`（registry.py:135-186）读取 SKILL.md 文件后直接解析并存储，不验证内容安全性。恶意 SKILL.md 可以包含：(1) 旨在劫持 LLM 行为的 prompt injection 文本。(2) 误导 LLM 执行危险工具调用的指令。(3) 隐藏在 markdown 注释中的恶意指令。`SkillSource` 枚举区分了 USER/PROJECT/BUNDLED/MCP 来源，但 `_scan_dir()` 中所有来源都标记为 `SkillSource.USER`（行 174），来源标签未用于安全过滤。
+
+**File Location:** `framework/agent_framework/skills/registry.py:135-186`
+
+**Impact:** 如果攻击者能在 skill 目录中放置恶意 SKILL.md（如通过 git clone 的第三方项目），LLM 会将其作为合法 skill 加载执行。`is_trusted()` 方法（行 74-79）只检查 `source != MCP`，所有文件系统来源的 skill 都被标记为 trusted。
+
+**Fix Suggestion:** (1) 对非项目目录（如 user 目录）的 skill 标记为 `SkillSource.MCP` 或新增 `UNTRUSTED` 来源，要求用户显式信任。(2) 在 skill 内容中检测已知的 prompt injection 模式（如 "ignore previous instructions"）。
+
+**Priority:** HIGH
+**Related:** FRMW-04 (安全审查)
+
+---
+
+### MEDIUM
+
+#### FRMW-ARCH-44: registry.py activate_for_paths 每次调用遍历所有 inactive skills
+
+**Description:** `activate_for_paths()`（registry.py:81-101）在每次文件访问时被 `SkillDiscovery.on_file_access()` 调用。方法遍历所有 `_documents`，跳过 `active=True` 的，对每个 inactive skill 的每个 path pattern 执行 `_glob_match()`。如果 skill 数量多（如 50 个），每次文件访问都执行 50 次 glob 匹配。
+
+**File Location:** `framework/agent_framework/skills/registry.py:81-101`
+
+**Impact:** 在高频文件访问场景下（如 agent 频繁读写文件），glob 匹配的累积开销可能影响性能。
+
+**Fix Suggestion:** 维护 `self._inactive_paths: dict[str, list[str]]` 反向索引（pattern -> skill names），`activate_for_paths()` 只遍历 pattern 索引而非所有 skills。
+
+**Priority:** MEDIUM
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-ARCH-45: registry.py _glob_match 使用 PurePosixPath.match，Windows 路径不兼容
+
+**Description:** `_glob_match()`（registry.py:217-238）使用 `PurePosixPath(file_path)` 创建路径对象。如果 `file_path` 是 Windows 路径（包含反斜杠 `\`），`PurePosixPath` 会将反斜杠视为文件名的一部分而非路径分隔符，导致匹配失败。
+
+**File Location:** `framework/agent_framework/skills/registry.py:218-238`
+
+**Impact:** 在 Windows 平台上，基于 paths 的 skill 自动激活功能失效。
+
+**Fix Suggestion:** 使用 `pathlib.PurePath`（自动适应平台）替代 `PurePosixPath`，或在匹配前统一将反斜杠替换为正斜杠。
+
+**Priority:** MEDIUM
+**Related:** FRMW-03 (设计问题)
+
+---
+
+### LOW
+
+*(none found)*
 
 ---
 
 ## hooks/
 
-*(pending manual review — Plan 04)*
+逐文件审查范围：2 个源文件，~207 行（manager.py 145 行、types.py 62 行）。
+模块职责：Hook 生命周期管理（注册、匹配、执行）、类型定义。
 
 ### CRITICAL
 
-*(pending)*
+*(none found)*
 
 ### HIGH
+
+#### FRMW-SEC-16: HookManager._execute_command 使用 bash -c 执行用户配置的命令
+
+**Description:** `_execute_command()`（manager.py:120-121）通过 `asyncio.create_subprocess_exec("bash", "-c", config.command)` 执行 hook 命令。`config.command` 来自 JSON 配置文件（`load_from_json()`），内容完全由用户控制。虽然 `trusted` flag 在 `fire()` 中阻止非信任工作区的 hook 执行（manager.py:97-98），但 `load_from_json()` 不验证命令内容（如检查路径是否存在、是否在 PATH 中）。如果 JSON 配置文件被恶意修改（如通过 git 合并攻击），攻击者可注入任意 shell 命令。
+
+**File Location:** `framework/agent_framework/hooks/manager.py:120-121`
+
+**Impact:** 在信任工作区中，恶意 hook 命令可以执行任意 shell 操作（文件删除、网络请求等）。`trusted` flag 是唯一的防护层，其安全模型假设：信任工作区 = 配置文件可信。如果这个假设被打破（如供应链攻击），没有纵深防御。
+
+**Fix Suggestion:** (1) 在 `load_from_json()` 中验证 command 是否为合法可执行文件路径（拒绝包含 `rm -rf`、`curl | bash` 等危险模式的命令）。(2) 添加 hook 命令白名单或审计日志。(3) 使用 `shlex.quote()` 对 stdin_data 中的字段进行转义，防止通过 stdin 注入 shell 命令。
+
+**Priority:** HIGH
+**Related:** FRMW-04 (安全审查), T-12-11
+
+---
 
 #### FRMW-DEAD-09: manager.py 导入未使用的 typing.Any
 
@@ -1560,33 +1840,39 @@ if isinstance(flush_result, Exception):
 
 ### MEDIUM
 
-*(pending)*
+#### FRMW-LOGIC-33: HookManager._match 对 None tool_name 返回 False，但 matcher 为 "*" 时应匹配所有
 
-### LOW
+**Description:** `_match()`（manager.py:88-93）中，当 `matcher == "*"` 时直接返回 True（正确）。但当 `matcher != "*"` 且 `tool_name is None` 时返回 False。这意味着在 SessionStart 事件中（没有 tool_name），只有 `matcher == "*"` 的 hook 会被触发。如果用户配置了 `matcher: "SessionStart"`（期望匹配 SessionStart 事件），实际不会触发——因为 `_match` 将 matcher 当作 tool_name 的 glob 模式，而非 event name 的匹配器。
 
-*(pending)*
+**File Location:** `framework/agent_framework/hooks/manager.py:88-93`
+
+**Impact:** 用户可能误以为 matcher 可以匹配事件名称（如 "SessionStart"），但实际上 matcher 只匹配 tool_name。文档应明确说明 matcher 的语义。
+
+**Fix Suggestion:** (1) 在 HookConfig 的 matcher 字段文档中明确说明其语义是 tool_name glob 模式，不是 event name。(2) 或支持多维度匹配：当 event 为 SessionStart 时，matcher 匹配 event name；当 event 为 PreToolUse/PostToolUse 时，matcher 匹配 tool_name。
+
+**Priority:** MEDIUM
+**Related:** FRMW-02 (逻辑漏洞)
 
 ---
 
-## skills/
+#### FRMW-ARCH-46: HookManager.fire 遍历中移除 once hook 可能跳过后续 hook
 
-*(pending manual review — Plan 04)*
+**Description:** `fire()`（manager.py:95-113）在遍历 `self._hooks[event]` 列表时，收集 `once=True` 的 config 到 `to_remove` 列表，遍历结束后统一移除。这是正确的做法（避免了遍历中修改列表的问题）。但如果多个 `once=True` hook 匹配同一事件，第一次 fire 后它们全部被移除——如果后续 hook 依赖前面 hook 的副作用（如 `updated_input`），可能因为 hook 被移除而无法执行。
 
-### CRITICAL
+**File Location:** `framework/agent_framework/hooks/manager.py:95-113`
 
-*(pending)*
+**Impact:** 极端情况下，多个 once hook 的执行顺序和副作用可能不符合预期。但当前 `_parse_exit()` 中 `exit_code == 0` 时才解析 `updatedInput`，hook 之间没有 `updatedInput` 传递链——前一个 hook 的 `updated_input` 不会传递给下一个 hook。
 
-### HIGH
+**Fix Suggestion:** 如果未来支持 hook 链（前一个 hook 的输出作为下一个 hook 的输入），需要重新设计 once hook 的移除策略。当前实现可接受，无需修改。
 
-*(pending)*
+**Priority:** MEDIUM
+**Related:** FRMW-03 (设计问题)
 
-### MEDIUM
-
-*(pending)*
+---
 
 ### LOW
 
-*(pending)*
+*(none found)*
 
 ---
 
@@ -1787,121 +2073,314 @@ if isinstance(flush_result, Exception):
 
 ## commands/
 
-*(pending manual review — Plan 04)*
+逐文件审查范围：6 个源文件，~332 行（dispatcher.py 84 行、types.py 49 行、builtins/clear.py 23 行、builtins/compact.py 23 行、builtins/config.py 39 行、builtins/help.py 54 行、builtins/status.py 27 行、builtins/__init__.py 33 行）。
+模块职责：slash 命令解析和分派（/clear、/compact、/config、/help、/status），skill 命令 fallback。
 
 ### CRITICAL
 
-*(pending)*
+*(none found)*
 
 ### HIGH
 
-*(pending)*
+#### FRMW-LOGIC-34: help.py 直接访问 registry._documents 私有属性，破坏封装
+
+**Description:** `_handler()`（help.py:46）通过 `skill_registry._documents.get(name)` 访问 `SkillRegistry` 的私有属性 `_documents`，以检查 skill 是否 `active`。这破坏了 `SkillRegistry` 的封装——`_documents` 是内部实现细节，如果 `SkillRegistry` 的数据结构变更（如改为按 name 查询而非 dict），`help.py` 会崩溃。
+
+**File Location:** `framework/agent_framework/commands/builtins/help.py:46`
+
+**Impact:** 如果 `SkillRegistry._documents` 被重命名或重构，`/help` 命令会抛出 `AttributeError`。
+
+**Fix Suggestion:** 在 `SkillRegistry` 中添加 `is_active(name: str) -> bool` 公开方法，替代直接访问 `_documents`。
+
+**Priority:** HIGH
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-SEC-17: dispatcher.py skill loading 使用 str.replace 替换 $ARGUMENTS，不转义用户输入
+
+**Description:** `_try_load_skill()`（dispatcher.py:78）使用 `body.replace("$ARGUMENTS", args)` 将用户输入直接替换到 skill 正文中。`args` 来自用户输入（`/skill_name args`），不经过任何转义或验证。如果用户输入包含特殊字符（如 `</skill>`、`<skill name="...">`），可能破坏 skill XML 结构，注入恶意指令到 LLM prompt。
+
+**File Location:** `framework/agent_framework/commands/dispatcher.py:78`
+
+**Impact:** 用户可以通过 skill 参数注入任意文本到 LLM prompt 中。虽然这是 slash 命令（用户自己输入），但与 skill 系统的 `quoteattr()`（registry.py:7）XML 转义形成不一致——skill 正文使用 XML 标签包裹，但 $ARGUMENTS 替换不转义。
+
+**Fix Suggestion:** (1) 使用 `xml.sax.saxutils.escape()` 对 `args` 进行 XML 转义后再替换。(2) 或改用 JSON 结构传递参数，避免字符串替换。(3) dispatcher.py 的 docstring（行 30）已标注"调用方在注入 LLM prompt 时需自行处理"——但这将安全责任推给了调用方。
+
+**Priority:** HIGH
+**Related:** FRMW-04 (安全审查)
+
+---
+
+#### FRMW-ARCH-47: config handler 只记录"设置"但不实际修改配置
+
+**Description:** `/config` 命令的 `_handler()`（config.py:23-39）只返回格式化的字符串消息（如"设置 model = gpt-4"），不实际修改任何运行时配置。`CommandResult.data` 字典包含 `{key: value}`，但 `CommandDispatcher` 和调用方没有消费 `data` 来更新配置的逻辑。`/config` 命令是一个纯展示/空操作的占位符。
+
+**File Location:** `framework/agent_framework/commands/builtins/config.py:23-39`
+
+**Impact:** 用户使用 `/config model gpt-4` 时看到"设置 model = gpt-4"的反馈，但配置并未实际变更。这是功能缺失而非 bug，但可能误导用户。
+
+**Fix Suggestion:** (1) 明确标记 `/config` 为只读（只显示当前配置），移除写入逻辑。(2) 或实现配置写入功能，连接到 `AgentProfile` 或 `ILLMAdapter` 的配置管理。
+
+**Priority:** HIGH
+**Related:** FRMW-03 (设计问题)
+
+---
 
 ### MEDIUM
 
-*(pending)*
+#### FRMW-LOGIC-35: dispatcher.py 不处理命令名称中的特殊字符
+
+**Description:** `resolve()`（dispatcher.py:37-42）通过 `stripped.split(maxsplit=1)` 提取命令名。如果用户输入 `/foo bar baz`，`name` 为 `"foo"`，`args` 为 `"bar baz"`。但如果输入 `/` 后跟空格（如 `/ foo`），`stripped` 为 `" foo"`，`name` 为 `"foo"`——前导空格被保留在 `stripped` 中但 `split()` 会忽略。然而，如果用户输入包含 Unicode 特殊字符或零宽空格（如 `/​foo`），`stripped` 为 `​foo`，`name` 不匹配任何 builtin，fallback 到 skill 查询——skill 名称也不包含零宽空格，最终返回 `NONE`。
+
+**File Location:** `framework/agent_framework/commands/dispatcher.py:37-42`
+
+**Impact:** 极端情况下（零宽空格、不可见字符），用户可能困惑为什么命令不被识别。实际影响极低。
+
+**Fix Suggestion:** 在提取 name 前 strip whitespace 和零宽字符：`name = parts[0].strip()`。
+
+**Priority:** MEDIUM
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
 
 ### LOW
 
-*(pending)*
+*(none found)*
 
 ---
 
 ## prompts/
 
-*(pending manual review — Plan 04)*
+逐文件审查范围：3 个源文件，~168 行（assembler.py 85 行、profiles.py 62 行、templates.py 23 行）。
+模块职责：system prompt 组装（PromptAssembler）、Agent 配置文件（AgentProfile）、提示词模板。
 
 ### CRITICAL
 
-*(pending)*
+*(none found)*
 
 ### HIGH
 
-*(pending)*
+#### FRMW-SEC-18: PromptAssembler 不转义用户注入的 profile 内容，允许 prompt injection
 
-### MEDIUM
+**Description:** `PromptAssembler.render()`（assembler.py:81-84）将所有 `PromptBlock.content` 直接拼接为 system prompt，不转义任何内容。如果 `AgentProfile.soul`、`agents_rules`、`identity`、`user_context` 中包含 prompt injection 文本（如 `"Ignore all previous instructions and ..."`），这些文本会直接注入到 LLM 的 system prompt 中。虽然 profile 内容通常由开发者控制（来自 `.md` 文件），但 `user_context` 可能包含用户输入。
 
-*(pending)*
+**File Location:** `framework/agent_framework/prompts/assembler.py:81-84`
 
-### LOW
+**Impact:** 如果 `user_context` 或 `identity` 包含不可信内容（如来自数据库的用户偏好），攻击者可以通过这些字段注入指令到 system prompt。
 
-*(pending)*
+**Fix Suggestion:** (1) 明确标注哪些 PromptBlock 接受不可信输入，对这些字段进行转义或标记边界。(2) 使用 XML 标签包裹各 block，便于 LLM 区分指令来源。
+
+**Priority:** HIGH
+**Related:** FRMW-04 (安全审查)
 
 ---
 
-## a2a/
-
-*(pending manual review — Plan 04)*
-
-### CRITICAL
-
-*(pending)*
-
-### HIGH
-
-*(pending)*
-
 ### MEDIUM
 
-*(pending)*
+#### FRMW-ARCH-48: AgentProfile.from_directory 不验证文件内容大小
+
+**Description:** `from_directory()`（profiles.py:39-54）从目录加载 profile 时，`_read_file()` 使用 `path.read_text()` 读取整个文件内容，无大小限制。如果某个 `.md` 文件异常大（如意外包含了二进制内容），会占用大量内存并可能使 system prompt 超过 LLM 的 context window。
+
+**File Location:** `framework/agent_framework/prompts/profiles.py:57-61`
+
+**Impact:** 异常大的 profile 文件会导致 system prompt 过长，触发 LLM API 的 token limit 错误。
+
+**Fix Suggestion:** 添加文件大小检查（如 `max_profile_file_size = 100_000`），超过限制时截断或报错。
+
+**Priority:** MEDIUM
+**Related:** FRMW-03 (设计问题)
+
+---
+
+#### FRMW-ARCH-49: templates.py DRIFT_WARN_TEMPLATE 使用简单 str.format，不支持复杂模板
+
+**Description:** `DRIFT_WARN_TEMPLATE`（templates.py:16-23）使用 `str.format()` 的 `{drift_count}` 和 `{plan_text}` 占位符。如果 `plan_text` 中包含花括号（如 JSON 示例 `{"key": "value"}`），`format()` 会抛出 `KeyError` 或 `IndexError`。虽然 `plan_text` 由 `format_for_injection()` 生成（通常不包含花括号），但如果 skill 内容或用户输入包含花括号并被注入到 plan 中，`DRIFT_WARN_TEMPLATE.format()` 会失败。
+
+**File Location:** `framework/agent_framework/prompts/templates.py:16-23`
+
+**Impact:** `PlanningSession.format_context_message()` 在构建 drift 警告时可能因 `plan_text` 包含花括号而抛出 `KeyError`。
+
+**Fix Suggestion:** 使用 `$drift_count` + `str.replace()` 替代 `str.format()`，或使用 `string.Template`（不解释花括号）。
+
+**Priority:** MEDIUM
+**Related:** FRMW-03 (设计问题)
+
+---
 
 ### LOW
 
-*(pending)*
+*(none found)*
 
 ---
 
 ## transcript/
 
-*(pending manual review — Plan 04)*
+逐文件审查范围：4 个源文件，~173 行（writer.py 24 行、reader.py 66 行、consumer.py 53 行、types.py 22 行）。
+模块职责：JSONL 转录写入（TranscriptWriter）、转录读取和消息恢复（TranscriptReader）、透明包装 LoopEvent 录制（TranscriptConsumer）。
 
 ### CRITICAL
 
-*(pending)*
+*(none found)*
 
 ### HIGH
 
-*(pending)*
+#### FRMW-LOGIC-36: TranscriptWriter 不实现上下文管理器，文件句柄可能泄漏
+
+**Description:** `TranscriptWriter.__init__()`（writer.py:13-14）打开文件 `self._file = open(path, "a")`，但类未实现 `__enter__`/`__exit__` 协议。调用方必须手动调用 `close()`。如果调用方忘记关闭（如异常退出），文件句柄不会正确释放。`write()` 方法（writer.py:16-19）在每次写入后调用 `flush()`，但不处理 `IOError`（如磁盘满）。
+
+**File Location:** `framework/agent_framework/transcript/writer.py:13-14`
+
+**Impact:** (1) 文件句柄泄漏——在长期运行的服务中可能导致 `OSError: Too many open files`。(2) 写入失败时异常会传播到调用方，可能中断 agent loop。
+
+**Fix Suggestion:** (1) 实现 `__enter__`/`__exit__` 支持 `with TranscriptWriter(path) as w:`。(2) 在 `write()` 中 catch IOError 并记录日志，避免转录失败中断主流程。
+
+**Priority:** HIGH
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-LOGIC-37: TranscriptReader.events() 不处理损坏的 JSONL 行
+
+**Description:** `TranscriptReader.events()`（reader.py:22-37）逐行读取 JSONL 文件，使用 `json.loads(line)` 解析每行。如果某行不是合法 JSON（如文件被截断、并发写入导致半写入），`json.loads()` 会抛出 `JSONDecodeError`，整个迭代中断。已经 yield 的事件丢失——调用方无法知道已读取了多少事件。
+
+**File Location:** `framework/agent_framework/transcript/reader.py:30`
+
+**Impact:** 损坏的 JSONL 文件导致读取中断。`to_messages()`（reader.py:39-52）调用 `events()`，如果中途失败，返回不完整的消息列表。
+
+**Fix Suggestion:** (1) 捕获 `json.JSONDecodeError`，记录 warning 日志，跳过损坏的行继续读取。(2) 或返回 `TranscriptReadResult` 包含 `events: list[TranscriptEvent]` 和 `errors: list[int]`（损坏行号）。
+
+**Priority:** HIGH
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-SEC-19: transcript 文件包含完整对话内容，可能泄露敏感信息
+
+**Description:** `TranscriptConsumer`（consumer.py）录制完整的 agent loop 事件，包括 user message（行 28-32）、assistant content blocks（行 36-39）、tool call 和 tool result（行 41-51）。转录文件以 JSONL 格式存储在本地文件系统（默认路径由调用方指定），无加密。如果对话中包含 API key、密码等敏感信息（如用户通过 chat 传递认证信息），这些信息会以明文形式持久化到磁盘。
+
+**File Location:** `framework/agent_framework/transcript/consumer.py:28-51`
+
+**Impact:** 明文存储的转录文件可能泄露敏感信息。攻击者如果能读取转录文件（如通过文件系统访问或备份泄露），可以获取完整的对话历史。
+
+**Fix Suggestion:** (1) 在转录写入前脱敏（检测并替换 API key 模式、密码字段）。(2) 对转录文件进行加密存储。(3) 添加 TTL 自动清理机制。(4) 在文档中明确标注转录文件包含敏感数据，需妥善保管。
+
+**Priority:** HIGH
+**Related:** FRMW-04 (安全审查), T-12-12
+
+---
 
 ### MEDIUM
 
-*(pending)*
+#### FRMW-ARCH-50: TranscriptConsumer.wrap 假设 LoopEvent 数据结构，与 AgentLoop 强耦合
+
+**Description:** `TranscriptConsumer.wrap()`（consumer.py:34-52）通过 `event.type` 和 `event.data` 访问 LoopEvent 的内部结构。具体假设包括：`event.type == "step"` 时 `data.get("content", [])` 返回 content blocks 列表（行 38-39）；`event.type == "tool_result"` 时 `data.get("tool_calls", [])` 和 `data.get("tool_results", [])` 返回列表（行 42-43）。这些字段名和结构与 `AgentLoop` 的 `LoopEvent` 定义耦合——如果 `AgentLoop` 修改了 data 字段名（如将 `tool_calls` 改为 `tool_invocations`），`TranscriptConsumer` 会静默失败（写入空内容）。
+
+**File Location:** `framework/agent_framework/transcript/consumer.py:34-52`
+
+**Impact:** AgentLoop 内部结构调整会导致转录内容丢失，但不会抛出异常（因为使用 `.get()` 带默认值）。
+
+**Fix Suggestion:** 定义 `LoopEventData` TypedDict 或 Protocol，明确 `step` 和 `tool_result` 事件的 data 结构契约。
+
+**Priority:** MEDIUM
+**Related:** FRMW-03 (设计问题)
+
+---
 
 ### LOW
 
-*(pending)*
+*(none found)*
 
 ---
 
 ## viz/
 
-*(pending manual review — Plan 04)*
+逐文件审查范围：3 个源文件 + event_bus.py，~277 行（event_bus.py 61 行、agent_runner.py 95 行、viz_event.py 18 行、ws_server.py 96 行）。
+模块职责：异步事件总线（EventBus）、Agent 可视化事件映射（AgentRunner）、WebSocket 实时推送（ws_server）。
 
 ### CRITICAL
 
-*(pending)*
+*(none found)*
 
 ### HIGH
 
-*(pending)*
+#### FRMW-SEC-20: ws_server.py WebSocket 无认证，任何客户端可连接并接收所有事件
+
+**Description:** `serve_ws()`（ws_server.py:19-24）启动 WebSocket 服务端，不验证客户端身份。任何能连接到 `ws://localhost:8765` 的客户端都可以：(1) 订阅所有 EventBus 事件（包含完整的 tool call 输入/输出）。(2) 发送 `start_team`/`stop_team` 控制命令（虽然 MVP 阶段只返回确认，但未来可能执行实际操作）。虽然默认绑定 `localhost`，在同一台机器上运行的其他进程（包括恶意软件）可以连接。
+
+**File Location:** `framework/agent_framework/viz/ws_server.py:19-24`
+
+**Impact:** (1) 信息泄露：tool call 的输入/输出可能包含敏感数据（API key、用户数据）。(2) 控制命令被未授权方执行（当前 MVP 阶段影响有限，但随功能完善风险增加）。
+
+**Fix Suggestion:** (1) 添加 WebSocket 握手阶段的 token 认证（如 URL 参数 `?token=xxx` 或自定义 header）。(2) 或使用 Unix domain socket 替代 TCP，限制只有同一用户可连接。(3) 最小措施：添加 `allowed_origins` 检查（CORS for WebSocket）。
+
+**Priority:** HIGH
+**Related:** FRMW-04 (安全审查), T-12-10
+
+---
+
+#### FRMW-SEC-21: ws_server.py start_team 命令不验证 agent 配置内容
+
+**Description:** `_handle_start_team()`（ws_server.py:72-77）接收 `cmd.get("agent", {})` 配置但完全不验证其内容。虽然当前是 MVP（只记录日志并返回确认），但如果未来实现真正的 agent 启动逻辑，恶意客户端可以注入任意 agent 配置（如修改 model 参数、注入恶意 system prompt）。
+
+**File Location:** `framework/agent_framework/viz/ws_server.py:72-77`
+
+**Impact:** 当前为 MVP 空操作，无实际安全风险。但作为 API 边界，应在 MVP 阶段就建立输入验证习惯。
+
+**Fix Suggestion:** 添加基本的输入验证（如 `name` 必须是字符串且匹配 `^[a-zA-Z0-9_-]+$`，`model` 必须是已知的 model 名称）。
+
+**Priority:** HIGH
+**Related:** FRMW-04 (安全审查)
+
+---
 
 ### MEDIUM
 
 #### FRMW-SEC-12: ws_server.py try-except-pass 静默吞异常
 
-**Description:** `viz/ws_server.py:41` 在 WebSocket task result 处理中使用 `try-except-pass`。这是 cleanup 代码中的异常保护，静默处理有一定合理性（防止清理失败阻塞主流程），但缺少日志记录。
+**Description:** `_handler()`（ws_server.py:39-42）在处理 WebSocket 连接的 task result 时使用 `try-except-pass`。这是 cleanup 代码中的异常保护（取消 pending tasks 后获取已完成 task 的结果），静默处理有一定合理性（防止清理失败阻塞连接关闭），但缺少日志记录。
 
-**File Location:** `framework/agent_framework/viz/ws_server.py:41`
+**File Location:** `framework/agent_framework/viz/ws_server.py:39-42`
 
-**Impact:** WebSocket 连接清理失败时无法追踪。
+**Impact:** WebSocket 连接清理失败时无法追踪。如果 task 抛出意外异常（如 EventBus 内部错误），无法通过日志诊断。
 
-**Fix Suggestion:** 添加 `logger.debug` 记录清理失败。
+**Fix Suggestion:** 添加 `logger.debug("Task cleanup error: %s", exc)` 记录清理失败。
 
 **Priority:** MEDIUM
 **Related:** FRMW-04 (安全审查)
 
 ---
 
+#### FRMW-LOGIC-38: EventBus.publish 在锁外遍历订阅者快照，存在竞态窗口
+
+**Description:** `EventBus.publish()`（event_bus.py:41-57）在 `async with self._lock` 内获取订阅者快照 `snapshot = list(self._subscribers)`（行 49），然后在锁外遍历快照进行 `put_nowait()`（行 51-57）。在遍历期间，如果另一个协程调用 `unsubscribe()` 移除了某个 Queue，`put_nowait()` 仍会向已取消订阅的 Queue 推送事件——这是可接受的（多推送几个事件无害）。但如果 Queue 已被 GC 回收，`put_nowait()` 可能抛出意外异常。此外，锁内的"无订阅者时缓冲"逻辑（行 44-48）与锁外的"遍历快照推送"逻辑之间存在微小的竞态窗口——在获取锁和释放锁之间，可能有新的订阅者加入，但不会收到当前事件（因为事件已经被缓冲到 `_replay` 或已经发布到旧快照中）。
+
+**File Location:** `framework/agent_framework/viz/event_bus.py:41-57`
+
+**Impact:** (1) 新订阅者可能错过刚发布的事件（竞态窗口极小）。(2) 已取消订阅的 Queue 可能收到多余事件（无害）。在当前单线程 asyncio 模型下，实际的并发问题只发生在 `await` 点之间，竞态窗口极小。
+
+**Fix Suggestion:** 当前行为在单线程 asyncio 下足够安全。如果要严格保证事件顺序，将 `put_nowait()` 也放在锁内——但会增加锁持有时间，可能影响性能。建议维持现状，在文档中注明"best-effort delivery"语义。
+
+**Priority:** MEDIUM
+**Related:** FRMW-02 (逻辑漏洞)
+
+---
+
+#### FRMW-ARCH-51: ws_server.py _active_runners 是模块级全局变量，多个 serve_ws 实例共享
+
+**Description:** `_active_runners`（ws_server.py:16）是模块级 `dict`，所有 `serve_ws()` 实例共享。如果同时启动多个 WebSocket 服务端（不同端口），它们会共享同一个 `_active_runners` 字典。`_handle_stop_team()` 通过 `name` 查找并取消 task——如果两个服务端分别启动了同名的 agent，`stop_team` 会取消错误的 task。
+
+**File Location:** `framework/agent_framework/viz/ws_server.py:16`
+
+**Impact:** 多实例场景下 task 管理混乱。当前通常只启动一个 WebSocket 服务端，影响有限。
+
+**Fix Suggestion:** 将 `_active_runners` 移到 `serve_ws()` 的闭包中，或创建 `WSServer` 类管理状态。
+
+**Priority:** MEDIUM
+**Related:** FRMW-03 (设计问题)
+
+---
+
 ### LOW
 
-*(pending)*
+*(none found)*
