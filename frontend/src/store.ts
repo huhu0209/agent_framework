@@ -23,6 +23,33 @@ export function resetIdCounter() {
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''
 
+const inflightRequests = new Map<string, Promise<ChatMessage[]>>()
+
+async function fetchMessages(id: string): Promise<ChatMessage[]> {
+  const existing = inflightRequests.get(id)
+  if (existing) return existing
+
+  const promise = (async () => {
+    const res = await fetch(`${API_BASE}/api/v1/chat/${id}`)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const data = await res.json()
+    return data.messages.map((m: Record<string, unknown>, i: number) => ({
+      id: `restored-${i}-${Date.now()}`,
+      role: m.role as MessageRole,
+      timestamp: (m.timestamp as number) ?? Date.now(),
+      ...(m.content ? { content: m.content as string } : {}),
+      ...(m.blocks ? { blocks: toFrontendBlocks(m.blocks as Record<string, unknown>[]) } : {}),
+    }))
+  })()
+
+  inflightRequests.set(id, promise)
+  try {
+    return await promise
+  } finally {
+    inflightRequests.delete(id)
+  }
+}
+
 function vizEventToBlock(event: VizEvent): AgentBlockInit | null {
   switch (event.type) {
     case 'thinking': {
@@ -175,19 +202,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
     set({ switchingSession: true })
     try {
-      const res = await fetch(`${API_BASE}/api/v1/chat/${id}`)
-      if (!res.ok) {
-        set({ switchingSession: false })
-        return
-      }
-      const data = await res.json()
-      const messages: ChatMessage[] = data.messages.map((m: Record<string, unknown>, i: number) => ({
-        id: `restored-${i}-${Date.now()}`,
-        role: m.role as MessageRole,
-        timestamp: (m.timestamp as number) ?? Date.now(),
-        ...(m.content ? { content: m.content as string } : {}),
-        ...(m.blocks ? { blocks: toFrontendBlocks(m.blocks as Record<string, unknown>[]) } : {}),
-      }))
+      const messages = await fetchMessages(id)
       const cache = new Map(get().messageCache)
       cache.set(id, messages)
       set({ messages, sessionId: id, streamingMessage: null, switchingSession: false, messageCache: cache })
@@ -243,16 +258,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   prefetchSession: async (id: string) => {
     if (get().messageCache.has(id)) return
     try {
-      const res = await fetch(`${API_BASE}/api/v1/chat/${id}`)
-      if (!res.ok) return
-      const data = await res.json()
-      const messages: ChatMessage[] = data.messages.map((m: Record<string, unknown>, i: number) => ({
-        id: `restored-${i}-${Date.now()}`,
-        role: m.role as MessageRole,
-        timestamp: (m.timestamp as number) ?? Date.now(),
-        ...(m.content ? { content: m.content as string } : {}),
-        ...(m.blocks ? { blocks: toFrontendBlocks(m.blocks as Record<string, unknown>[]) } : {}),
-      }))
+      const messages = await fetchMessages(id)
       const cache = new Map(get().messageCache)
       cache.set(id, messages)
       set({ messageCache: cache })

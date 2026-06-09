@@ -417,4 +417,35 @@ describe('useChatStore', () => {
 
     expect(mockFetch).not.toHaveBeenCalled()
   })
+
+  it('deduplicates concurrent fetches for the same session', async () => {
+    let fetchCount = 0
+    mockFetch.mockImplementation(async () => {
+      fetchCount++
+      // Simulate delay so both calls overlap
+      await new Promise(r => setTimeout(r, 50))
+      return {
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({
+          session_id: 'aaa...aaa',
+          messages: [{ role: 'user', content: 'hi', timestamp: 1000 }],
+          has_more: false,
+        }),
+      }
+    })
+
+    // Reset cache so both miss
+    useChatStore.setState({ messageCache: new Map(), messages: [], sessionId: null })
+
+    const sid = 'a'.repeat(32)
+    await Promise.all([
+      useChatStore.getState().switchSession(sid),
+      useChatStore.getState().prefetchSession(sid),
+    ])
+
+    expect(fetchCount).toBe(1)
+    // Verify the cache is populated
+    expect(useChatStore.getState().messageCache.has(sid)).toBe(true)
+  })
 })
