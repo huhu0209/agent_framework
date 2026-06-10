@@ -191,3 +191,50 @@ class TestMcpEnvBlacklist:
         cfg = McpServerConfig(name="test", command="echo", env={"DEBUG": "true", "VERBOSE": "1"})
         assert cfg.env["DEBUG"] == "true"
         assert cfg.env["VERBOSE"] == "1"
+
+    # --- 扩展模式测试 (Phase 16) ---
+
+    def test_rejects_auth(self):
+        with pytest.raises(ValidationError, match="敏感"):
+            McpServerConfig(name="test", command="echo", env={"AUTH_HEADER": "xxx"})
+
+    def test_rejects_session(self):
+        with pytest.raises(ValidationError, match="敏感"):
+            McpServerConfig(name="test", command="echo", env={"SESSION_ID": "xxx"})
+
+    def test_rejects_cookie(self):
+        with pytest.raises(ValidationError, match="敏感"):
+            McpServerConfig(name="test", command="echo", env={"COOKIE_VALUE": "xxx"})
+
+    def test_rejects_bearer(self):
+        with pytest.raises(ValidationError, match="敏感"):
+            McpServerConfig(name="test", command="echo", env={"BEARER_TOKEN": "xxx"})
+
+    def test_rejects_refresh(self):
+        with pytest.raises(ValidationError, match="敏感"):
+            McpServerConfig(name="test", command="echo", env={"REFRESH_TOKEN": "xxx"})
+
+    def test_rejects_jwt(self):
+        with pytest.raises(ValidationError, match="敏感"):
+            McpServerConfig(name="test", command="echo", env={"JWT_SECRET": "xxx"})
+
+
+class TestMcpShutdownLogging:
+    """McpManager.shutdown 应在 client 关闭失败时记录日志。"""
+
+    @pytest.mark.asyncio
+    async def test_shutdown_logs_on_close_failure(self, caplog):
+        """当 client.close() 抛异常时，shutdown 应记 debug 日志而非静默 pass。"""
+        import logging
+
+        class FailingClient:
+            async def close(self):
+                raise RuntimeError("close failed")
+
+        manager = McpManager([])
+        manager._clients["broken"] = FailingClient()
+
+        with caplog.at_level(logging.DEBUG, logger="agent_framework.tools.mcp.config"):
+            await manager.shutdown()
+
+        assert any("broken" in r.message and "关闭失败" in r.message for r in caplog.records)
