@@ -6,6 +6,8 @@ import json
 import logging
 from pathlib import Path
 
+import aiofiles
+
 from agent_framework.llm.base import ILLMAdapter
 from agent_framework.llm.types import (
     CompletionConfig,
@@ -34,7 +36,7 @@ class LLMScoringRetriever:
             "只返回 JSON，不要其他内容。"
         )
 
-    def _scan_candidates(self, memory_dir: Path) -> list[dict[str, str]]:
+    async def _scan_candidates(self, memory_dir: Path) -> list[dict[str, str]]:
         """扫描 memory 目录下的 .md 文件，提取 frontmatter 摘要。"""
         candidates = []
         for f in sorted(memory_dir.glob("*.md")):
@@ -42,7 +44,8 @@ class LLMScoringRetriever:
                 break
             if f.name == "MEMORY.md":
                 continue
-            content = f.read_text(encoding="utf-8")
+            async with aiofiles.open(f, "r", encoding="utf-8") as af:
+                content = await af.read()
             meta = parse_frontmatter(content)
             candidates.append({
                 "file": f.name,
@@ -58,7 +61,7 @@ class LLMScoringRetriever:
         memory_dir: Path,
     ) -> list[dict[str, str]]:
         """LLM 选择最相关的记忆文件，返回内容。"""
-        candidates = self._scan_candidates(memory_dir)
+        candidates = await self._scan_candidates(memory_dir)
         if not candidates:
             return []
 
@@ -102,9 +105,11 @@ class LLMScoringRetriever:
             if not fpath.is_relative_to(memory_dir.resolve()):
                 continue
             if fpath.exists():
+                async with aiofiles.open(fpath, "r", encoding="utf-8") as af:
+                    file_content = await af.read()
                 selected.append({
                     "file": fpath.name,
-                    "content": fpath.read_text(encoding="utf-8"),
+                    "content": file_content,
                 })
 
         return selected

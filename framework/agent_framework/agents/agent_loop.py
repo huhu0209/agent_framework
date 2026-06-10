@@ -254,7 +254,7 @@ class AgentLoop(Agent):
             if memory_dir:
                 _conv_text = self._serialize_for_flush(messages)
                 log_mgr = EpisodicLogManager(Path(memory_dir))
-                existing = log_mgr.read_log(dt.now().strftime("%Y-%m-%d"))
+                existing = await log_mgr.read_log(dt.now().strftime("%Y-%m-%d"))
                 flush_coro = self._flush_extractor.flush(
                     _conv_text, dt.now(), log_mgr, existing_log=existing,
                 )

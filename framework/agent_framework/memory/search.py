@@ -27,7 +27,7 @@ async def handle_memory_search(args: dict, ctx: ToolUseContext) -> ToolResult:
 
     results: list[str] = []
     for date in reversed(dates):
-        content = log_manager.read_log(date)
+        content = await log_manager.read_log(date)
         if content is None:
             continue
 

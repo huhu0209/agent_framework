@@ -1,7 +1,4 @@
-"""MEMORY.md 索引管理器 — 自动维护语义记忆索引文件。
-
-注：文件 I/O 全部同步。索引维护在写入路径上调用，写入为串行操作，无并发风险。
-"""
+"""MEMORY.md 索引管理器 — 自动维护语义记忆索引文件。"""
 
 from __future__ import annotations
 
@@ -10,6 +7,8 @@ import os
 import re
 import tempfile
 from pathlib import Path
+
+import aiofiles
 
 logger = logging.getLogger(__name__)
 
@@ -23,15 +22,16 @@ class MemoryIndexManager:
     def __init__(self, index_path: Path) -> None:
         self._path = index_path
 
-    def _atomic_write(self, text: str) -> None:
+    async def _atomic_write(self, text: str) -> None:
         """原子写入：write-to-temp + os.replace，防止崩溃时丢失。"""
         self._path.parent.mkdir(parents=True, exist_ok=True)
         fd, tmp_path = tempfile.mkstemp(
             dir=self._path.parent, suffix=".tmp", prefix=".memory_idx_"
         )
         try:
-            with os.fdopen(fd, "w", encoding="utf-8") as f:
-                f.write(text)
+            os.close(fd)
+            async with aiofiles.open(tmp_path, "w", encoding="utf-8") as f:
+                await f.write(text)
             os.replace(tmp_path, self._path)
         except BaseException:
             try:
@@ -44,12 +44,13 @@ class MemoryIndexManager:
     def _make_pattern(file_name: str) -> re.Pattern:
         return re.compile(rf"^\- \[.*?\]\({re.escape(file_name)}\) — ")
 
-    def update(self, file_name: str, name: str, description: str) -> None:
+    async def update(self, file_name: str, name: str, description: str) -> None:
         """新增或更新索引行。>200 行时截断最旧行。"""
         line = self._format_line(file_name, name, description)
 
         if self._path.exists():
-            content = self._path.read_text(encoding="utf-8")
+            async with aiofiles.open(self._path, "r", encoding="utf-8") as f:
+                content = await f.read()
         else:
             content = ""
 
@@ -89,20 +90,21 @@ class MemoryIndexManager:
                 lines = header + body[-max_body:]
             logger.warning("MEMORY.md 索引超 %d 行，执行截断", _MAX_LINES)
 
-        self._atomic_write("\n".join(lines))
+        await self._atomic_write("\n".join(lines))
 
-    def remove(self, file_name: str) -> None:
+    async def remove(self, file_name: str) -> None:
         """删除索引行。"""
         if not self._path.exists():
             return
 
-        content = self._path.read_text(encoding="utf-8")
+        async with aiofiles.open(self._path, "r", encoding="utf-8") as f:
+            content = await f.read()
         lines = content.split("\n")
 
         pattern = self._make_pattern(file_name)
         lines = [l for l in lines if not pattern.match(l)]
 
-        self._atomic_write("\n".join(lines))
+        await self._atomic_write("\n".join(lines))
 
     def _format_line(self, file_name: str, name: str, description: str) -> str:
         line = f"- [{name}]({file_name}) — {description}"

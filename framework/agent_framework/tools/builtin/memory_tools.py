@@ -34,7 +34,7 @@ async def handle_memory_write(args: dict, ctx: ToolUseContext) -> ToolResult:
         return ToolResult(content=f"event_type 无效，可选值: {valid}", is_error=True)
 
     log_manager = EpisodicLogManager(memory_dir=Path(memory_dir))
-    log_manager.append(datetime.now(), event_type, content)
+    await log_manager.append(datetime.now(), event_type, content)
 
     return ToolResult(content=f"已记录 [{event_type.value}] {content[:50]}")
 
@@ -66,7 +66,7 @@ async def handle_memory_search(args: dict, ctx: ToolUseContext) -> ToolResult:
 
     results: list[str] = []
     for date in reversed(dates):
-        content = log_manager.read_log(date)
+        content = await log_manager.read_log(date)
         if content is None:
             continue
 
