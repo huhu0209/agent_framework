@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass, field
+import logging
+
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, AsyncGenerator, TYPE_CHECKING
 
@@ -51,6 +53,9 @@ if TYPE_CHECKING:
     from agent_framework.hooks.manager import HookManager
     from agent_framework.tasks.runner import TaskRunner
     from agent_framework.teams.manager import TeamManager
+
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class LoopEvent(AgentEvent):

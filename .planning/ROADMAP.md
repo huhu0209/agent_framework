@@ -59,6 +59,11 @@
 2. `agent_loop.py` logger 正确定义，memory flush 异常可被正确记录
 3. `from __future__ import annotations` 或 httpx import 位置修复
 4. 全部 964+ 测试通过
+**Plans:** 1 plan
+
+Plans:
+- [ ] 15-01-PLAN.md — Remove 32 unused imports, fix logger undefined, fix httpx TYPE_CHECKING
+
 **Depends on:** None
 
 ### Phase 16: Framework 安全修复
@@ -134,7 +139,7 @@
 | 12. Framework 代码审查 | v0.0.4 | 5/5 | Complete | 2026-06-09 |
 | 13. Backend 代码审查 | v0.0.4 | 2/2 | Complete | 2026-06-09 |
 | 14. Frontend 代码审查 | v0.0.4 | 2/2 | Complete | 2026-06-09 |
-| 15. Framework 死代码清理 | v0.0.5 | 0/? | Not started | — |
+| 15. Framework 死代码清理 | v0.0.5 | 0/1 | Not started | — |
 | 16. Framework 安全修复 | v0.0.5 | 0/? | Not started | — |
 | 17. Framework 逻辑修复 | v0.0.5 | 0/? | Not started | — |
 | 18. Backend 全面修复 | v0.0.5 | 0/? | Not started | — |

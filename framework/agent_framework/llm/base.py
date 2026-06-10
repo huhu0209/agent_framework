@@ -8,8 +8,12 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
 
 from .types import CompletionConfig, CompletionResult, ProviderInfo, StreamEvent
+
+if TYPE_CHECKING:
+    import httpx
 
 
 class ILLMAdapter(ABC):
