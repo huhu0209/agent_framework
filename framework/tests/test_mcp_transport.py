@@ -2,9 +2,10 @@
 
 import asyncio
 import json
+import os
 import sys
 import pytest
-from agent_framework.tools.mcp.transport import McpTransport, StdioTransport
+from agent_framework.tools.mcp.transport import McpTransport, StdioTransport, _ALLOWED_ENV_KEYS
 
 
 def _make_transport_with_reader(data: bytes) -> StdioTransport:
@@ -183,3 +184,83 @@ async def test_read_until_header_end_eof():
     transport = _make_transport_with_reader(b"")
     with pytest.raises(EOFError):
         await transport._read_until_header_end()
+
+
+# --- 白名单 env 测试 ---
+
+
+def test_allowed_env_keys_is_frozenset():
+    """_ALLOWED_ENV_KEYS 应为 frozenset。"""
+    assert isinstance(_ALLOWED_ENV_KEYS, frozenset)
+
+
+def test_allowed_env_keys_includes_essentials():
+    """白名单应包含基础环境变量。"""
+    expected = {"PATH", "HOME", "TEMP", "TMP", "TMPDIR", "USER", "LANG", "SYSTEMROOT"}
+    assert expected.issubset(_ALLOWED_ENV_KEYS)
+
+
+@pytest.mark.asyncio
+async def test_connect_env_uses_whitelist_not_full_environ(monkeypatch, tmp_path):
+    """子进程只继承白名单环境变量，不继承全部 os.environ。"""
+    monkeypatch.setenv("MY_SECRET_API_KEY", "should-not-leak")
+    monkeypatch.setenv("MY_DANGEROUS_TOKEN", "should-not-leak")
+
+    # 用一个脚本把环境变量写入临时文件
+    outfile = tmp_path / "child_env.json"
+    dump_script = tmp_path / "dump_env.py"
+    dump_script.write_text(
+        f"import os, json\n"
+        f"env = dict(os.environ)\n"
+        f"with open({str(outfile)!r}, 'w') as f:\n"
+        f"    json.dump(env, f)\n"
+    )
+
+    transport = StdioTransport(
+        command=sys.executable,
+        args=[str(dump_script)],
+    )
+    await transport.connect()
+    await transport._process.wait()
+
+    with open(outfile) as f:
+        child_env = json.load(f)
+
+    # 敏感变量不应泄漏到子进程
+    assert "MY_SECRET_API_KEY" not in child_env
+    assert "MY_DANGEROUS_TOKEN" not in child_env
+
+    await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_connect_env_merges_config_env_on_top(monkeypatch, tmp_path):
+    """config env 应合并在白名单基座之上。"""
+    # 确保白名单中有 HOME
+    if "HOME" not in os.environ:
+        monkeypatch.setenv("HOME", "/original")
+
+    outfile = tmp_path / "child_env2.json"
+    dump_script = tmp_path / "dump_env2.py"
+    dump_script.write_text(
+        f"import os, json\n"
+        f"env = dict(os.environ)\n"
+        f"with open({str(outfile)!r}, 'w') as f:\n"
+        f"    json.dump(env, f)\n"
+    )
+
+    transport = StdioTransport(
+        command=sys.executable,
+        args=[str(dump_script)],
+        env={"MY_CUSTOM_VAR": "hello"},
+    )
+    await transport.connect()
+    await transport._process.wait()
+
+    with open(outfile) as f:
+        child_env = json.load(f)
+
+    # config env 应出现在子进程中
+    assert child_env.get("MY_CUSTOM_VAR") == "hello"
+
+    await transport.close()
