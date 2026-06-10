@@ -24,6 +24,12 @@ _BLOCKED_ENV_PATTERNS: tuple[str, ...] = (
     "credential",
     "private_key",
     "access_key",
+    "auth",
+    "session",
+    "cookie",
+    "bearer",
+    "refresh",
+    "jwt",
 )
 
 
@@ -94,11 +100,11 @@ class McpManager:
 
     async def shutdown(self) -> None:
         """关闭所有 client。"""
-        for client in self._clients.values():
+        for name, client in self._clients.items():
             try:
                 await client.close()
             except Exception:
-                pass
+                logger.debug("MCP client '%s' 关闭失败", name)
         self._clients.clear()
 
     def _create_transport(self, cfg: McpServerConfig) -> McpTransport:

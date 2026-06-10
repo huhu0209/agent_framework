@@ -10,6 +10,10 @@ from abc import ABC, abstractmethod
 
 logger = logging.getLogger(__name__)
 
+_ALLOWED_ENV_KEYS: frozenset[str] = frozenset({
+    "PATH", "HOME", "TEMP", "TMP", "TMPDIR", "USER", "LANG", "SYSTEMROOT",
+})
+
 
 class McpTransport(ABC):
     """MCP 传输抽象基类。
@@ -54,7 +58,8 @@ class StdioTransport(McpTransport):
         self._reader_task: asyncio.Task | None = None
 
     async def connect(self) -> None:
-        env = {**os.environ, **(self._env or {})}
+        base_env = {k: v for k, v in os.environ.items() if k in _ALLOWED_ENV_KEYS}
+        env = {**base_env, **(self._env or {})}
         self._process = await asyncio.create_subprocess_exec(
             self._command,
             *self._args,
