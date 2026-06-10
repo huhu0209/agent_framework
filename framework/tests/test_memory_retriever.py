@@ -64,7 +64,7 @@ class TestLLMScoringRetriever:
         assert all("../../" not in f for f in files)
         assert "feedback_testing.md" in files
 
-    def test_scan_candidates_respects_limit(self, memory_dir: Path):
+    async def test_scan_candidates_respects_limit(self, memory_dir: Path):
         for i in range(55):
             (memory_dir / f"file_{i}.md").write_text(
                 "---\nname: test\ndescription: d\ntype: user\n---\n\nbody",
@@ -72,5 +72,5 @@ class TestLLMScoringRetriever:
             )
         adapter = MockAdapter('{"selected": []}')
         retriever = LLMScoringRetriever(adapter=adapter, model="test-model")
-        candidates = retriever._scan_candidates(memory_dir)
+        candidates = await retriever._scan_candidates(memory_dir)
         assert len(candidates) <= 50

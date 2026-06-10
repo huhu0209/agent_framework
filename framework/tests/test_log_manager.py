@@ -14,9 +14,9 @@ def log_mgr(memory_dir):
 
 
 class TestAppend:
-    def test_creates_file_and_directories(self, log_mgr, memory_dir):
+    async def test_creates_file_and_directories(self, log_mgr, memory_dir):
         ts = datetime(2026, 5, 20, 14, 32, tzinfo=timezone.utc)
-        log_mgr.append(ts, EventType.DECISION, "选择 FastAPI")
+        await log_mgr.append(ts, EventType.DECISION, "选择 FastAPI")
         log_path = memory_dir / "logs" / "2026" / "05" / "2026-05-20.md"
         assert log_path.exists()
         content = log_path.read_text(encoding="utf-8")
@@ -24,55 +24,55 @@ class TestAppend:
         assert "决策" in content
         assert "选择 FastAPI" in content
 
-    def test_multiple_appends_same_day(self, log_mgr):
+    async def test_multiple_appends_same_day(self, log_mgr):
         ts1 = datetime(2026, 5, 20, 10, 0, tzinfo=timezone.utc)
         ts2 = datetime(2026, 5, 20, 14, 32, tzinfo=timezone.utc)
-        log_mgr.append(ts1, EventType.PROGRESS, "完成 A")
-        log_mgr.append(ts2, EventType.ERROR, "出错 B")
-        content = log_mgr.read_log("2026-05-20")
+        await log_mgr.append(ts1, EventType.PROGRESS, "完成 A")
+        await log_mgr.append(ts2, EventType.ERROR, "出错 B")
+        content = await log_mgr.read_log("2026-05-20")
         assert content is not None
         assert "10:00" in content
         assert "14:32" in content
 
 
 class TestReadLog:
-    def test_existing_log(self, log_mgr):
+    async def test_existing_log(self, log_mgr):
         ts = datetime(2026, 5, 20, 14, 32, tzinfo=timezone.utc)
-        log_mgr.append(ts, EventType.DECISION, "test")
-        assert log_mgr.read_log("2026-05-20") is not None
+        await log_mgr.append(ts, EventType.DECISION, "test")
+        assert await log_mgr.read_log("2026-05-20") is not None
 
-    def test_missing_log_returns_none(self, log_mgr):
-        assert log_mgr.read_log("2020-01-01") is None
+    async def test_missing_log_returns_none(self, log_mgr):
+        assert await log_mgr.read_log("2020-01-01") is None
 
 
 class TestWriteRaw:
-    def test_raw_append(self, log_mgr):
-        log_mgr.write_raw("2026-05-20", "## [14:32] 决策\n内容\n")
-        content = log_mgr.read_log("2026-05-20")
+    async def test_raw_append(self, log_mgr):
+        await log_mgr.write_raw("2026-05-20", "## [14:32] 决策\n内容\n")
+        content = await log_mgr.read_log("2026-05-20")
         assert "14:32" in content
 
 
 class TestWriteRawFormat:
-    def test_write_raw_adds_flush_header(self, log_mgr):
-        log_mgr.write_raw("2026-05-20", "## 决策\n选择 FastAPI\n")
-        content = log_mgr.read_log("2026-05-20")
+    async def test_write_raw_adds_flush_header(self, log_mgr):
+        await log_mgr.write_raw("2026-05-20", "## 决策\n选择 FastAPI\n")
+        content = await log_mgr.read_log("2026-05-20")
         assert "## [" in content
         assert "flush" in content
 
-    def test_write_raw_and_append_coexist(self, log_mgr):
+    async def test_write_raw_and_append_coexist(self, log_mgr):
         ts = datetime(2026, 5, 20, 10, 0, tzinfo=timezone.utc)
-        log_mgr.append(ts, EventType.PROGRESS, "完成 A")
-        log_mgr.write_raw("2026-05-20", "## 决策\n选择 FastAPI\n")
-        content = log_mgr.read_log("2026-05-20")
+        await log_mgr.append(ts, EventType.PROGRESS, "完成 A")
+        await log_mgr.write_raw("2026-05-20", "## 决策\n选择 FastAPI\n")
+        content = await log_mgr.read_log("2026-05-20")
         assert content is not None
         assert content.count("## [") >= 2
 
 
 class TestListDates:
-    def test_lists_sorted_dates(self, log_mgr):
+    async def test_lists_sorted_dates(self, log_mgr):
         for day in [15, 10, 20]:
             ts = datetime(2026, 5, day, 12, 0, tzinfo=timezone.utc)
-            log_mgr.append(ts, EventType.PROGRESS, f"day {day}")
+            await log_mgr.append(ts, EventType.PROGRESS, f"day {day}")
         dates = log_mgr.list_dates()
         assert dates == ["2026-05-10", "2026-05-15", "2026-05-20"]
 

@@ -23,7 +23,7 @@ class TestSearch:
         """情景层关键词匹配。"""
         log_mgr = EpisodicLogManager(memory_dir=memory_dir)
         ts = datetime(2026, 5, 20, 10, 0, tzinfo=timezone.utc)
-        log_mgr.append(ts, EventType.DECISION, "选择 FastAPI 框架")
+        await log_mgr.append(ts, EventType.DECISION, "选择 FastAPI 框架")
 
         results = await memory_store.search("FastAPI")
         assert len(results) >= 1
@@ -37,7 +37,7 @@ class TestSearch:
         """语义层 LLM 评分召回。"""
         # 先写入语义记忆
         writer = SemanticWriter(memory_dir=memory_dir)
-        path = writer.write(SemanticMemoryDraft(
+        path = await writer.write(SemanticMemoryDraft(
             name="后端框架", description="使用 FastAPI",
             type=MemoryType.PROJECT,
             body="**Why:** 性能好\n**How to apply:** 新接口用 FastAPI",

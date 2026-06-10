@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 
+import aiofiles
+
 from agent_framework.tools.types import ToolResult
 
 RESULT_DUMP_DIR = ".agent_results"
@@ -12,7 +14,7 @@ PREVIEW_HEAD_CHARS = 250
 PREVIEW_TAIL_CHARS = 250
 
 
-def truncate_if_needed(
+async def truncate_if_needed(
     result: ToolResult, tool_call_id: str, workdir: str
 ) -> ToolResult:
     """超过阈值时将完整结果写入磁盘，返回摘要 ToolResult。"""
@@ -31,8 +33,8 @@ def truncate_if_needed(
     relative_path = f"{RESULT_DUMP_DIR}/{dump_filename}"
 
     os.makedirs(dump_dir, exist_ok=True)
-    with open(dump_path, "w", encoding="utf-8") as f:
-        f.write(result.content)
+    async with aiofiles.open(dump_path, "w", encoding="utf-8") as f:
+        await f.write(result.content)
 
     return ToolResult(
         content=(

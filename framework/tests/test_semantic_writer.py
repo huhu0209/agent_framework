@@ -81,42 +81,42 @@ class TestValidation:
 
 
 class TestWrite:
-    def test_creates_new_file(self, writer, memory_dir):
+    async def test_creates_new_file(self, writer, memory_dir):
         draft = SemanticMemoryDraft(
             name="test-strategy", description="测试描述",
             type=MemoryType.USER, body="正文内容",
         )
-        path = writer.write(draft)
+        path = await writer.write(draft)
         assert path.exists()
         content = path.read_text(encoding="utf-8")
         assert "---" in content
         assert "test-strategy" in content
         assert "正文内容" in content
 
-    def test_merge_existing_file(self, writer, memory_dir):
+    async def test_merge_existing_file(self, writer, memory_dir):
         draft = SemanticMemoryDraft(
             name="test-strategy", description="desc",
             type=MemoryType.USER, body="first body",
         )
-        writer.write(draft)
-        writer.write(draft.model_copy(update={"body": "second body"}))
+        await writer.write(draft)
+        await writer.write(draft.model_copy(update={"body": "second body"}))
         content = next(memory_dir.glob("*.md")).read_text(encoding="utf-8")
         assert "first body" in content
         assert "second body" in content
         assert "追加" in content
 
-    def test_updates_memory_index(self, writer, memory_dir):
+    async def test_updates_memory_index(self, writer, memory_dir):
         draft = SemanticMemoryDraft(
             name="test", description="desc",
             type=MemoryType.USER, body="body",
         )
-        writer.write(draft)
+        await writer.write(draft)
         index = (memory_dir / "MEMORY.md").read_text(encoding="utf-8")
         assert "test" in index
 
 
 class TestMergeConflictDetection:
-    def test_merge_with_overlap_logs_warning(self, writer, caplog):
+    async def test_merge_with_overlap_logs_warning(self, writer, caplog):
         """merge 检测到关键词重叠时，应 logger.warning。"""
         import logging
 
@@ -125,14 +125,14 @@ class TestMergeConflictDetection:
             type=MemoryType.FEEDBACK,
             body="**Why:** mock 不够\n**How to apply:** 用真实 DB",
         )
-        writer.write(draft)
+        await writer.write(draft)
         with caplog.at_level(logging.WARNING, logger="agent_framework.memory.semantic_writer"):
-            writer.write(draft.model_copy(update={
+            await writer.write(draft.model_copy(update={
                 "body": "**Why:** 还是用 mock 不够\n**How to apply:** 改用真实 DB",
             }))
         assert any("重叠" in r.message for r in caplog.records)
 
-    def test_merge_no_overlap_no_warning(self, writer, caplog):
+    async def test_merge_no_overlap_no_warning(self, writer, caplog):
         """merge 无重叠时，不产生警告。"""
         import logging
 
@@ -144,20 +144,20 @@ class TestMergeConflictDetection:
             name="偏好A", description="desc",
             type=MemoryType.USER, body="完全不同的新内容关于部署流程",
         )
-        writer.write(draft1)
+        await writer.write(draft1)
         with caplog.at_level(logging.WARNING, logger="agent_framework.memory.semantic_writer"):
-            writer.write(draft2)
+            await writer.write(draft2)
         assert not any("重叠" in r.message for r in caplog.records)
 
 
 class TestWriteBatch:
-    def test_mixed_valid_invalid(self, writer):
+    async def test_mixed_valid_invalid(self, writer):
         valid = SemanticMemoryDraft(
             name="ok", description="d", type=MemoryType.USER, body="body",
         )
         invalid = SemanticMemoryDraft(
             name="bad", description="d", type=MemoryType.FEEDBACK, body="no markers",
         )
-        result = writer.write_batch([valid, invalid])
+        result = await writer.write_batch([valid, invalid])
         assert len(result.written) == 1
         assert len(result.skipped) == 1

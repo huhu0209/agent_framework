@@ -37,7 +37,7 @@ class TestMemoryWrite:
 
         log_mgr = EpisodicLogManager(memory_dir=memory_dir)
         today = datetime.now().strftime("%Y-%m-%d")
-        log_content = log_mgr.read_log(today)
+        log_content = await log_mgr.read_log(today)
 
         assert log_content is not None
         assert "PostgreSQL" in log_content

@@ -53,7 +53,7 @@ class TestFlushExtractor:
         )
 
         assert result is True
-        log_content = log_manager.read_log("2026-05-20")
+        log_content = await log_manager.read_log("2026-05-20")
         assert log_content is not None
         assert "决策" in log_content
 
@@ -70,4 +70,4 @@ class TestFlushExtractor:
         )
 
         assert result is False
-        assert log_manager.read_log("2026-05-20") is None
+        assert await log_manager.read_log("2026-05-20") is None

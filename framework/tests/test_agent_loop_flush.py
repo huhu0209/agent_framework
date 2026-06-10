@@ -67,7 +67,7 @@ async def test_flush_triggers_on_compaction(memory_dir: Path):
 
     log_mgr = EpisodicLogManager(memory_dir)
     today = datetime.now().strftime("%Y-%m-%d")
-    log_content = log_mgr.read_log(today)
+    log_content = await log_mgr.read_log(today)
     assert log_content is not None
     assert "决策" in log_content
 
@@ -150,7 +150,7 @@ async def test_flush_reads_existing_log_for_dedup(memory_dir: Path):
     """flush 前读取当天已有日志，传入 extract 做去重。"""
     log_mgr = EpisodicLogManager(memory_dir)
     today = datetime.now().strftime("%Y-%m-%d")
-    log_mgr.write_raw(today, "## [10:00] 决策\n已有的决策\n")
+    await log_mgr.write_raw(today, "## [10:00] 决策\n已有的决策\n")
 
     flush_adapter = AsyncMock(spec=ILLMAdapter)
     flush_adapter.get_provider_info.return_value = ProviderInfo(

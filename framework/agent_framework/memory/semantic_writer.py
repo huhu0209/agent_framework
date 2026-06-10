@@ -1,7 +1,4 @@
-"""语义记忆写入器 — 校验、命名、文件写入、merge。
-
-注：文件 I/O 全部同步。语义记忆写入由 flush 管线串行调用，无并发竞争。
-"""
+"""语义记忆写入器 — 校验、命名、文件写入、merge。"""
 
 from __future__ import annotations
 
@@ -12,6 +9,7 @@ import unicodedata
 from datetime import date
 from pathlib import Path
 
+import aiofiles
 from pydantic import BaseModel
 
 from agent_framework.memory.frontmatter import format_frontmatter
@@ -72,7 +70,7 @@ class SemanticWriter:
                 )
         return ValidationResult(passed=True)
 
-    def write(self, draft: SemanticMemoryDraft, *, merged_at: date | None = None) -> Path:
+    async def write(self, draft: SemanticMemoryDraft, *, merged_at: date | None = None) -> Path:
         """写入 .md 文件。冲突时 merge 追加。"""
         validation = self.validate(draft)
         if not validation.passed:
@@ -81,29 +79,30 @@ class SemanticWriter:
         file_path = self._memory_dir / f"{slug}.md"
 
         if file_path.exists():
-            self._merge(file_path, draft, merged_at=merged_at)
+            await self._merge(file_path, draft, merged_at=merged_at)
         else:
-            self._create(file_path, draft)
+            await self._create(file_path, draft)
 
-        self._index.update(f"{slug}.md", draft.name, draft.description)
+        await self._index.update(f"{slug}.md", draft.name, draft.description)
         return file_path
 
-    def write_batch(self, drafts: list[SemanticMemoryDraft]) -> WriteBatchResult:
+    async def write_batch(self, drafts: list[SemanticMemoryDraft]) -> WriteBatchResult:
         """批量写入，跳过校验不通过的。"""
         written: list[Path] = []
         skipped: list[tuple[SemanticMemoryDraft, str]] = []
         for draft in drafts:
             try:
-                written.append(self.write(draft))
+                written.append(await self.write(draft))
             except ValueError as e:
                 skipped.append((draft, str(e)))
         return WriteBatchResult(written=written, skipped=skipped)
 
-    def _create(self, path: Path, draft: SemanticMemoryDraft) -> None:
+    async def _create(self, path: Path, draft: SemanticMemoryDraft) -> None:
         meta = {"name": draft.name, "description": draft.description, "type": draft.type.value}
         content = f"{format_frontmatter(meta)}\n\n{draft.body}\n"
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
+        async with aiofiles.open(path, "w", encoding="utf-8") as f:
+            await f.write(content)
 
     @staticmethod
     def _detect_overlap(existing: str, new_body: str) -> str | None:
@@ -122,12 +121,13 @@ class SemanticWriter:
                 return tok
         return None
 
-    def _merge(self, path: Path, draft: SemanticMemoryDraft, *, merged_at: date | None = None) -> None:
-        existing = path.read_text(encoding="utf-8")
+    async def _merge(self, path: Path, draft: SemanticMemoryDraft, *, merged_at: date | None = None) -> None:
+        async with aiofiles.open(path, "r", encoding="utf-8") as f:
+            existing = await f.read()
         overlap = self._detect_overlap(existing, draft.body)
         if overlap:
             logger.warning("语义记忆合并时检测到内容重叠: %s — %s", path.name, overlap)
         effective_date = (merged_at or date.today()).isoformat()
         append_text = f"\n<!-- {effective_date} 追加 -->\n{draft.body}\n"
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(append_text)
+        async with aiofiles.open(path, "a", encoding="utf-8") as f:
+            await f.write(append_text)

@@ -96,6 +96,6 @@ class FlushExtractor:
             return False
 
         date_str = current_time.strftime("%Y-%m-%d")
-        log_manager.write_raw(date_str, events_text)
+        await log_manager.write_raw(date_str, events_text)
 
         return True

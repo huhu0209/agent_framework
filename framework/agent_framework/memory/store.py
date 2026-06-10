@@ -50,7 +50,7 @@ class MemoryStore:
         results: list[MemorySearchResult] = []
 
         # 情景层：关键词搜索
-        episodic = self._search_episodic(query, top_k=top_k)
+        episodic = await self._search_episodic(query, top_k=top_k)
         results.extend(episodic)
 
         # 语义层：LLM 评分召回
@@ -66,9 +66,9 @@ class MemoryStore:
 
     async def write(self, draft: SemanticMemoryDraft) -> Path:
         """语义记忆写入，委托给 SemanticWriter。"""
-        return self._writer.write(draft)
+        return await self._writer.write(draft)
 
-    def _search_episodic(
+    async def _search_episodic(
         self, query: str, *, top_k: int = 10,
     ) -> list[MemorySearchResult]:
         """情景记忆关键词搜索。"""
@@ -77,7 +77,7 @@ class MemoryStore:
         query_lower = query.lower()
 
         for date in reversed(dates):
-            content = self._log_manager.read_log(date)
+            content = await self._log_manager.read_log(date)
             if content is None:
                 continue
             blocks = re.split(r"(?=^## )", content, flags=re.MULTILINE)
