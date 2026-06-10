@@ -122,25 +122,18 @@ class TestWebSearch:
     async def test_search_via_registry(self, registry, ctx):
         from unittest.mock import AsyncMock, patch
 
-        from agent_framework.tools.builtin.search_tools import reset_client
+        mock_tavily = AsyncMock()
+        mock_tavily.search.return_value = {
+            "results": [
+                {"title": "Test", "url": "https://example.com", "content": "test query info"}
+            ]
+        }
 
-        reset_client()
-        try:
-            mock_client = AsyncMock()
-            mock_client.search.return_value = {
-                "results": [
-                    {"title": "Test", "url": "https://example.com", "content": "test query info"}
-                ]
-            }
+        spec = registry.get("web_search")
+        # handler 是 SearchClient 实例的 bound method，直接 patch 实例
+        handler_self = spec.handler.__self__
+        with patch.object(handler_self, "_get_client", return_value=mock_tavily):
+            result = await spec.handler({"query": "test query"}, ctx)
 
-            with patch(
-                "agent_framework.tools.builtin.search_tools._get_client",
-                return_value=mock_client,
-            ):
-                spec = registry.get("web_search")
-                result = await spec.handler({"query": "test query"}, ctx)
-
-            assert result.is_error is False
-            assert "test query" in result.content
-        finally:
-            reset_client()
+        assert result.is_error is False
+        assert "test query" in result.content

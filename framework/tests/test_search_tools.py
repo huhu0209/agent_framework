@@ -3,15 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from agent_framework.tools.builtin.search_tools import (
-    _semaphore,
-    reset_client,
-    web_search,
-)
+from agent_framework.tools.builtin.search_tools import SearchClient, web_search
 from agent_framework.tools.types import ToolUseContext
 
 
@@ -20,9 +16,17 @@ def ctx(tmp_path):
     return ToolUseContext(working_dir=str(tmp_path))
 
 
+@pytest.fixture
+def client():
+    """每个测试创建独立的 SearchClient 实例。"""
+    return SearchClient()
+
+
 @pytest.fixture(autouse=True)
-def _clean_client():
-    """每个测试前重置客户端单例。"""
+def _reset_default_client():
+    """每个测试前重置模块级默认客户端。"""
+    from agent_framework.tools.builtin.search_tools import reset_client
+
     reset_client()
     yield
     reset_client()
@@ -30,9 +34,9 @@ def _clean_client():
 
 class TestSearchSuccess:
     @pytest.mark.asyncio
-    async def test_search_returns_results_on_success(self, ctx):
-        mock_client = AsyncMock()
-        mock_client.search.return_value = {
+    async def test_search_returns_results_on_success(self, ctx, client):
+        mock_tavily = AsyncMock()
+        mock_tavily.search.return_value = {
             "results": [
                 {
                     "title": "Python Tutorial",
@@ -42,11 +46,8 @@ class TestSearchSuccess:
             ]
         }
 
-        with patch(
-            "agent_framework.tools.builtin.search_tools._get_client",
-            return_value=mock_client,
-        ):
-            result = await web_search({"query": "Python tutorial"}, ctx)
+        with patch.object(client, "_get_client", return_value=mock_tavily):
+            result = await client.search({"query": "Python tutorial"}, ctx)
 
         assert result.is_error is False
         assert "Python Tutorial" in result.content
@@ -56,25 +57,22 @@ class TestSearchSuccess:
 
 class TestSearchErrors:
     @pytest.mark.asyncio
-    async def test_search_returns_error_on_missing_api_key(self, ctx, monkeypatch):
+    async def test_search_returns_error_on_missing_api_key(self, ctx, client, monkeypatch):
         monkeypatch.delenv("TAVILY_API_KEY", raising=False)
-        reset_client()
+        client.reset()
 
-        result = await web_search({"query": "test"}, ctx)
+        result = await client.search({"query": "test"}, ctx)
         assert result.is_error is True
         assert "搜索失败" in result.content
         assert "TAVILY_API_KEY 未配置" in result.content
 
     @pytest.mark.asyncio
-    async def test_search_returns_error_on_network_failure(self, ctx):
-        mock_client = AsyncMock()
-        mock_client.search.side_effect = ConnectionError("timeout")
+    async def test_search_returns_error_on_network_failure(self, ctx, client):
+        mock_tavily = AsyncMock()
+        mock_tavily.search.side_effect = ConnectionError("timeout")
 
-        with patch(
-            "agent_framework.tools.builtin.search_tools._get_client",
-            return_value=mock_client,
-        ):
-            result = await web_search({"query": "test"}, ctx)
+        with patch.object(client, "_get_client", return_value=mock_tavily):
+            result = await client.search({"query": "test"}, ctx)
 
         assert result.is_error is True
         assert "搜索失败" in result.content
@@ -82,11 +80,11 @@ class TestSearchErrors:
 
 
 class TestSearchSemaphore:
-    def test_semaphore_limits_concurrency(self):
-        assert _semaphore._value == 5
+    def test_semaphore_limits_concurrency(self, client):
+        assert client._semaphore._value == 5
 
     @pytest.mark.asyncio
-    async def test_semaphore_enforces_max_5_concurrent(self, ctx):
+    async def test_semaphore_enforces_max_5_concurrent(self, ctx, client):
         """启动 10 个并发搜索，验证同时运行的不超过 5 个。"""
         active_count = 0
         max_active = 0
@@ -99,14 +97,11 @@ class TestSearchSemaphore:
             active_count -= 1
             return {"results": [{"title": "t", "url": "u", "content": "c"}]}
 
-        mock_client = AsyncMock()
-        mock_client.search = mock_search
+        mock_tavily = AsyncMock()
+        mock_tavily.search = mock_search
 
-        with patch(
-            "agent_framework.tools.builtin.search_tools._get_client",
-            return_value=mock_client,
-        ):
-            tasks = [web_search({"query": f"q{i}"}, ctx) for i in range(10)]
+        with patch.object(client, "_get_client", return_value=mock_tavily):
+            tasks = [client.search({"query": f"q{i}"}, ctx) for i in range(10)]
             await asyncio.gather(*tasks)
 
         assert max_active <= 5
@@ -114,9 +109,9 @@ class TestSearchSemaphore:
 
 class TestSearchResultFormat:
     @pytest.mark.asyncio
-    async def test_search_result_format(self, ctx):
-        mock_client = AsyncMock()
-        mock_client.search.return_value = {
+    async def test_search_result_format(self, ctx, client):
+        mock_tavily = AsyncMock()
+        mock_tavily.search.return_value = {
             "results": [
                 {"title": "Title A", "url": "https://a.com", "content": "Content A"},
                 {"title": "Title B", "url": "https://b.com", "content": "Content B"},
@@ -124,11 +119,8 @@ class TestSearchResultFormat:
             ]
         }
 
-        with patch(
-            "agent_framework.tools.builtin.search_tools._get_client",
-            return_value=mock_client,
-        ):
-            result = await web_search({"query": "test"}, ctx)
+        with patch.object(client, "_get_client", return_value=mock_tavily):
+            result = await client.search({"query": "test"}, ctx)
 
         assert result.is_error is False
         assert "1. Title A" in result.content
@@ -139,15 +131,41 @@ class TestSearchResultFormat:
         assert "https://c.com" in result.content
 
     @pytest.mark.asyncio
-    async def test_search_empty_results(self, ctx):
-        mock_client = AsyncMock()
-        mock_client.search.return_value = {"results": []}
+    async def test_search_empty_results(self, ctx, client):
+        mock_tavily = AsyncMock()
+        mock_tavily.search.return_value = {"results": []}
 
-        with patch(
-            "agent_framework.tools.builtin.search_tools._get_client",
-            return_value=mock_client,
-        ):
-            result = await web_search({"query": "obscure query"}, ctx)
+        with patch.object(client, "_get_client", return_value=mock_tavily):
+            result = await client.search({"query": "obscure query"}, ctx)
 
         assert result.is_error is False
         assert "未找到结果" in result.content
+
+
+class TestBackwardCompatibility:
+    @pytest.mark.asyncio
+    async def test_module_level_web_search_delegates_to_default_client(self, ctx):
+        """模块级 web_search 仍然可用（向后兼容）。"""
+        mock_tavily = AsyncMock()
+        mock_tavily.search.return_value = {
+            "results": [{"title": "t", "url": "u", "content": "c"}]
+        }
+
+        with patch(
+            "agent_framework.tools.builtin.search_tools._default_client._get_client",
+            return_value=mock_tavily,
+        ):
+            result = await web_search({"query": "test"}, ctx)
+
+        assert result.is_error is False
+        assert "t" in result.content
+
+    def test_module_level_reset_client_delegates_to_default_client(self):
+        """模块级 reset_client 仍然可用（向后兼容）。"""
+        from agent_framework.tools.builtin.search_tools import (
+            _default_client,
+            reset_client,
+        )
+
+        reset_client()
+        assert _default_client._client is None
