@@ -97,6 +97,14 @@ Plans:
 5. search_tools 消除模块级全局可变状态
 6. ToolValidator 增加 enum 和 unknown 参数验证
 7. 全部 964+ 测试通过
+**Plans:** 4 plans
+
+Plans:
+- [ ] 17-01-PLAN.md — _CRITICAL_TOOLS 构造注入 + ToolValidator enum/unknown + TypedDict extra + MCP 文档 (FW-LOGIC-02,06,07,10)
+- [ ] 17-02-PLAN.md — SearchClient 类封装消除全局可变状态 (FW-LOGIC-05)
+- [ ] 17-03-PLAN.md — HITLManager 注入 ToolRouter + dispatch 复杂度拆分 + 移除 _dispatch_agent (FW-LOGIC-01,04,08)
+- [ ] 17-04-PLAN.md — AgentLoop.run 复杂度拆分 + _apply_changes 复杂度拆分 (FW-LOGIC-03,09)
+
 **Depends on:** Phase 16
 
 ### Phase 18: Backend 全面修复
@@ -149,6 +157,6 @@ Plans:
 | 14. Frontend 代码审查 | v0.0.4 | 2/2 | Complete | 2026-06-09 |
 | 15. Framework 死代码清理 | v0.0.5 | 1/1 | Complete    | 2026-06-10 |
 | 16. Framework 安全修复 | v0.0.5 | 4/4 | Complete    | 2026-06-10 |
-| 17. Framework 逻辑修复 | v0.0.5 | 0/? | Not started | — |
+| 17. Framework 逻辑修复 | v0.0.5 | 0/4 | In Progress | — |
 | 18. Backend 全面修复 | v0.0.5 | 0/? | Not started | — |
 | 19. Frontend 全面修复 | v0.0.5 | 0/? | Not started | — |
