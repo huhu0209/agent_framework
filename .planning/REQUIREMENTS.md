@@ -145,7 +145,7 @@
 |-------------|-------|--------|
 | FW-DEAD-01~06 | Phase 15 | Complete |
 | FW-SEC-01 | Phase 15 | Complete |
-| FW-SEC-02~09 | Phase 16 | Pending |
+| FW-SEC-02~09 | Phase 16 | Complete |
 | FW-LOGIC-01~10 | Phase 17 | Pending |
 | BK-SEC-01~05 | Phase 18 | Pending |
 | BK-LOGIC-01~05 | Phase 18 | Pending |

@@ -148,7 +148,7 @@ Plans:
 | 13. Backend 代码审查 | v0.0.4 | 2/2 | Complete | 2026-06-09 |
 | 14. Frontend 代码审查 | v0.0.4 | 2/2 | Complete | 2026-06-09 |
 | 15. Framework 死代码清理 | v0.0.5 | 1/1 | Complete    | 2026-06-10 |
-| 16. Framework 安全修复 | v0.0.5 | 4/4 | Complete   | 2026-06-10 |
+| 16. Framework 安全修复 | v0.0.5 | 4/4 | Complete    | 2026-06-10 |
 | 17. Framework 逻辑修复 | v0.0.5 | 0/? | Not started | — |
 | 18. Backend 全面修复 | v0.0.5 | 0/? | Not started | — |
 | 19. Frontend 全面修复 | v0.0.5 | 0/? | Not started | — |
