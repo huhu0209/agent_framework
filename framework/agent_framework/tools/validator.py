@@ -48,4 +48,30 @@ class ToolValidator:
                         is_error=True,
                     )
 
+        # 3. 检查 enum 约束
+        for field_name, value in args.items():
+            prop_schema = schema.properties.get(field_name)
+            if prop_schema is None:
+                continue
+            enum_list = prop_schema.get("enum")
+            if enum_list is not None and value not in enum_list:
+                return ToolResult(
+                    content=(
+                        f"Parameter validation failed: '{field_name}' value "
+                        f"'{value}' not in enum {enum_list}"
+                    ),
+                    is_error=True,
+                )
+
+        # 4. 检查未知参数
+        for field_name in args:
+            if field_name not in schema.properties:
+                return ToolResult(
+                    content=(
+                        f"Parameter validation failed: unknown parameter "
+                        f"'{field_name}'"
+                    ),
+                    is_error=True,
+                )
+
         return None

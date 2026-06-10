@@ -52,13 +52,15 @@ class TestToolValidator:
         assert isinstance(result, ToolResult)
         assert result.is_error is True
 
-    def test_extra_args_pass(self):
-        """额外的参数不报错（forward compatible）。"""
+    def test_extra_args_rejected(self):
+        """额外的未知参数报错（strict validation）。"""
         spec = _make_spec(
             properties={"path": {"type": "string"}},
             required=["path"],
         )
-        assert validator.validate(spec, {"path": "/tmp/a.txt", "extra": 123}) is None
+        result = validator.validate(spec, {"path": "/tmp/a.txt", "extra": 123})
+        assert isinstance(result, ToolResult)
+        assert result.is_error is True
 
     def test_optional_param_missing_pass(self):
         """非必填参数缺失不报错。"""
