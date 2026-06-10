@@ -182,20 +182,17 @@ class TaskManager:
         if new not in allowed.get(old, set()):
             raise TaskStatusError(f"不允许从 {old.value} 转换到 {new.value}")
 
-    def _apply_changes(self, task: Task, changes: dict) -> Task:
-        field_updates: dict = {"updated_at": self._now()}
+    def _update_dependencies(
+        self,
+        task: Task,
+        changes: dict,
+    ) -> tuple[list[str], list[str], list[Task]]:
+        """Handle blocked_by and blocks dependency updates.
 
-        for key in ("subject", "description", "owner"):
-            if key in changes:
-                field_updates[key] = changes[key]
-
-        if "status" in changes:
-            field_updates["status"] = TaskStatus(changes["status"])
-
-        updated = dataclasses.replace(task, **field_updates)
-
-        new_blocked_by = list(updated.blocked_by)
-        new_blocks = list(updated.blocks)
+        Returns (new_blocked_by, new_blocks, pending_writes).
+        """
+        new_blocked_by = list(task.blocked_by)
+        new_blocks = list(task.blocks)
         pending_writes: list[Task] = []
 
         for dep_id in changes.get("add_blocked_by", []):
@@ -219,6 +216,22 @@ class TaskManager:
                     blocked_by=dep_task.blocked_by + [task.id],
                     updated_at=self._now(),
                 ))
+
+        return new_blocked_by, new_blocks, pending_writes
+
+    def _apply_changes(self, task: Task, changes: dict) -> Task:
+        field_updates: dict = {"updated_at": self._now()}
+
+        for key in ("subject", "description", "owner"):
+            if key in changes:
+                field_updates[key] = changes[key]
+
+        if "status" in changes:
+            field_updates["status"] = TaskStatus(changes["status"])
+
+        updated = dataclasses.replace(task, **field_updates)
+
+        new_blocked_by, new_blocks, pending_writes = self._update_dependencies(updated, changes)
 
         for dep_task in pending_writes:
             self._write(dep_task)

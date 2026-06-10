@@ -297,6 +297,134 @@ class AgentLoop(Agent):
             self._compact_failures += 1
             return messages
 
+    # ---- Extracted helpers for run() ----
+
+    def _init_messages(self, user_message: str, resume: bool) -> list[Message]:
+        """Initialize or resume the message list."""
+        if resume and self._messages:
+            messages = list(self._messages)
+            messages.append(UserMessage(content=[TextBlock(text=user_message)]))
+            return messages
+        return [
+            SystemMessage(content=self._system_prompt_text),
+            UserMessage(content=[TextBlock(text=user_message)]),
+        ]
+
+    async def _fire_session_start_hook(self) -> None:
+        """Fire SessionStart hook and append inject messages."""
+        if self._hook_manager is None:
+            return
+        from agent_framework.hooks.types import HookContext, HookEvent
+
+        ss_ctx = HookContext(hook_event_name=HookEvent.SESSION_START.value)
+        for result in await self._hook_manager.fire(HookEvent.SESSION_START, ss_ctx):
+            if result.inject_message:
+                self._messages.append(UserMessage(content=[
+                    TextBlock(text=f"[Hook] {result.inject_message}")
+                ]))
+
+    async def _drain_notifications(self) -> None:
+        """Drain task_runner and team_manager notifications into self._messages."""
+        from agent_framework.tasks.types import RuntimeTaskStatus
+
+        if self._task_runner is not None:
+            notifications = await self._task_runner.drain_notifications()
+            for note in notifications:
+                status_text = {
+                    RuntimeTaskStatus.COMPLETED: "已完成",
+                    RuntimeTaskStatus.ERROR: "失败",
+                    RuntimeTaskStatus.TIMEOUT: "超时",
+                }.get(note.status, note.status.value)
+                msg = (
+                    f"<task-notification>\n"
+                    f"任务 #{note.task_id} {status_text}\n"
+                    f"{note.output or note.error}\n"
+                    f"</task-notification>"
+                )
+                self._messages.append(UserMessage(content=[TextBlock(text=msg)]))
+
+        if self._team_manager is not None:
+            while True:
+                try:
+                    note = self._team_manager.notifications.get_nowait()
+                    self._messages.append(UserMessage(content=[TextBlock(
+                        text=f"<team-notification>{note.name} 已关闭</team-notification>"
+                    )]))
+                except asyncio.QueueEmpty:
+                    break
+
+    def _inject_plan_context(self) -> None:
+        """Remove old plan context and inject fresh plan context."""
+        if not self._planning.has_plan:
+            return
+        for i in range(len(self._messages) - 1, -1, -1):
+            msg = self._messages[i]
+            if isinstance(msg, UserMessage) and msg.content:
+                first = msg.content[0]
+                if isinstance(first, TextBlock) and self._planning.is_plan_context_text(first.text):
+                    self._messages.pop(i)
+                    break
+        drift_text, plan_text = self._planning.format_context_message()
+        if drift_text or plan_text:
+            self._messages.append(UserMessage(content=[TextBlock(text=f"{drift_text}{plan_text}")]))
+
+    async def _handle_tool_calls(
+        self,
+        result: CompletionResult,
+        step: int,
+        plan_checked: bool,
+    ) -> tuple[list[LoopEvent], bool]:
+        """Dispatch tool calls, update plan state, check drift.
+
+        Returns (events_to_yield, updated_plan_checked).
+        """
+        tool_calls = self._extract_tool_calls(result)
+        if not tool_calls:
+            return (
+                [LoopEvent(type="done", step=step, data={"content": _serialize_content(result)}, plan=self._planning.snapshot())],
+                plan_checked,
+            )
+
+        cleaned_content = self._strip_plan_from_content(result.content)
+        self._messages.append(AssistantMessage(content=cleaned_content))
+
+        tool_results: list[str] = []
+        for tc in tool_calls:
+            call = ToolCall(id=tc.id, name=tc.name, arguments=tc.input)
+            tool_result = await self.router.dispatch(call, self.ctx)
+            self._messages.append(ToolMessage(tool_call_id=tc.id, content=tool_result.content))
+            tool_results.append(tool_result.content)
+
+        if self._planning.has_plan and not plan_checked:
+            text = self._extract_text(result)
+            if text and self._planning.try_parse_from_response(text):
+                self.ctx.extra["planning_session"] = self._planning
+            plan_checked = True
+
+        if self._planning.has_plan:
+            drift = self._planning.increment_drift()
+            if drift == DriftLevel.ABORT:
+                return (
+                    [LoopEvent(
+                        type="error", step=step,
+                        data={"error": f"偏离计划：连续 {self._planning.drift_count} 步未推进任何计划项"},
+                        plan=self._planning.snapshot(),
+                    )],
+                    plan_checked,
+                )
+
+        return (
+            [LoopEvent(
+                type="tool_result", step=step,
+                data={
+                    "tool_calls": [{"id": tc.id, "name": tc.name, "input": tc.input} for tc in tool_calls],
+                    "tool_results": tool_results,
+                },
+                plan=self._planning.snapshot(),
+            )],
+            plan_checked,
+        )
+
     async def run(
         self,
         user_message: str,
@@ -305,29 +433,11 @@ class AgentLoop(Agent):
         resume: bool = False,
     ) -> AsyncGenerator[LoopEvent, None]:
         """核心异步生成器：执行 ReAct 循环，支持 Session Planning。"""
-        from agent_framework.tasks.types import RuntimeTaskStatus
-
         # 0. 初始化消息列表
-        if resume and self._messages:
-            self._messages.append(
-                UserMessage(content=[TextBlock(text=user_message)])
-            )
-        else:
-            self._messages = [
-                SystemMessage(content=self._system_prompt_text),
-                UserMessage(content=[TextBlock(text=user_message)]),
-            ]
+        self._messages = self._init_messages(user_message, resume)
 
         # SessionStart hook
-        if self._hook_manager is not None:
-            from agent_framework.hooks.types import HookContext, HookEvent
-
-            ss_ctx = HookContext(hook_event_name=HookEvent.SESSION_START.value)
-            for result in await self._hook_manager.fire(HookEvent.SESSION_START, ss_ctx):
-                if result.inject_message:
-                    self._messages.append(UserMessage(content=[
-                        TextBlock(text=f"[Hook] {result.inject_message}")
-                    ]))
+        await self._fire_session_start_hook()
 
         # 1. 如果提供了计划，初始化计划状态
         if plan is not None:
@@ -337,57 +447,12 @@ class AgentLoop(Agent):
         plan_checked = False
 
         for step in range(1, self.max_steps + 1):
-            # Drain 后台任务通知
-            if self._task_runner is not None:
-                # 取后台通知— 非阻塞，把后台任务/队友的状态变化取出来注入消息
-                notifications = await self._task_runner.drain_notifications()
-                for note in notifications:
-                    status_text = {
-                        RuntimeTaskStatus.COMPLETED: "已完成",
-                        RuntimeTaskStatus.ERROR: "失败",
-                        RuntimeTaskStatus.TIMEOUT: "超时",
-                    }.get(note.status, note.status.value)
-                    msg = (
-                        f"<task-notification>\n"
-                        f"任务 #{note.task_id} {status_text}\n"
-                        f"{note.output or note.error}\n"
-                        f"</task-notification>"
-                    )
-                    self._messages.append(UserMessage(content=[TextBlock(text=msg)]))
-
-            # Drain 队友通知
-            if self._team_manager is not None:
-                while True:
-                    try:
-                        note = self._team_manager.notifications.get_nowait()
-                        self._messages.append(UserMessage(content=[TextBlock(
-                            text=f"<team-notification>{note.name} 已关闭</team-notification>"
-                        )]))
-                    except asyncio.QueueEmpty:
-                        break
-            
-            # 注入计划上下文（如果有）
-            if self._planning.has_plan:
-                # 更新计划上下文 - 如果有活跃计划，删掉上一轮注入的计划文本，换上最新的
-                for i in range(len(self._messages) - 1, -1, -1):
-                    msg = self._messages[i]
-                    if isinstance(msg, UserMessage) and msg.content:
-                        first = msg.content[0]
-                        if isinstance(first, TextBlock) and self._planning.is_plan_context_text(first.text):
-                            self._messages.pop(i)
-                            break
-                # 注入新计划消息
-                drift_text, plan_text = self._planning.format_context_message()
-                if drift_text or plan_text:
-                    self._messages.append(UserMessage(content=[TextBlock(text=f"{drift_text}{plan_text}")]))
+            await self._drain_notifications()
+            self._inject_plan_context()
 
             try:
-                # Context management
                 self._messages = await self._maybe_compact(self._messages, step)
-
                 result = await self.adapter.complete(self._build_config(self._messages))
-
-                # Track usage for hybrid estimation
                 self._last_usage = result.usage
                 self._messages_at_last_call = len(self._messages)
             except Exception as exc:
@@ -402,7 +467,7 @@ class AgentLoop(Agent):
                 plan=plan_snapshot,
             )
 
-            # 根据 stop_reason 分流— 这是核心决策
+            # 根据 stop_reason 分流 — 这是核心决策
             if result.stop_reason == StopReason.END_TURN:
                 text = self._extract_text(result)
                 if text and self._planning.try_parse_from_response(text):
@@ -426,45 +491,12 @@ class AgentLoop(Agent):
                 return
 
             if result.stop_reason == StopReason.TOOL_USE:
-                tool_calls = self._extract_tool_calls(result)
-                if not tool_calls:
-                    yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)}, plan=plan_snapshot)
+                events, plan_checked = await self._handle_tool_calls(result, step, plan_checked)
+                for event in events:
+                    yield event
+                # If drift abort occurred, the event list contains an error — stop the loop
+                if events and events[-1].type == "error":
                     return
-
-                cleaned_content = self._strip_plan_from_content(result.content)
-                self._messages.append(AssistantMessage(content=cleaned_content))
-
-                tool_results: list[str] = []
-                for tc in tool_calls:
-                    call = ToolCall(id=tc.id, name=tc.name, arguments=tc.input)
-                    tool_result = await self.router.dispatch(call, self.ctx)
-                    self._messages.append(ToolMessage(tool_call_id=tc.id, content=tool_result.content))
-                    tool_results.append(tool_result.content)
-
-                if self._planning.has_plan and not plan_checked:
-                    text = self._extract_text(result)
-                    if text and self._planning.try_parse_from_response(text):
-                        self.ctx.extra["planning_session"] = self._planning
-                    plan_checked = True
-
-                if self._planning.has_plan:
-                    drift = self._planning.increment_drift()
-                    if drift == DriftLevel.ABORT:
-                        yield LoopEvent(
-                            type="error", step=step,
-                            data={"error": f"偏离计划：连续 {self._planning.drift_count} 步未推进任何计划项"},
-                            plan=self._planning.snapshot(),
-                        )
-                        return
-
-                yield LoopEvent(
-                    type="tool_result", step=step,
-                    data={
-                        "tool_calls": [{"id": tc.id, "name": tc.name, "input": tc.input} for tc in tool_calls],
-                        "tool_results": tool_results,
-                    },
-                    plan=self._planning.snapshot(),
-                )
                 continue
 
             self._messages.append(AssistantMessage(content=result.content))
