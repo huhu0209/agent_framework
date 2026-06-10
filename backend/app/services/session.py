@@ -242,6 +242,14 @@ class SessionManager:
             return None
         return [json.loads(item) for item in raw]
 
+    async def persist_messages(self, session_id: str, messages: list[dict]) -> None:
+        """Public method: persist messages to Redis cache."""
+        await asyncio.to_thread(self._redis_set_messages, session_id, messages)
+
+    async def restore_messages(self, session_id: str) -> list[dict] | None:
+        """Public method: restore messages from cache/storage."""
+        return await asyncio.to_thread(self._get_all_messages, session_id)
+
     def delete_session(self, session_id: str) -> bool:
         """删除会话及其 transcript。"""
         self._invalidate_list_cache()
