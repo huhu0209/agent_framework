@@ -6,7 +6,7 @@
 - ✅ **v0.0.2 Agent 扩展与编排** — Phases 6-8 (shipped 2026-05-29)
 - ✅ **v0.0.3 Agent 可视化平台 MVP** — Phases 9-11 (shipped 2026-05-31)
 - ✅ **v0.0.4 全面代码审查** — Phases 12-14 (shipped 2026-06-09)
-- 🔄 **v0.0.5 Review 问题修复** — Phases 15-19 (in progress)
+- ✅ **v0.0.5 Review 问题修复** — Phases 15-19 (shipped 2026-06-10)
 
 ## Phases
 
@@ -140,6 +140,12 @@ Plans:
 6. store 错误处理添加用户反馈
 7. 内联 hover 样式替换为 Tailwind
 8. `npm run build` 成功，无 TypeScript 错误
+**Plans:** 2/2 plans complete
+
+Plans:
+- [x] 19-01-PLAN.md — store.ts SSE 验证 + null check + JSON.parse + errorToast + toFrontendBlocks + groupBlocks + handleSseEvent (FT-SEC-01, FT-LOGIC-01~02, FT-ARCH-01~04)
+- [x] 19-02-PLAN.md — 组件修复 auto-scroll + hoverRef cleanup + hover→Tailwind + rehype-sanitize (FT-LOGIC-03~04, FT-ARCH-05, FT-SEC-02)
+
 **Depends on:** Phase 18 (SSE 格式变更可能影响前端)
 
 </details>
@@ -165,5 +171,5 @@ Plans:
 | 15. Framework 死代码清理 | v0.0.5 | 1/1 | Complete    | 2026-06-10 |
 | 16. Framework 安全修复 | v0.0.5 | 4/4 | Complete    | 2026-06-10 |
 | 17. Framework 逻辑修复 | v0.0.5 | 4/4 | Complete    | 2026-06-10 |
-| 18. Backend 全面修复 | v0.0.5 | 3/3 | Complete   | 2026-06-10 |
-| 19. Frontend 全面修复 | v0.0.5 | 0/? | Not started | — |
+| 18. Backend 全面修复 | v0.0.5 | 3/3 | Complete    | 2026-06-10 |
+| 19. Frontend 全面修复 | v0.0.5 | 2/2 | Complete | 2026-06-10 |

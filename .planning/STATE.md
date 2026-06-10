@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.0.5
 milestone_name: Review 问题修复
-status: executing
-last_updated: "2026-06-10T08:17:18.630Z"
-last_activity: 2026-06-10 -- Phase 18 planning complete
+status: milestone_complete
+last_updated: "2026-06-10T19:06:00.000Z"
+last_activity: 2026-06-10 -- Phase 19 completed (2/2 plans), milestone v0.0.5 shipped
 progress:
   total_phases: 5
-  completed_phases: 3
-  total_plans: 12
-  completed_plans: 9
-  percent: 60
+  completed_phases: 5
+  total_plans: 14
+  completed_plans: 14
+  percent: 100
 ---
 
 # STATE.md
@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-10)
 
 **Core value:** 可靠的 Agent 编排框架，提供安全、可测试、可扩展的基础设施
-**Current focus:** Phase 18 — Backend 全面修复
+**Current focus:** v0.0.5 milestone 已完成，准备归档
 
 ## Milestone History
 
@@ -28,16 +28,15 @@ See: .planning/PROJECT.md (updated 2026-06-10)
 - **v0.0.2** — Agent 扩展与编排 (shipped 2026-05-29, 812 tests)
 - **v0.0.3** — Agent 可视化平台 MVP (shipped 2026-05-31, 964 tests)
 - **v0.0.4** — 全面代码审查 (shipped 2026-06-09, 964 tests, 189 review issues)
+- **v0.0.5** — Review 问题修复 (shipped 2026-06-10, 1002 tests)
 
 ## Current Position
 
-Phase: 18 (backend) — CONTEXT GATHERED
-Plan: 0 of ?
-Status: Ready to execute
-Last activity: 2026-06-10 -- Phase 18 planning complete
-Resume: .planning/phases/18-backend/18-CONTEXT.md
+Phase: 19 (complete)
+Status: Milestone v0.0.5 全部完成
+Last activity: 2026-06-10
 
-Progress: [----------] 0%
+Progress: [==========] 100%
 
 ## Velocity
 
@@ -45,15 +44,13 @@ Progress: [----------] 0%
 - v0.0.2: 9 plans (3 phases, 1 day)
 - v0.0.3: 9 plans (3 phases, 3 days)
 - v0.0.4: 9 plans (3 phases, 1 day)
-- Total: 39 plans across 14 phases
+- v0.0.5: 14 plans (5 phases, 1 day)
+- Total: 53 plans across 19 phases
 
 ## Deferred Items
 
 | Category | Item | Status |
 |----------|------|--------|
-| tech_debt | 189 review issues (64 HIGH, 90 MEDIUM, 35 LOW) | v0.0.5 target |
-| tech_debt | SEC-04~06, PERF-03~05, ARCH-01~12 | documented-only (LOW) |
-| tech_debt | v0.0.3 前端单元测试缺失 | review target |
 | feature | EventBus topic 过滤机制 | deferred |
 | feature | 事件持久化到文件/数据库 | deferred |
 | feature | 多动物形象选择 | deferred |
