@@ -9,6 +9,15 @@ from agent_framework.prompts.profiles import AgentProfile, PromptBlock
 if TYPE_CHECKING:
     from agent_framework.skills.registry import SkillRegistry
 
+_BLOCK_TAGS: dict[str, str] = {
+    "SOUL": "soul",
+    "AGENTS_RULES": "instructions",
+    "IDENTITY": "identity",
+    "USER": "user-provided",
+    "SKILLS": "skills",
+    "TOOL_GUIDANCE": "tool-guidance",
+}
+
 
 class PromptAssembler:
     """将 AgentProfile 的各模块组装成有序的 PromptBlock 列表或 system prompt 字符串。"""
@@ -81,4 +90,13 @@ class PromptAssembler:
     def render(self, profile: AgentProfile) -> str:
         """将 profile 渲染为完整的 system prompt 字符串。"""
         blocks = self.assemble(profile)
-        return "\n\n".join(b.content for b in blocks if b.content)
+        parts = []
+        for b in blocks:
+            if not b.content:
+                continue
+            tag = _BLOCK_TAGS.get(b.name)
+            if tag:
+                parts.append(f"<{tag}>\n{b.content}\n</{tag}>")
+            else:
+                parts.append(b.content)
+        return "\n\n".join(parts)
