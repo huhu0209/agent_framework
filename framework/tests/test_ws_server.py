@@ -111,3 +111,62 @@ async def test_multiple_clients_receive_events(ws_server: tuple) -> None:
         r2 = json.loads(await asyncio.wait_for(ws2.recv(), timeout=2.0))
         assert r1["type"] == "done"
         assert r2["type"] == "done"
+
+
+# --- Token authentication tests ---
+
+
+@pytest.fixture
+async def ws_server_with_token():
+    bus = EventBus()
+    port = _free_port()
+    task = asyncio.create_task(serve_ws(bus, port=port, token="secret123"))
+    await asyncio.sleep(0.05)
+    yield bus, port, task
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
+async def test_valid_token_connects_successfully(ws_server_with_token: tuple) -> None:
+    _, port, _ = ws_server_with_token
+
+    async with connect(f"ws://localhost:{port}?token=secret123") as ws:
+        # Connection should succeed — send a ping-like command
+        await ws.send(json.dumps({"type": "unknown"}))
+        raw = await asyncio.wait_for(ws.recv(), timeout=2.0)
+        resp = json.loads(raw)
+        assert resp["success"] is False  # unknown command, but connection works
+        assert "Unknown command" in resp["error"]
+
+
+async def test_invalid_token_rejected(ws_server_with_token: tuple) -> None:
+    _, port, _ = ws_server_with_token
+
+    with pytest.raises(Exception):
+        # Connection should be rejected with code 4001
+        async with connect(f"ws://localhost:{port}?token=wrong"):
+            pass
+
+
+async def test_missing_token_when_required_rejected(ws_server_with_token: tuple) -> None:
+    _, port, _ = ws_server_with_token
+
+    with pytest.raises(Exception):
+        # Connection without token should be rejected
+        async with connect(f"ws://localhost:{port}"):
+            pass
+
+
+async def test_no_auth_mode_accepts_all(ws_server: tuple) -> None:
+    """Default fixture (no token) accepts connections without query params."""
+    bus, port, _ = ws_server
+    event = {"type": "done", "agent": "cat", "payload": {}, "timestamp": 1.0}
+
+    async with connect(f"ws://localhost:{port}") as ws:
+        await bus.publish(event)
+        raw = await asyncio.wait_for(ws.recv(), timeout=2.0)
+        data = json.loads(raw)
+        assert data["type"] == "done"
