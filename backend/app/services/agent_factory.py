@@ -27,7 +27,7 @@ class AgentFactory:
     def from_settings(cls, settings: Settings, storage_dir: Path | None = None) -> AgentFactory:
         adapter = create_adapter(
             provider=settings.llm_provider,
-            api_key=settings.llm_api_key,
+            api_key=settings.llm_api_key.get_secret_value(),
             model=settings.llm_model,
             base_url=settings.llm_base_url,
         )
