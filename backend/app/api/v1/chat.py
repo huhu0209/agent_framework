@@ -2,21 +2,66 @@
 
 from __future__ import annotations
 
+import asyncio
+import enum
 import json
 import logging
 import time
 from typing import Any, AsyncGenerator
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Path, Request
 from starlette.responses import StreamingResponse
 
 from agent_framework.agents.agent_loop import LoopEvent
+from agent_framework.llm.base import (
+    CircuitOpenError,
+    LLMAdapterError,
+    RateLimitError,
+    ServiceUnavailableError,
+)
 from agent_framework.transcript import TranscriptConsumer
-from app.models import ChatRequest, HistoryResponse, RenameRequest
+from app.models import SESSION_ID_RE, ChatRequest, HistoryResponse, RenameRequest
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+# ---------------------------------------------------------------------------
+# Error classification (BK-SEC-01)
+# ---------------------------------------------------------------------------
+
+
+class ErrorCategory(enum.Enum):
+    """SSE 错误分类 — 客户端收到用户友好消息，不泄露内部信息。"""
+
+    LLM_TIMEOUT = "llm_timeout"
+    LLM_RATE_LIMIT = "llm_rate_limit"
+    TOOL_ERROR = "tool_error"
+    SESSION_NOT_FOUND = "session_not_found"
+    UNKNOWN_ERROR = "unknown_error"
+
+
+_ERROR_MESSAGES: dict[ErrorCategory, str] = {
+    ErrorCategory.LLM_TIMEOUT: "AI 服务响应超时，请稍后重试。",
+    ErrorCategory.LLM_RATE_LIMIT: "AI 服务繁忙，请稍后重试。",
+    ErrorCategory.TOOL_ERROR: "工具执行出错，请检查输入。",
+    ErrorCategory.SESSION_NOT_FOUND: "会话不存在或已过期。",
+    ErrorCategory.UNKNOWN_ERROR: "服务内部错误，请稍后重试。",
+}
+
+
+def _classify_error(exc: Exception) -> ErrorCategory:
+    """将异常类型映射到 ErrorCategory（D-03）。"""
+    if isinstance(exc, RateLimitError):
+        return ErrorCategory.LLM_RATE_LIMIT
+    if isinstance(exc, (ServiceUnavailableError, CircuitOpenError)):
+        return ErrorCategory.LLM_TIMEOUT
+    if isinstance(exc, LLMAdapterError):
+        return ErrorCategory.LLM_TIMEOUT
+    if isinstance(exc, asyncio.TimeoutError):
+        return ErrorCategory.TOOL_ERROR
+    return ErrorCategory.UNKNOWN_ERROR
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +175,10 @@ async def create_chat(req: ChatRequest, request: Request):
                         await sm.update_title(session.session_id, req.message[:50])
         except Exception as exc:
             logger.exception("Agent error in session %s", session.session_id)
-            yield _sse("error", {"error": str(exc)})
+            yield _sse("error", {
+                "step": 0,
+                "error": _ERROR_MESSAGES[_classify_error(exc)],
+            })
             session.messages.append({
                 "role": "error",
                 "content": str(exc),
@@ -152,8 +200,8 @@ async def create_chat(req: ChatRequest, request: Request):
 
 @router.get("/chat/{session_id}", response_model=HistoryResponse)
 async def get_history(
-    session_id: str,
     request: Request,
+    session_id: str = Path(pattern=SESSION_ID_RE.pattern),
     limit: int | None = None,
     before: str | None = None,
 ) -> HistoryResponse:
@@ -186,7 +234,10 @@ async def list_sessions(request: Request) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 @router.delete("/sessions/{session_id}")
-async def delete_session(session_id: str, request: Request) -> dict:
+async def delete_session(
+    request: Request,
+    session_id: str = Path(pattern=SESSION_ID_RE.pattern),
+) -> dict:
     sm = request.app.state.session_manager
     deleted = await sm.delete_session(session_id)
     if not deleted:
@@ -199,7 +250,11 @@ async def delete_session(session_id: str, request: Request) -> dict:
 # ---------------------------------------------------------------------------
 
 @router.patch("/sessions/{session_id}")
-async def rename_session(session_id: str, req: RenameRequest, request: Request) -> dict:
+async def rename_session(
+    request: Request,
+    session_id: str = Path(pattern=SESSION_ID_RE.pattern),
+    req: RenameRequest = ...,  # body — required
+) -> dict:
     sm = request.app.state.session_manager
     updated = await sm.update_title(session_id, req.title)
     if not updated:
