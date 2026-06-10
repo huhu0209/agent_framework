@@ -91,7 +91,7 @@ class TaskRunner:
                         description=f"超时: {rt.error}",
                     )
                 except Exception:
-                    pass
+                    logger.debug("任务超时状态更新失败: %s", rt.task_id)
             except Exception as exc:
                 rt.status = RuntimeTaskStatus.ERROR
                 rt.error = str(exc)
@@ -102,7 +102,7 @@ class TaskRunner:
                         description=f"异常: {str(exc)[:500]}",
                     )
                 except Exception:
-                    pass
+                    logger.debug("任务异常状态更新失败: %s", rt.task_id)
             finally:
                 self._notifications.put_nowait(rt)
                 self._running.pop(rt.task_id, None)
