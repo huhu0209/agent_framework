@@ -145,19 +145,19 @@ async def test_valid_token_connects_successfully(ws_server_with_token: tuple) ->
 async def test_invalid_token_rejected(ws_server_with_token: tuple) -> None:
     _, port, _ = ws_server_with_token
 
-    with pytest.raises(Exception):
-        # Connection should be rejected with code 4001
-        async with connect(f"ws://localhost:{port}?token=wrong"):
-            pass
+    async with connect(f"ws://localhost:{port}?token=wrong") as ws:
+        # Server closes after handshake; client discovers on recv
+        with pytest.raises(Exception):
+            await asyncio.wait_for(ws.recv(), timeout=2.0)
 
 
 async def test_missing_token_when_required_rejected(ws_server_with_token: tuple) -> None:
     _, port, _ = ws_server_with_token
 
-    with pytest.raises(Exception):
-        # Connection without token should be rejected
-        async with connect(f"ws://localhost:{port}"):
-            pass
+    async with connect(f"ws://localhost:{port}") as ws:
+        # Server closes after handshake; client discovers on recv
+        with pytest.raises(Exception):
+            await asyncio.wait_for(ws.recv(), timeout=2.0)
 
 
 async def test_no_auth_mode_accepts_all(ws_server: tuple) -> None:
