@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -45,6 +45,19 @@ class ToolSpec(BaseModel):
         )
 
 
+class ToolContextExtra(TypedDict, total=False):
+    """已知 extra 键的类型提示（运行时仍为 dict[str, Any]）。
+
+    handler 代码可通过 ``cast(ToolContextExtra, ctx.extra)`` 获得类型提示。
+    """
+
+    skill_registry: Any
+    memory_dir: str
+    memory_store: Any
+    planning_session: Any
+    worker_manager: Any
+
+
 class ToolUseContext(BaseModel):
     """工具执行的共享运行环境（控制总线）。"""
 
@@ -54,7 +67,7 @@ class ToolUseContext(BaseModel):
     message_history: list[Any] = []
     mcp_clients: dict[str, Any] = {}
     app_state: dict[str, Any] = {}
-    extra: dict[str, Any] = {}
+    extra: dict[str, Any] = {}  # See ToolContextExtra for known keys
 
 
 ToolHandler = Callable[[dict[str, Any], ToolUseContext], Awaitable[ToolResult]]
