@@ -1,27 +1,27 @@
 ---
 gsd_state_version: 1.0
-milestone: none
-milestone_name: none
-status: planning_next
-last_updated: 2026-06-09T22:30:00.000Z
-last_activity: 2026-06-09 -- v0.0.4 milestone archived, planning next
+milestone: v0.0.5
+milestone_name: "Review 问题修复"
+status: planning
+last_updated: 2026-06-10T00:00:00.000Z
+last_activity: 2026-06-10 -- v0.0.5 milestone started
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
   percent: 0
-stopped_at: Milestone v0.0.4 archived
+stopped_at: Roadmap created
 ---
 
 # STATE.md
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-06-09)
+See: .planning/PROJECT.md (updated 2026-06-10)
 
 **Core value:** 可靠的 Agent 编排框架，提供安全、可测试、可扩展的基础设施
-**Current focus:** Planning next milestone
+**Current focus:** v0.0.5 Review 问题修复
 
 ## Milestone History
 
@@ -32,9 +32,10 @@ See: .planning/PROJECT.md (updated 2026-06-09)
 
 ## Current Position
 
-Phase: 15 (next)
-Plan: Not started
-Status: Milestone v0.0.4 archived. Planning next milestone.
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-06-10 — Milestone v0.0.5 started
 
 Progress: [----------] 0%
 
@@ -50,7 +51,7 @@ Progress: [----------] 0%
 
 | Category | Item | Status |
 |----------|------|--------|
-| tech_debt | 189 review issues (64 HIGH, 90 MEDIUM, 35 LOW) | documented in review reports |
+| tech_debt | 189 review issues (64 HIGH, 90 MEDIUM, 35 LOW) | v0.0.5 target |
 | tech_debt | SEC-04~06, PERF-03~05, ARCH-01~12 | documented-only (LOW) |
 | tech_debt | v0.0.3 前端单元测试缺失 | review target |
 | feature | EventBus topic 过滤机制 | deferred |

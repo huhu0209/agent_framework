@@ -47,7 +47,10 @@ v0.0.3 新增：EventBus 事件总线、WebSocket 实时推送、AgentRunner 包
 
 ### Active
 
-(Planning next milestone)
+**v0.0.5 — Review 问题修复**
+- 修复 v0.0.4 全面代码审查中发现的 HIGH 和关键 MEDIUM 级别 issue
+- 来源: docs/reviews/REVIEW-FRAMEWORK.md (133 issues), REVIEW-BACKEND.md (25 issues), REVIEW-FRONTEND.md (31 issues)
+- 范围: 64 HIGH + 关键 MEDIUM（共 189 issues 中筛选）
 
 ### Out of Scope
 
@@ -154,11 +157,12 @@ frontend/src/
 ## Current State
 
 **Shipped v0.0.4** — 964 测试通过，189 个审查 issue 已记录待修复。
-下一步：规划修复 milestone 或新功能 milestone。
+
+**Current: v0.0.5** — Review 问题修复。修复 HIGH + 关键 MEDIUM 级别 issue（64 HIGH, ~90 MEDIUM 中筛选）。
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
 
 ---
-*Last updated: 2026-06-09 after v0.0.4 milestone complete*
+*Last updated: 2026-06-10 after v0.0.5 milestone initiated*
