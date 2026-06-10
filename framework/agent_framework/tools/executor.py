@@ -50,4 +50,4 @@ class ToolExecutor:
                 is_error=True,
             )
 
-        return truncate_if_needed(result, spec.name, ctx.working_dir)
+        return await truncate_if_needed(result, spec.name, ctx.working_dir)
