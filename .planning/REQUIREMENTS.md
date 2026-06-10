@@ -58,7 +58,7 @@
 
 ### FW-SEC — Framework 安全修复
 
-- [ ] **FW-SEC-01**: 修复 httpx 引用在 TYPE_CHECKING guard 外使用
+- [x] **FW-SEC-01**: 修复 httpx 引用在 TYPE_CHECKING guard 外使用
 - [ ] **FW-SEC-02**: 修复 memory/ 全模块同步文件 I/O 阻塞事件循环
 - [ ] **FW-SEC-03**: 修复 MCP 子进程继承全部环境变量
 - [ ] **FW-SEC-04**: 修复 Skill 内容注入漏洞
@@ -143,8 +143,8 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FW-DEAD-01~06 | Phase 15 | Pending |
-| FW-SEC-01 | Phase 15 | Pending |
+| FW-DEAD-01~06 | Phase 15 | Complete |
+| FW-SEC-01 | Phase 15 | Complete |
 | FW-SEC-02~09 | Phase 16 | Pending |
 | FW-LOGIC-01~10 | Phase 17 | Pending |
 | BK-SEC-01~05 | Phase 18 | Pending |
