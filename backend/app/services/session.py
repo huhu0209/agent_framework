@@ -344,6 +344,7 @@ class SessionManager:
         expired = [
             sid for sid, s in self._sessions.items()
             if now - s.created_at > self._ttl
+            and (s.task is None or s.task.done())
         ]
         for sid in expired:
             self.remove(sid)

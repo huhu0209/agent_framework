@@ -85,13 +85,13 @@ async def create_chat(req: ChatRequest, request: Request):
     is_resume = False
     if req.session_id:
         agent_loop = factory.create_loop()
-        session = sm.get_or_restore(req.session_id, agent_loop)
+        session = await sm.get_or_restore(req.session_id, agent_loop)
         if session is None:
             raise HTTPException(404, "session not found")
         is_resume = True
     else:
         agent_loop = factory.create_loop()
-        session = sm.create(agent_loop)
+        session = await sm.create(agent_loop)
 
     session.messages.append({
         "role": "user",
@@ -127,7 +127,7 @@ async def create_chat(req: ChatRequest, request: Request):
                     await sm.persist_messages(session.session_id, session.messages)
                     # 更新会话标题（取第一条用户消息前 50 字符）
                     if len(session.messages) <= 2:
-                        sm.update_title(session.session_id, req.message[:50])
+                        await sm.update_title(session.session_id, req.message[:50])
         except Exception as exc:
             logger.exception("Agent error in session %s", session.session_id)
             yield _sse("error", {"error": str(exc)})
@@ -159,7 +159,7 @@ async def get_history(
 ) -> HistoryResponse:
     sm = request.app.state.session_manager
     before_ts = float(before) if before else None
-    result = sm.get_messages(session_id, limit=limit, before=before_ts)
+    result = await sm.get_messages(session_id, limit=limit, before=before_ts)
     if result is None:
         raise HTTPException(404, "session not found")
     messages, has_more, next_cursor = result
@@ -178,7 +178,7 @@ async def get_history(
 @router.get("/sessions")
 async def list_sessions(request: Request) -> list[dict]:
     sm = request.app.state.session_manager
-    return sm.list_sessions()
+    return await sm.list_sessions()
 
 
 # ---------------------------------------------------------------------------
@@ -188,7 +188,7 @@ async def list_sessions(request: Request) -> list[dict]:
 @router.delete("/sessions/{session_id}")
 async def delete_session(session_id: str, request: Request) -> dict:
     sm = request.app.state.session_manager
-    deleted = sm.delete_session(session_id)
+    deleted = await sm.delete_session(session_id)
     if not deleted:
         raise HTTPException(404, "session not found")
     return {"status": "ok"}
@@ -201,7 +201,7 @@ async def delete_session(session_id: str, request: Request) -> dict:
 @router.patch("/sessions/{session_id}")
 async def rename_session(session_id: str, req: RenameRequest, request: Request) -> dict:
     sm = request.app.state.session_manager
-    updated = sm.update_title(session_id, req.title)
+    updated = await sm.update_title(session_id, req.title)
     if not updated:
         raise HTTPException(404, "session not found")
     return {"status": "ok"}
