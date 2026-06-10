@@ -161,3 +161,97 @@ class TestPromptAssemblerWithSkills:
         assembler = PromptAssembler(skill_registry=registry)
         text = assembler.render(profile=profile)
         assert "deploy" in text
+
+
+class TestRenderXmlTags:
+    """render() XML tag wrapping — per D-07, D-09."""
+
+    def test_soul_wrapped_in_xml(self):
+        profile = AgentProfile(
+            name="t", description="t", soul="你是一个工程师。"
+        )
+        text = PromptAssembler().render(profile=profile)
+        assert "<soul>" in text
+        assert "</soul>" in text
+        assert "<soul>\n你是一个工程师。\n</soul>" in text
+
+    def test_agents_rules_wrapped_in_instructions(self):
+        profile = AgentProfile(
+            name="t", description="t", agents_rules="先读再改。"
+        )
+        text = PromptAssembler().render(profile=profile)
+        assert "<instructions>" in text
+        assert "</instructions>" in text
+
+    def test_identity_wrapped_in_xml(self):
+        profile = AgentProfile(
+            name="t", description="t", identity="编程搭档。"
+        )
+        text = PromptAssembler().render(profile=profile)
+        assert "<identity>" in text
+        assert "</identity>" in text
+
+    def test_user_context_wrapped_in_user_provided(self):
+        profile = AgentProfile(
+            name="t", description="t", soul="s", user_context="用户偏好简洁回复。"
+        )
+        text = PromptAssembler().render(profile=profile)
+        assert "<user-provided>" in text
+        assert "</user-provided>" in text
+        assert "<user-provided>\n用户偏好简洁回复。\n</user-provided>" in text
+
+    def test_skills_wrapped_in_xml(self, tmp_path):
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        skill_path = skills_dir / "deploy"
+        skill_path.mkdir()
+        (skill_path / "SKILL.md").write_text(
+            "---\nname: deploy\ndescription: 部署\n---\nbody", encoding="utf-8"
+        )
+        from agent_framework.skills.registry import SkillRegistry
+
+        registry = SkillRegistry([skills_dir])
+        profile = AgentProfile(name="t", description="t", soul="soul")
+        text = PromptAssembler(skill_registry=registry).render(profile=profile)
+        assert "<skills>" in text
+        assert "</skills>" in text
+
+    def test_tool_guidance_wrapped_in_xml(self):
+        profile = AgentProfile(
+            name="t", description="t", soul="s", tool_guidance="grep 先搜再读。"
+        )
+        text = PromptAssembler().render(profile=profile)
+        assert "<tool-guidance>" in text
+        assert "</tool-guidance>" in text
+
+    def test_render_empty_profile_no_tags(self):
+        profile = AgentProfile(name="empty", description="test")
+        text = PromptAssembler().render(profile=profile)
+        assert text == ""
+
+    def test_assemble_returns_raw_blocks_no_xml(self):
+        """assemble() must NOT include XML wrapping — that's render()'s job."""
+        profile = AgentProfile(
+            name="t", description="t", soul="soul content"
+        )
+        blocks = PromptAssembler().assemble(profile=profile)
+        for b in blocks:
+            assert "<soul>" not in b.content
+            assert "</soul>" not in b.content
+
+    def test_full_profile_all_tags_present(self):
+        profile = AgentProfile(
+            name="t",
+            description="t",
+            soul="soul",
+            agents_rules="rules",
+            identity="identity",
+            user_context="user info",
+            tool_guidance="guidance",
+        )
+        text = PromptAssembler().render(profile=profile)
+        assert "<soul>" in text
+        assert "<instructions>" in text
+        assert "<identity>" in text
+        assert "<user-provided>" in text
+        assert "<tool-guidance>" in text
