@@ -36,15 +36,16 @@ class PermissionResult:
         self.risk_level = risk_level
 
 
-# 全局高危工具列表
-_CRITICAL_TOOLS: set[str] = set()
-
-
 class PermissionPipeline:
     """四步级联权限检查。"""
 
-    def __init__(self, profile: AgentProfile) -> None:
+    def __init__(
+        self,
+        profile: AgentProfile,
+        critical_tools: frozenset[str] = frozenset(),
+    ) -> None:
         self._profile = profile
+        self._critical_tools = critical_tools
         self._annotations: dict[str, dict[str, Any]] = {}
 
     def register_annotations(self, tool_name: str, annotations: dict[str, Any]) -> None:
@@ -54,8 +55,8 @@ class PermissionPipeline:
     def check(self, tool_name: str, tool_input: dict) -> PermissionResult:
         """执行四步级联权限检查。"""
 
-        # ① DENY — 黑名单 + 全局高危
-        if tool_name in _CRITICAL_TOOLS:
+        # ① DENY — 黑名单 + 高危工具
+        if tool_name in self._critical_tools:
             return PermissionResult(PermissionDecision.DENY, "critical", RiskLevel.CRITICAL)
 
         disallowed = self._profile.disallowed_tools
