@@ -17,6 +17,7 @@ class ChatRequest(BaseModel):
     @field_validator("session_id")
     @classmethod
     def validate_session_id(cls, v: str | None) -> str | None:
+        """验证是否为 32位十六进制小写字符串（即标准 UUID 去掉连字符的格式）"""
         if v is not None and not SESSION_ID_RE.match(v):
             raise ValueError("invalid session_id format")
         return v
