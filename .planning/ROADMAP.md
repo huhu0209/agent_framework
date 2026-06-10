@@ -119,6 +119,13 @@ Plans:
 6. AgentFactory 设置 working_dir
 7. 不再访问 framework 私有属性
 8. 全部 964+ 测试通过
+**Plans:** 3 plans
+
+Plans:
+- [ ] 18-01-PLAN.md — Framework interface changes: @property + per-session ctx + working_dir + public methods (BK-LOGIC-03,04,05)
+- [ ] 18-02-PLAN.md — SessionManager async + atomic writes + TTL eviction fix (BK-LOGIC-01,02)
+- [ ] 18-03-PLAN.md — SSE error sanitization + CORS + session_id validation + Redis + SecretStr (BK-SEC-01~05)
+
 **Depends on:** Phase 17 (framework 接口变更可能影响 backend)
 
 ### Phase 19: Frontend 全面修复
@@ -158,5 +165,5 @@ Plans:
 | 15. Framework 死代码清理 | v0.0.5 | 1/1 | Complete    | 2026-06-10 |
 | 16. Framework 安全修复 | v0.0.5 | 4/4 | Complete    | 2026-06-10 |
 | 17. Framework 逻辑修复 | v0.0.5 | 4/4 | Complete    | 2026-06-10 |
-| 18. Backend 全面修复 | v0.0.5 | 0/? | Not started | — |
+| 18. Backend 全面修复 | v0.0.5 | 0/3 | Planning    | — |
 | 19. Frontend 全面修复 | v0.0.5 | 0/? | Not started | — |
