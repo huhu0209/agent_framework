@@ -210,3 +210,53 @@ class TestEdgeCases:
         assert decision.action == PermissionDecision.ASK
         assert decision.risk_level == RiskLevel.MEDIUM
         assert decision.reason == "destructive_idempotent"
+
+
+class TestCriticalToolsConstructor:
+    """PermissionPipeline critical_tools 构造器注入测试。"""
+
+    def test_critical_tools_deny(self):
+        """critical_tools 中的工具被 DENY。"""
+        profile = AgentProfile(
+            name="default",
+            description="默认",
+            soul="", agents_rules="", identity="",
+            permission_mode="ask",
+        )
+        pipeline = PermissionPipeline(
+            profile=profile,
+            critical_tools=frozenset({"rm", "execute_code"}),
+        )
+        decision = pipeline.check("rm", {})
+        assert decision.action == PermissionDecision.DENY
+        assert decision.reason == "critical"
+        assert decision.risk_level == RiskLevel.CRITICAL
+
+    def test_empty_critical_tools_passthrough(self):
+        """critical_tools 为空时不拦截，走后续 profile disallowed 检查。"""
+        profile = AgentProfile(
+            name="default",
+            description="默认",
+            soul="", agents_rules="", identity="",
+            disallowed_tools=["write_file"],
+            permission_mode="ask",
+        )
+        pipeline = PermissionPipeline(
+            profile=profile,
+            critical_tools=frozenset(),
+        )
+        decision = pipeline.check("write_file", {})
+        assert decision.action == PermissionDecision.DENY
+        assert decision.reason == "disallowed"
+
+    def test_default_critical_tools_no_deny(self):
+        """不传 critical_tools（默认 frozenset()）时不拒绝任何工具。"""
+        profile = AgentProfile(
+            name="default",
+            description="默认",
+            soul="", agents_rules="", identity="",
+            permission_mode="ask",
+        )
+        pipeline = PermissionPipeline(profile=profile)
+        decision = pipeline.check("rm", {})
+        assert decision.action == PermissionDecision.ASK
