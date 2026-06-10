@@ -112,7 +112,7 @@ async def create_chat(req: ChatRequest, request: Request):
             if session.transcript_writer is not None:
                 consumer = TranscriptConsumer(
                     session.transcript_writer,
-                    system_prompt=getattr(loop, '_system_prompt_text', None),
+                    system_prompt=loop.system_prompt_text,
                 )
                 gen = consumer.wrap(gen, req.message)
             async for loop_event in gen:

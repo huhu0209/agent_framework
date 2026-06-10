@@ -168,6 +168,11 @@ class AgentLoop(Agent):
         if self.profile is None:
             self._system_prompt_text += "\n\n" + PlanningSession.plan_instruction_prompt()
 
+    @property
+    def system_prompt_text(self) -> str:
+        """The assembled system prompt text (read-only)."""
+        return self._system_prompt_text
+
     def load_messages(self, messages: list[Message]) -> None:
         """注入历史消息（用于 resume）。前插 SystemMessage 以确保 system prompt 存在。"""
         self._messages = [
