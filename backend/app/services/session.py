@@ -5,11 +5,15 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import tempfile
 import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+import aiofiles
 
 from agent_framework.agents.agent_loop import AgentLoop
 from agent_framework.transcript import TranscriptWriter
@@ -40,6 +44,22 @@ class SessionManager:
         self._cleanup_task: asyncio.Task | None = None  # type: ignore[type-arg]
         self._session_list_cache: list[dict] | None = None
 
+    async def _atomic_write(self, path: Path, content: str) -> None:
+        """原子写入：write-to-temp + os.replace，防止崩溃时丢失。"""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        fd, tmp_path = tempfile.mkstemp(dir=path.parent, suffix=".tmp", prefix=".sess_")
+        try:
+            os.close(fd)
+            async with aiofiles.open(tmp_path, "w", encoding="utf-8") as f:
+                await f.write(content)
+            os.replace(tmp_path, path)
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+
     def start_cleanup(self) -> None:
         if self._cleanup_task is None or self._cleanup_task.done():
             self._cleanup_task = asyncio.create_task(self._cleanup_loop())
@@ -48,13 +68,13 @@ class SessionManager:
         if self._cleanup_task and not self._cleanup_task.done():
             self._cleanup_task.cancel()
 
-    def create(self, agent_loop: AgentLoop, *, title: str = "") -> ChatSession:
+    async def create(self, agent_loop: AgentLoop, *, title: str = "") -> ChatSession:
         sid = uuid.uuid4().hex
         writer = None
         if self._storage_dir:
             transcript_path = self._storage_dir / f"{sid}.jsonl"
             writer = TranscriptWriter(transcript_path)
-            self._append_history(sid, title or "新会话")
+            await self._append_history(sid, title or "新会话")
         session = ChatSession(session_id=sid, agent_loop=agent_loop, transcript_writer=writer)
         self._sessions[sid] = session
         self._invalidate_list_cache()
@@ -66,7 +86,7 @@ class SessionManager:
             session.created_at = time.time()
         return session
 
-    def get_messages(
+    async def get_messages(
         self,
         session_id: str,
         *,
@@ -74,7 +94,7 @@ class SessionManager:
         before: float | None = None,
     ) -> tuple[list[dict], bool, str | None] | None:
         """获取消息，支持分页。返回 (messages, has_more, next_cursor) 或 None。"""
-        all_messages = self._get_all_messages(session_id)
+        all_messages = await self._get_all_messages(session_id)
         if all_messages is None:
             return None
 
@@ -99,7 +119,7 @@ class SessionManager:
 
         return page, has_more, next_cursor
 
-    def _get_all_messages(self, session_id: str) -> list[dict] | None:
+    async def _get_all_messages(self, session_id: str) -> list[dict] | None:
         """三层查找：内存 → Redis → JSONL。"""
         # 1. 内存
         session = self._sessions.get(session_id)
@@ -109,12 +129,17 @@ class SessionManager:
         cached = self._redis_get_messages(session_id)
         if cached is not None:
             return cached
-        # 3. JSONL 冷读 → 回填 Redis
+        # 3. JSONL 冷读 → 回填 Redis (TranscriptReader is sync, wrap in to_thread)
         if not self._storage_dir:
             return None
         transcript_path = self._storage_dir / f"{session_id}.jsonl"
         if not transcript_path.exists():
             return None
+        result = await asyncio.to_thread(self._cold_read_jsonl, transcript_path, session_id)
+        return result
+
+    def _cold_read_jsonl(self, transcript_path: Path, session_id: str) -> list[dict]:
+        """Sync JSONL cold read — called via asyncio.to_thread."""
         from agent_framework.transcript import TranscriptReader
         reader = TranscriptReader(transcript_path)
         result: list[dict] = []
@@ -151,7 +176,7 @@ class SessionManager:
             session.task.cancel()
         session.task = new_task
 
-    def _append_history(self, session_id: str, title: str) -> None:
+    async def _append_history(self, session_id: str, title: str) -> None:
         if not self._storage_dir:
             return
         history_path = self._storage_dir / "history.jsonl"
@@ -161,10 +186,10 @@ class SessionManager:
             "title": title,
             "created_at": time.time(),
         }, ensure_ascii=False)
-        with open(history_path, "a", encoding="utf-8") as f:
-            f.write(entry + "\n")
+        async with aiofiles.open(history_path, "a", encoding="utf-8") as f:
+            await f.write(entry + "\n")
 
-    def update_title(self, session_id: str, title: str) -> bool:
+    async def update_title(self, session_id: str, title: str) -> bool:
         """更新 history.jsonl 中的标题，返回是否实际更新。"""
         if not self._storage_dir:
             return False
@@ -173,24 +198,23 @@ class SessionManager:
             return False
         lines = []
         updated = False
-        with open(history_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                entry = json.loads(line)
-                if entry["session_id"] == session_id:
-                    entry["title"] = title
-                    updated = True
-                lines.append(json.dumps(entry, ensure_ascii=False))
-        with open(history_path, "w", encoding="utf-8") as f:
-            f.write("\n".join(lines) + "\n")
+        async with aiofiles.open(history_path, "r", encoding="utf-8") as f:
+            content = await f.read()
+        for line in content.strip().split("\n"):
+            if not line.strip():
+                continue
+            entry = json.loads(line)
+            if entry["session_id"] == session_id:
+                entry["title"] = title
+                updated = True
+            lines.append(json.dumps(entry, ensure_ascii=False))
+        await self._atomic_write(history_path, "\n".join(lines) + "\n")
         self._invalidate_list_cache()
         if self._redis:
             self._redis.delete(f"session:{session_id}:meta")
         return updated
 
-    def list_sessions(self) -> list[dict]:
+    async def list_sessions(self) -> list[dict]:
         """列出所有历史会话（带缓存）。"""
         if self._session_list_cache is not None:
             return self._session_list_cache
@@ -200,15 +224,15 @@ class SessionManager:
         if not history_path.exists():
             return []
         sessions = []
-        with open(history_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                entry = json.loads(line)
-                transcript_path = self._storage_dir / f"{entry['session_id']}.jsonl"
-                if transcript_path.exists():
-                    sessions.append(entry)
+        async with aiofiles.open(history_path, "r", encoding="utf-8") as f:
+            content = await f.read()
+        for line in content.strip().split("\n"):
+            if not line.strip():
+                continue
+            entry = json.loads(line)
+            transcript_path = self._storage_dir / f"{entry['session_id']}.jsonl"
+            if transcript_path.exists():
+                sessions.append(entry)
         sessions.reverse()  # 最新的在前
         self._session_list_cache = sessions
         return sessions
@@ -244,13 +268,13 @@ class SessionManager:
 
     async def persist_messages(self, session_id: str, messages: list[dict]) -> None:
         """Public method: persist messages to Redis cache."""
-        await asyncio.to_thread(self._redis_set_messages, session_id, messages)
+        self._redis_set_messages(session_id, messages)
 
     async def restore_messages(self, session_id: str) -> list[dict] | None:
         """Public method: restore messages from cache/storage."""
-        return await asyncio.to_thread(self._get_all_messages, session_id)
+        return await self._get_all_messages(session_id)
 
-    def delete_session(self, session_id: str) -> bool:
+    async def delete_session(self, session_id: str) -> bool:
         """删除会话及其 transcript。"""
         self._invalidate_list_cache()
         if self._redis:
@@ -264,25 +288,25 @@ class SessionManager:
         if transcript_path.exists():
             transcript_path.unlink()
             deleted = True
-        # 从 history.jsonl 移除
+        # 从 history.jsonl 移除（原子写入）
         history_path = self._storage_dir / "history.jsonl"
         if history_path.exists():
+            async with aiofiles.open(history_path, "r", encoding="utf-8") as f:
+                content = await f.read()
             lines = []
-            with open(history_path, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    entry = json.loads(line)
-                    if entry["session_id"] != session_id:
-                        lines.append(json.dumps(entry, ensure_ascii=False))
-            with open(history_path, "w", encoding="utf-8") as f:
-                f.write("\n".join(lines))
-                if lines:
-                    f.write("\n")
+            for line in content.strip().split("\n"):
+                if not line.strip():
+                    continue
+                entry = json.loads(line)
+                if entry["session_id"] != session_id:
+                    lines.append(json.dumps(entry, ensure_ascii=False))
+            output = "\n".join(lines)
+            if lines:
+                output += "\n"
+            await self._atomic_write(history_path, output)
         return deleted
 
-    def get_or_restore(self, session_id: str, agent_loop: AgentLoop | None = None) -> ChatSession | None:
+    async def get_or_restore(self, session_id: str, agent_loop: AgentLoop | None = None) -> ChatSession | None:
         """获取 session，如果不在内存中则从 transcript 恢复。"""
         session = self.get(session_id)
         if session is not None:
@@ -320,6 +344,7 @@ class SessionManager:
         expired = [
             sid for sid, s in self._sessions.items()
             if now - s.created_at > self._ttl
+            and (s.task is None or s.task.done())
         ]
         for sid in expired:
             self.remove(sid)
