@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import time
@@ -99,7 +98,7 @@ async def create_chat(req: ChatRequest, request: Request):
         "content": req.message,
         "timestamp": time.time(),
     })
-    await asyncio.to_thread(sm._redis_set_messages, session.session_id, session.messages)
+    await sm.persist_messages(session.session_id, session.messages)
 
     async def event_stream() -> AsyncGenerator[str, None]:
         loop = session.agent_loop
@@ -112,7 +111,7 @@ async def create_chat(req: ChatRequest, request: Request):
             if session.transcript_writer is not None:
                 consumer = TranscriptConsumer(
                     session.transcript_writer,
-                    system_prompt=getattr(loop, '_system_prompt_text', None),
+                    system_prompt=loop.system_prompt_text,
                 )
                 gen = consumer.wrap(gen, req.message)
             async for loop_event in gen:
@@ -125,7 +124,7 @@ async def create_chat(req: ChatRequest, request: Request):
                         "blocks": content,
                         "timestamp": time.time(),
                     })
-                    await asyncio.to_thread(sm._redis_set_messages, session.session_id, session.messages)
+                    await sm.persist_messages(session.session_id, session.messages)
                     # 更新会话标题（取第一条用户消息前 50 字符）
                     if len(session.messages) <= 2:
                         sm.update_title(session.session_id, req.message[:50])
