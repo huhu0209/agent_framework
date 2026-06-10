@@ -506,3 +506,121 @@ async def test_dispatch_degrader_no_fallback_returns_error():
         ctx,
     )
     assert result.is_error is True
+
+
+# --- HITL (Human-in-the-Loop) 集成测试 ---
+
+
+def _make_ask_pipeline(tool_name: str = "echo"):
+    """创建一个始终返回 ASK 决定的权限管道。"""
+    from unittest.mock import MagicMock
+    from agent_framework.prompts.profiles import AgentProfile
+    from agent_framework.safety.permissions import (
+        PermissionDecision,
+        PermissionResult,
+        PermissionPipeline,
+        RiskLevel,
+    )
+
+    pipeline = PermissionPipeline(profile=AgentProfile(
+        name="asker",
+        description="ask mode",
+        soul="", agents_rules="", identity="",
+    ))
+    # Override check to always return ASK for the target tool
+    original_check = pipeline.check
+
+    def ask_check(name, tool_input):
+        if name == tool_name:
+            return PermissionResult(
+                PermissionDecision.ASK,
+                "test_ask",
+                RiskLevel.MEDIUM,
+            )
+        return original_check(name, tool_input)
+
+    pipeline.check = ask_check
+    return pipeline
+
+
+@pytest.mark.asyncio
+async def test_ask_with_hitl_approve_executes_tool():
+    """ASK 决定 + HITL approve → 工具正常执行。"""
+    import asyncio
+    from agent_framework.safety.hitl import HITLManager, PermissionRequest, PermissionResponse
+
+    hitl = HITLManager()
+    registry = _make_registry_with_echo()
+    router = ToolRouter(registry, hitl_manager=hitl)
+    router.set_permission_pipeline(_make_ask_pipeline())
+
+    call = ToolCall(id="hitl_1", name="echo", arguments={"msg": "approved"})
+
+    # Schedule a resolution after a short delay
+    async def resolve_later():
+        await asyncio.sleep(0.05)
+        # Find the pending request and resolve it
+        req_id = next(iter(hitl._pending))
+        hitl.resolve(req_id, PermissionResponse(
+            request_id=req_id,
+            action="approve",
+        ))
+
+    asyncio.get_event_loop().create_task(resolve_later())
+    result = await router.dispatch(call, ctx)
+    assert result.is_error is False
+    assert "echo: approved" in result.content
+
+
+@pytest.mark.asyncio
+async def test_ask_with_hitl_deny_returns_error():
+    """ASK 决定 + HITL deny → 返回拒绝错误。"""
+    import asyncio
+    from agent_framework.safety.hitl import HITLManager, PermissionResponse
+
+    hitl = HITLManager()
+    registry = _make_registry_with_echo()
+    router = ToolRouter(registry, hitl_manager=hitl)
+    router.set_permission_pipeline(_make_ask_pipeline())
+
+    call = ToolCall(id="hitl_2", name="echo", arguments={"msg": "denied"})
+
+    async def resolve_later():
+        await asyncio.sleep(0.05)
+        req_id = next(iter(hitl._pending))
+        hitl.resolve(req_id, PermissionResponse(
+            request_id=req_id,
+            action="deny",
+        ))
+
+    asyncio.get_event_loop().create_task(resolve_later())
+    result = await router.dispatch(call, ctx)
+    assert result.is_error is True
+    assert "拒绝" in result.content or "denied" in result.content.lower()
+
+
+@pytest.mark.asyncio
+async def test_ask_without_hitl_returns_error():
+    """ASK 决定 + 无 HITLManager → 返回需要确认错误（向后兼容）。"""
+    registry = _make_registry_with_echo()
+    router = ToolRouter(registry)
+    router.set_permission_pipeline(_make_ask_pipeline())
+
+    call = ToolCall(id="hitl_3", name="echo", arguments={"msg": "no hitl"})
+    result = await router.dispatch(call, ctx)
+    assert result.is_error is True
+    assert "确认" in result.content
+
+
+@pytest.mark.asyncio
+async def test_derive_propagates_hitl_manager():
+    """derive() 创建的子路由继承 hitl_manager。"""
+    from agent_framework.safety.hitl import HITLManager
+
+    hitl = HITLManager()
+    registry = _make_registry_with_echo()
+    router = ToolRouter(registry, hitl_manager=hitl)
+
+    sub_registry = ToolRegistry()
+    sub = router.derive(sub_registry)
+    assert sub._hitl_manager is hitl
