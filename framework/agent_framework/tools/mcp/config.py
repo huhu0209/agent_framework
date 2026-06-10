@@ -115,8 +115,17 @@ class McpManager:
     def _register_tools(
         self, client: McpClient, cfg: McpServerConfig, registry: ToolRegistry,
     ) -> None:
+        """注册 MCP 工具到 ToolRegistry。
+
+        MCP ToolSpec 对象是 schema-only 定义（无 handler 函数）。
+        handler 为 None 是有意设计：执行通过 ToolRouter.dispatch() 中
+        的 "mcp__" 前缀约定路由到 McpManager._dispatch_mcp()。
+        直接通过 ToolExecutor 执行 MCP ToolSpec 会失败——
+        它们必须经过 ToolRouter 的 mcp__ 前缀路由。
+        """
         for tool_def in client.tools:
             prefixed_name = f"mcp__{cfg.name}__{tool_def['name']}"
+            # handler=None is intentional: schema-only ToolSpec, routed via mcp__ prefix
             spec = ToolSpec(
                 name=prefixed_name,
                 description=tool_def.get("description", ""),
