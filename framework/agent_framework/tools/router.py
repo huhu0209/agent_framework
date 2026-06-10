@@ -101,8 +101,6 @@ class ToolRouter:
         try:
             if name.startswith("mcp__"):
                 tool_result = await self._dispatch_mcp(name, active_call.arguments, ctx)
-            elif name.startswith("agent__"):
-                tool_result = self._dispatch_agent(name, active_call.arguments, ctx)
             else:
                 tool_result = await self._dispatch_builtin(active_call, ctx)
 
@@ -175,9 +173,3 @@ class ToolRouter:
 
         server_name, tool_name = parts
         return await self._mcp_manager.call_tool(server_name, tool_name, args)
-
-    def _dispatch_agent(self, name: str, args: dict, ctx: ToolUseContext) -> ToolResult:
-        return ToolResult(
-            content=f"Agent 工具 '{name}' 未实现。子 Agent 支持尚未实现。",
-            is_error=True,
-        )

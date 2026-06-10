@@ -67,8 +67,8 @@ async def test_mcp_prefix_returns_not_configured():
 
 
 @pytest.mark.asyncio
-async def test_agent_prefix_returns_not_implemented():
-    """Agent-as-tool 路由已预留，返回未实现。"""
+async def test_agent_prefix_returns_unknown_tool():
+    """Agent-as-tool 前缀不再有专用路由，走 builtin 返回未知工具。"""
     registry = _make_registry_with_echo()
     router = ToolRouter(registry)
     result = await router.dispatch(
@@ -76,7 +76,7 @@ async def test_agent_prefix_returns_not_implemented():
         ctx,
     )
     assert result.is_error is True
-    assert "未实现" in result.content
+    assert "未知工具" in result.content
 
 
 # --- MCP 集成测试 ---
