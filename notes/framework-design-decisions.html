@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>框架设计决策图 — agent-framework-core</title>
+<style>
+:root {
+  --bg: #faf6f1;
+  --bg-card: #fff;
+  --text: #1a1a1a;
+  --text-muted: #666;
+  --border: #e0d5c8;
+  --accent: #c75c2e;
+  --accent-light: #f0ddd0;
+  --layer-llm: #3b82f6;
+  --layer-tool: #10b981;
+  --layer-agent: #8b5cf6;
+  --layer-infra: #f59e0b;
+  --layer-orch: #ef4444;
+  --shadow: 0 2px 8px rgba(0,0,0,0.08);
+  --radius: 8px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, "PingFang SC", "Noto Sans SC", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.7;
+  padding: 2rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+h1 { font-size: 1.8rem; margin-bottom: 0.3rem; color: var(--accent); }
+h2 { font-size: 1.3rem; margin: 2rem 0 1rem; }
+h3 { font-size: 1.1rem; margin: 1rem 0 0.5rem; }
+
+.subtitle { color: var(--text-muted); margin-bottom: 2rem; font-size: 0.95rem; }
+
+/* 图例 */
+.legend {
+  display: flex; flex-wrap: wrap; gap: 1rem;
+  margin: 1.5rem 0; padding: 1rem;
+  background: var(--bg-card); border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+.legend-item { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; }
+.legend-dot {
+  width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
+}
+
+/* 因果链概览 */
+.chain-overview {
+  margin: 1.5rem 0; padding: 1.5rem;
+  background: var(--bg-card); border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+.chain {
+  display: flex; align-items: center; flex-wrap: wrap;
+  gap: 0.3rem; margin: 0.8rem 0; font-size: 0.9rem;
+}
+.chain-label {
+  font-weight: 600; min-width: 80px; color: var(--text-muted);
+  font-size: 0.8rem;
+}
+.chain-node {
+  padding: 2px 10px; border-radius: 4px;
+  font-size: 0.8rem; cursor: pointer;
+  border: 1px solid; transition: all 0.2s;
+  white-space: nowrap;
+}
+.chain-node:hover { transform: scale(1.05); box-shadow: var(--shadow); }
+.chain-arrow { color: var(--text-muted); font-size: 1rem; }
+
+/* 层级区域 */
+.layer-section {
+  margin: 2rem 0; padding: 1.5rem;
+  background: var(--bg-card); border-radius: var(--radius);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--layer-llm);
+}
+.layer-section[data-layer="tool"] { border-left-color: var(--layer-tool); }
+.layer-section[data-layer="agent"] { border-left-color: var(--layer-agent); }
+.layer-section[data-layer="infra"] { border-left-color: var(--layer-infra); }
+.layer-section[data-layer="orch"] { border-left-color: var(--layer-orch); }
+
+.layer-header {
+  display: flex; align-items: center; gap: 0.8rem;
+  margin-bottom: 0.5rem;
+}
+.layer-number {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; font-weight: 700; font-size: 0.9rem; flex-shrink: 0;
+}
+.layer-question {
+  font-size: 1rem; font-weight: 600; color: var(--text);
+}
+
+/* 决策卡片 */
+.decision-card {
+  margin: 1rem 0; padding: 1rem 1.2rem;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  cursor: pointer; transition: all 0.2s;
+  position: relative;
+}
+.decision-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow);
+}
+.decision-card.active {
+  border-color: var(--accent);
+  background: var(--accent-light);
+}
+.decision-id {
+  position: absolute; top: 0.5rem; right: 0.8rem;
+  font-size: 0.75rem; color: var(--text-muted);
+  font-family: monospace;
+}
+.decision-title {
+  font-weight: 600; font-size: 0.95rem;
+  margin-right: 3rem;
+}
+.decision-subtitle {
+  font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem;
+}
+
+/* 展开详情 */
+.decision-detail {
+  display: none; margin-top: 0.8rem; padding-top: 0.8rem;
+  border-top: 1px dashed var(--border);
+  font-size: 0.88rem;
+}
+.decision-card.active .decision-detail { display: block; }
+
+.detail-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem;
+  margin: 0.5rem 0;
+}
+.detail-item { }
+.detail-label {
+  font-size: 0.78rem; color: var(--text-muted);
+  font-weight: 600; margin-bottom: 0.15rem;
+}
+.detail-value { font-size: 0.85rem; }
+.detail-value code {
+  background: rgba(0,0,0,0.06); padding: 1px 5px;
+  border-radius: 3px; font-size: 0.82rem;
+}
+
+.causal-tag {
+  display: inline-block; padding: 2px 8px; border-radius: 3px;
+  font-size: 0.75rem; margin: 0.2rem; cursor: pointer;
+  border: 1px solid; transition: all 0.15s;
+}
+.causal-tag:hover { opacity: 0.8; }
+
+/* 筛选按钮 */
+.filter-bar {
+  display: flex; flex-wrap: wrap; gap: 0.5rem;
+  margin: 1rem 0;
+}
+.filter-btn {
+  padding: 4px 14px; border-radius: 20px;
+  border: 1px solid var(--border); background: var(--bg-card);
+  font-size: 0.82rem; cursor: pointer; transition: all 0.2s;
+}
+.filter-btn:hover { border-color: var(--accent); }
+.filter-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* 全展开/收起 */
+.toggle-all {
+  display: inline-block; margin: 0.5rem 0; padding: 4px 12px;
+  border-radius: 4px; border: 1px solid var(--border);
+  background: var(--bg-card); font-size: 0.82rem;
+  cursor: pointer; color: var(--accent);
+}
+.toggle-all:hover { background: var(--accent-light); }
+
+/* 响应式 */
+@media (max-width: 768px) {
+  body { padding: 1rem; }
+  .detail-grid { grid-template-columns: 1fr; }
+  .chain { font-size: 0.8rem; }
+}
+</style>
+</head>
+<body>
+
+<h1>🏗️ 框架设计决策图</h1>
+<p class="subtitle">agent-framework-core · 18 个核心决策 · 6 条因果链 · 自底向上阅读</p>
+
+<!-- 图例 -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:var(--layer-llm)"></div>LLM 适配层</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--layer-tool)"></div>工具系统层</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--layer-agent)"></div>Agent 核心层</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--layer-infra)"></div>基础设施层</div>
+  <div class="legend-item"><div class="legend-dot" style="background:var(--layer-orch)"></div>编排协作层</div>
+</div>
+
+<!-- 筛选 -->
+<div class="filter-bar">
+  <button class="filter-btn active" data-filter="all">全部</button>
+  <button class="filter-btn" data-filter="llm">LLM 适配层</button>
+  <button class="filter-btn" data-filter="tool">工具系统层</button>
+  <button class="filter-btn" data-filter="agent">Agent 核心层</button>
+  <button class="filter-btn" data-filter="infra">基础设施层</button>
+  <button class="filter-btn" data-filter="orch">编排协作层</button>
+</div>
+<button class="toggle-all" onclick="toggleAll()">展开/收起全部</button>
+
+<!-- ============================================================ -->
+<!-- 因果链概览 -->
+<!-- ============================================================ -->
+<h2>🔗 六条因果链</h2>
+<p class="subtitle">前一个决策如何制约后一个决策。点击节点跳转到详情。</p>
+
+<div class="chain-overview">
+
+<div class="chain">
+  <span class="chain-label">类型链</span>
+  <span class="chain-node" style="border-color:var(--layer-llm);color:var(--layer-llm)" onclick="scrollTo('D1')">D1 统一类型</span>
+  <span class="chain-arrow">→</span>
+  <span class="chain-node" style="border-color:var(--layer-tool);color:var(--layer-tool)" onclick="scrollTo('D5')">D5 最小 Schema</span>
+  <span class="chain-arrow">→</span>
+  <span style="font-size:0.85rem;color:var(--text-muted)">工具参数必须扁平，不能用 oneOf/$ref</span>
+</div>
+
+<div class="chain">
+  <span class="chain-label">弹性链</span>
+  <span class="chain-node" style="border-color:var(--layer-llm);color:var(--layer-llm)" onclick="scrollTo('D1')">D1 统一接口</span>
+  <span class="chain-arrow">→</span>
+  <span class="chain-node" style="border-color:var(--layer-llm);color:var(--layer-llm)" onclick="scrollTo('D2')">D2 装饰器弹性</span>
+  <span class="chain-arrow">→</span>
+  <span class="chain-node" style="border-color:var(--layer-agent);color:var(--layer-agent)" onclick="scrollTo('D8')">D8 ReAct 原子</span>
+  <span class="chain-arrow">→</span>
+  <span style="font-size:0.85rem;color:var(--text-muted)">AgentLoop 只面向 ILLMAdapter，不知道背后有重试熔断</span>
+</div>
+
+<div class="chain">
+  <span class="chain-label">工具链</span>
+  <span class="chain-node" style="border-color:var(--layer-tool);color:var(--layer-tool)" onclick="scrollTo('D4')">D4 注册表+路由</span>
+  <span class="chain-arrow">→</span>
+  <span class="chain-node" style="border-color:var(--layer-agent);color:var(--layer-agent)" onclick="scrollTo('D9')">D9 子Agent工具化</span>
+  <span class="chain-arrow">→</span>
+  <span class="chain-node" style="border-color:var(--layer-orch);color:var(--layer-orch)" onclick="scrollTo('D16')">D16 A2A工具注册</span>
+  <span class="chain-arrow">→</span>
+  <span style="font-size:0.85rem;color:var(--text-muted)">一切能力皆工具，LLM 只需调用工具</span>
+</div>
+
+<div class="chain">
+  <span class="chain-label">策略链</span>
+  <span class="chain-node" style="border-color:var(--layer-agent);color:var(--layer-agent)" onclick="scrollTo('D8')">D8 ReAct 原子</span>
+  <span class="chain-arrow">→</span>
+  <span class="chain-node" style="border-color:var(--layer-agent);color:var(--layer-agent)" onclick="scrollTo('D10')">D10 三策略组合</span>
+  <span class="chain-arrow">→</span>
+  <span class="chain-node" style="border-color:var(--layer-orch);color:var(--layer-orch)" onclick="scrollTo('D14')">D14 LLM自路由</span>
+  <span class="chain-arrow">→</span>
+  <span style="font-size:0.85rem;color:var(--text-muted)">编排器也是 AgentLoop，只是工具不同</span>
+</div>
+
+<div class="chain">
+  <span class="chain-label">记忆链</span>
+  <span class="chain-node" style="border-color:var(--layer-infra);color:var(--layer-infra)" onclick="scrollTo('D11')">D11 双层记忆</span>
+  <span class="chain-arrow">→</span>
+  <span class="chain-node" style="border-color:var(--layer-infra);color:var(--layer-infra)" onclick="scrollTo('D12')">D12 文件即DB</span>
+  <span class="chain-arrow">→</span>
+  <span class="chain-node" style="border-color:var(--layer-infra);color:var(--layer-infra)" onclick="scrollTo('D13')">D13 LLM评分召回</span>
+  <span class="chain-arrow">→</span>
+  <span style="font-size:0.85rem;color:var(--text-muted)">文件数 < 50，不需要向量数据库</span>
+</div>
+
+<div class="chain">
+  <span class="chain-label">安全链</span>
+  <span class="chain-node" style="border-color:var(--layer-infra);color:var(--layer-infra)" onclick="scrollTo('D14')">D14 四步权限</span>
+  <span class="chain-arrow">→</span>
+  <span class="chain-node" style="border-color:var(--layer-infra);color:var(--layer-infra)" onclick="scrollTo('D15')">D15 HITL 异步门</span>
+  <span class="chain-arrow">→</span>
+  <span class="chain-node" style="border-color:var(--layer-tool);color:var(--layer-tool)" onclick="scrollTo('D6')">D6 路由管线嵌入</span>
+  <span class="chain-arrow">→</span>
+  <span style="font-size:0.85rem;color:var(--text-muted)">每次工具调用都过权限检查</span>
+</div>
+
+</div>
+
+<!-- ============================================================ -->
+<!-- 第一层：LLM 适配层 -->
+<!-- ============================================================ -->
+<div class="layer-section" data-layer="llm">
+  <div class="layer-header">
+    <div class="layer-number" style="background:var(--layer-llm)">1</div>
+    <span class="layer-question">怎么让上层不关心"调的是哪家模型"？</span>
+  </div>
+  <p class="subtitle">统一 LLM 调用抽象层，是整个框架的底层基石</p>
+
+  <!-- D1 -->
+  <div class="decision-card" id="D1" data-layer="llm" onclick="toggle(this)">
+    <span class="decision-id">D1</span>
+    <div class="decision-title">统一类型系统 — 框架拥有自己的类型</div>
+    <div class="decision-subtitle">content 永远是 ContentBlock 数组，tool_use 按 Anthropic 方式建模</div>
+    <div class="decision-detail">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">问题</div>
+          <div class="detail-value">每家 Provider 的消息格式完全不同（OpenAI 用 <code>tool_calls</code> 数组，Anthropic 用 content block），上层代码不可能适配所有格式</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">选择</div>
+          <div class="detail-value">Pydantic canonical types：<code>types.py</code> 定义统一消息模型，<code>transform/</code> 子包做双向转换</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">放弃</div>
+          <div class="detail-value">❌ OpenAI 格式作为统一格式（Anthropic 解包太复杂）<br>❌ LangChain 式 dict 自由格式（无类型安全）<br>❌ 每个 Provider 一套类型（上层要写 provider-aware 代码）</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">代价</div>
+          <div class="detail-value">需要维护 <code>transform/</code> 转换层；<code>provider_extras</code> 逃逸口让高级用法不污染核心类型</div>
+        </div>
+      </div>
+      <div style="margin-top:0.5rem">
+        <div class="detail-label">因果影响</div>
+        <span class="causal-tag" style="border-color:var(--layer-tool);color:var(--layer-tool)" onclick="event.stopPropagation();scrollTo('D5')">→ D5 最小 Schema（ToolParameterSchema 也在 types.py 中定义）</span>
+        <span class="causal-tag" style="border-color:var(--layer-tool);color:var(--layer-tool)" onclick="event.stopPropagation();scrollTo('D7')">→ D7 压缩器依赖 normalize</span>
+      </div>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--text-muted)">代码：<code>llm/types.py</code> · <code>llm/transform/</code></div>
+    </div>
+  </div>
+
+  <!-- D2 -->
+  <div class="decision-card" id="D2" data-layer="llm" onclick="toggle(this)">
+    <span class="decision-id">D2</span>
+    <div class="decision-title">装饰器模式做弹性 — 重试+熔断不侵入 Provider</div>
+    <div class="decision-subtitle">ResilientLLMAdapter 包装任意 ILLMAdapter，透明添加重试和熔断</div>
+    <div class="decision-detail">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">问题</div>
+          <div class="detail-value">LLM API 经常 429/5xx/超时，但重试/熔断逻辑不应该混入 Provider 代码</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">选择</div>
+          <div class="detail-value">装饰器模式：<code>ResilientLLMAdapter</code> 实现同一个 <code>ILLMAdapter</code> 接口，内部包装重试（指数退避）+ 三状态熔断器</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">放弃</div>
+          <div class="detail-value">❌ 继承式弹性（RetryableOpenAIProvider）→ 每个 Provider 写一遍<br>❌ 第三方库 tenacity/backoff → 引入外部依赖<br>❌ 分布式熔断 Redis → 框架是单进程的</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">代价</div>
+          <div class="detail-value">流式响应中途断开不重试（只连接阶段重试）；熔断器内存状态不支持多进程</div>
+        </div>
+      </div>
+      <div style="margin-top:0.5rem">
+        <div class="detail-label">因果影响</div>
+        <span class="causal-tag" style="border-color:var(--layer-agent);color:var(--layer-agent)" onclick="event.stopPropagation();scrollTo('D8')">→ D8 ReAct 循环只面向 ILLMAdapter，不知道背后有重试</span>
+      </div>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--text-muted)">代码：<code>llm/resilient.py</code> · <code>llm/retry.py</code></div>
+    </div>
+  </div>
+
+  <!-- D3 -->
+  <div class="decision-card" id="D3" data-layer="llm" onclick="toggle(this)">
+    <span class="decision-id">D3</span>
+    <div class="decision-title">httpx over SDK — 零 SDK 版本耦合</div>
+    <div class="decision-subtitle">三个 Provider 全部用 httpx.AsyncClient 直接调 HTTP API</div>
+    <div class="decision-detail">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">问题</div>
+          <div class="detail-value">openai/anthropic/deepseek SDK 版本迭代快，API 签名经常变，引入三个 SDK 依赖树庞大</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">选择</div>
+          <div class="detail-value">裸 <code>httpx.AsyncClient</code>，自己控制超时粒度（connect/read/write/pool）、连接池、代理</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">放弃</div>
+          <div class="detail-value">❌ Provider 官方 SDK → 版本耦合，依赖树爆炸<br>❌ DeepSeek 继承 OpenAIProvider → 行为差异会让继承变脆</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">代价</div>
+          <div class="detail-value">必须自己实现各家 API 的请求/响应格式转换；但通过 <code>transform/</code> 纯函数隔离了这部分复杂度</div>
+        </div>
+      </div>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--text-muted)">代码：<code>llm/providers/*.py</code> · <code>llm/streaming.py</code></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================================================ -->
+<!-- 第二层：工具系统层 -->
+<!-- ============================================================ -->
+<div class="layer-section" data-layer="tool">
+  <div class="layer-header">
+    <div class="layer-number" style="background:var(--layer-tool)">2</div>
+    <span class="layer-question">怎么让 Agent 能力可扩展，而不是硬编码？</span>
+  </div>
+  <p class="subtitle">工具注册、发现、路由与执行引擎</p>
+
+  <!-- D4 -->
+  <div class="decision-card" id="D4" data-layer="tool" onclick="toggle(this)">
+    <span class="decision-id">D4</span>
+    <div class="decision-title">注册表 + 前缀路由 — 三种来源统一调度</div>
+    <div class="decision-subtitle">flat namespace dict，用 mcp__ / agent__ 前缀区分来源</div>
+    <div class="decision-detail">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">问题</div>
+          <div class="detail-value">工具来自三个完全不同的来源：Python 函数（builtin）、JSON-RPC 子进程（MCP）、Agent 委派（agent）。各有不同的生命周期和错误处理</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">选择</div>
+          <div class="detail-value">注册表 <code>dict[str, ToolSpec]</code> + 前缀路由：<code>mcp__*</code> → MCP，<code>agent__*</code> → agent，其余 → builtin。5 阶段管线：权限→前Hook→执行→降级→后Hook</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">放弃</div>
+          <div class="detail-value">❌ 层级命名空间（mcp.server.tool）→ 简单前缀够用<br>❌ 装饰器注册 @tool → 显式注册更可调试<br>❌ 策略模式分发 → 3 种来源固定，无需抽象</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">代价</div>
+          <div class="detail-value">前缀约定是硬合约；注册重名抛 ValueError；MCP 工具绕过 executor（无超时/校验/截断保护）</div>
+        </div>
+      </div>
+      <div style="margin-top:0.5rem">
+        <div class="detail-label">因果影响</div>
+        <span class="causal-tag" style="border-color:var(--layer-agent);color:var(--layer-agent)" onclick="event.stopPropagation();scrollTo('D9')">→ D9 子Agent注册为 run_subagent 工具</span>
+        <span class="causal-tag" style="border-color:var(--layer-orch);color:var(--layer-orch)" onclick="event.stopPropagation();scrollTo('D16')">→ D16 A2A 远程 Agent 也注册为工具</span>
+      </div>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--text-muted)">代码：<code>tools/registry.py</code> · <code>tools/router.py</code> · <code>tools/degrader.py</code></div>
+    </div>
+  </div>
+
+  <!-- D5 -->
+  <div class="decision-card" id="D5" data-layer="tool" onclick="toggle(this)">
+    <span class="decision-id">D5</span>
+    <div class="decision-title">最小 JSON Schema — 跨 Provider 最大公约数</div>
+    <div class="decision-subtitle">只支持 type/properties/required/description/enum/items，排除 oneOf/anyOf/$ref</div>
+    <div class="decision-detail">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">问题</div>
+          <div class="detail-value">LLM 有时幻觉工具参数（缺字段、类型错），需要校验。但同一个 schema 要在 Anthropic/OpenAI/DeepSeek 三家的 tool definition 格式中都工作</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">选择</div>
+          <div class="detail-value">只支持 JSON Schema 的最小子集。<code>ToolParameterSchema</code> 定义在 <code>llm/types.py</code>（不在 tools/ 中），因为 LLM 层也需要它</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">放弃</div>
+          <div class="detail-value">❌ 完整 jsonschema 库 → 各家 Provider 不支持完整 JSON Schema<br>❌ Pydantic 模型校验 → MCP 工具的 schema 运行时动态到达，无法预定义</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">代价</div>
+          <div class="detail-value">工具参数必须设计为扁平结构；不能用 oneOf 做联合类型</div>
+        </div>
+      </div>
+      <div style="margin-top:0.5rem">
+        <div class="detail-label">因果来源</div>
+        <span class="causal-tag" style="border-color:var(--layer-llm);color:var(--layer-llm)" onclick="event.stopPropagation();scrollTo('D1')">← D1 统一类型（schema 定义权归 LLM 层）</span>
+      </div>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--text-muted)">代码：<code>llm/types.py:ToolParameterSchema</code> · <code>tools/validator.py</code></div>
+    </div>
+  </div>
+
+  <!-- D6 -->
+  <div class="decision-card" id="D6" data-layer="tool" onclick="toggle(this)">
+    <span class="decision-id">D6</span>
+    <div class="decision-title">5 阶段路由管线 — 权限/Hook/执行/降级 一条龙</div>
+    <div class="decision-subtitle">权限检查 → 前Hook → 执行（含降级回退）→ 后Hook</div>
+    <div class="decision-detail">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">问题</div>
+          <div class="detail-value">工具调用前需要安全检查、行为注入；调用后需要结果验证。这些关注点必须有序执行，不能跳步</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">选择</div>
+          <div class="detail-value">线性管线：权限（PermissionPipeline）→ 前Hook（可阻断/改参数）→ 执行+降级 → 后Hook（截断到 5000 字符防 Hook 进程爆）</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">放弃</div>
+          <div class="detail-value">❌ 中间件链 → Hook 系统已提供扩展性<br>❌ 事件溯源 → 线性管线更简单、更可审计</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">代价</div>
+          <div class="detail-value">管线阶段紧耦合在一个 dispatch() 方法中；后Hook 只看到截断结果</div>
+        </div>
+      </div>
+      <div style="margin-top:0.5rem">
+        <div class="detail-label">因果来源</div>
+        <span class="causal-tag" style="border-color:var(--layer-infra);color:var(--layer-infra)" onclick="event.stopPropagation();scrollTo('D14')">← D14 四步权限（嵌入管线第一阶段）</span>
+      </div>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--text-muted)">代码：<code>tools/router.py:dispatch()</code></div>
+    </div>
+  </div>
+
+  <!-- D7 -->
+  <div class="decision-card" id="D7" data-layer="tool" onclick="toggle(this)">
+    <span class="decision-id">D7</span>
+    <div class="decision-title">LLM 摘要压缩 — 保留语义的上下文窗口管理</div>
+    <div class="decision-subtitle">75% 阈值触发，按 turn 分组保留最近 20 轮，旧消息 LLM 摘要</div>
+    <div class="decision-detail">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">问题</div>
+          <div class="detail-value">长对话超出上下文窗口会报错，但直接删旧消息会丢失关键决策和状态</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">选择</div>
+          <div class="detail-value">Turn-based 滑动窗口：保留最近 20 轮，旧的用一个 LLM 调用生成 7 段式摘要（已完成/当前状态/关键文件/决策/错误/待办/上下文），注入为 UserMessage</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">放弃</div>
+          <div class="detail-value">❌ 简单删除 → 丢关键信息<br>❌ Token 级截断 → 可能切断 tool_call/result 配对<br>❌ 滚动摘要 → 累积误差</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">代价</div>
+          <div class="detail-value">压缩时多一次 LLM 调用；依赖 <code>normalize_messages</code> 确保压缩后格式合法（tools → llm 反向依赖）</div>
+        </div>
+      </div>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--text-muted)">代码：<code>tools/context/compactor.py</code> · <code>tools/context/token_counter.py</code></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================================================ -->
+<!-- 第三层：Agent 核心层 -->
+<!-- ============================================================ -->
+<div class="layer-section" data-layer="agent">
+  <div class="layer-header">
+    <div class="layer-number" style="background:var(--layer-agent)">3</div>
+    <span class="layer-question">怎么让推理策略可替换，而不是只有一种？</span>
+  </div>
+  <p class="subtitle">Agent 基类与 ReAct 推理循环，框架的核心推理引擎</p>
+
+  <!-- D8 -->
+  <div class="decision-card" id="D8" data-layer="agent" onclick="toggle(this)">
+    <span class="decision-id">D8</span>
+    <div class="decision-title">ReAct 作为不可约原子 — 所有策略的基础</div>
+    <div class="decision-subtitle">最简单的支持工具调用的循环；PlanAndSolve/Reflection 都委托给它</div>
+    <div class="decision-detail">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">问题</div>
+          <div class="detail-value">框架需要一个默认执行引擎。如果基础是 PlanAndSolve，你不能轻易降级为纯 ReAct；但从 ReAct 可以构建任何策略</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">选择</div>
+          <div class="detail-value">AgentLoop 状态机：调 LLM → 看 StopReason 分支 → <code>END_TURN</code> 结束 / <code>TOOL_USE</code> 调工具继续循环。所有外部依赖（LLM/工具/记忆/Hook）通过构造器注入</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">放弃</div>
+          <div class="detail-value">❌ 链/管线架构 → ReAct 本质是紧耦合循环<br>❌ 流式返回中间步骤 → 简化合约，避免并发竞争</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">代价</div>
+          <div class="detail-value">LLM 层必须返回 <code>StopReason.TOOL_USE</code>/<code>END_TURN</code>；工具必须返回 <code>ToolResult(content=str)</code>；计划注入会修改消息列表</div>
+        </div>
+      </div>
+      <div style="margin-top:0.5rem">
+        <div class="detail-label">因果来源</div>
+        <span class="causal-tag" style="border-color:var(--layer-llm);color:var(--layer-llm)" onclick="event.stopPropagation();scrollTo('D2')">← D2 装饰器弹性（Loop 不知道背后有重试）</span>
+        <div class="detail-label" style="margin-top:0.3rem">因果影响</div>
+        <span class="causal-tag" style="border-color:var(--layer-agent);color:var(--layer-agent)" onclick="event.stopPropagation();scrollTo('D10')">→ D10 三策略都委托 AgentLoop</span>
+        <span class="causal-tag" style="border-color:var(--layer-orch);color:var(--layer-orch)" onclick="event.stopPropagation();scrollTo('D14')">→ D14 编排器本身也是 AgentLoop</span>
+      </div>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--text-muted)">代码：<code>agents/agent_loop.py</code> · <code>agents/base.py</code></div>
+    </div>
+  </div>
+
+  <!-- D9 -->
+  <div class="decision-card" id="D9" data-layer="agent" onclick="toggle(this)">
+    <span class="decision-id">D9</span>
+    <div class="decision-title">子Agent 工具化 — LLM 自主决定何时委派</div>
+    <div class="decision-subtitle">run_subagent 是一个 ToolSpec；递归防护通过 RECURSIVE_TOOLS 集合实现</div>
+    <div class="decision-detail">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">问题</div>
+          <div class="detail-value">复杂任务需要委派，但子 Agent 不应该是独立的层级体系——那需要全新的生命周期管理</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">选择</div>
+          <div class="detail-value"><code>run_subagent</code> 注册为普通工具，LLM 像调用其他工具一样调用它。子 Agent 继承所有工具但过滤掉 <code>RECURSIVE_TOOLS = {"run_subagent", "task_create", "spawn_teammate"}</code>，静态防止无限递归</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">放弃</div>
+          <div class="detail-value">❌ 父子树生命周期管理 → 太重<br>❌ 共享消息历史 → 破坏隔离性<br>❌ 动态递归层数限制 → 静态集合更安全可审计</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">代价</div>
+          <div class="detail-value">子Agent 返回纯字符串（非结构化）；共享 ILLMAdapter 和 ToolUseContext（同模型凭证、同工作目录）</div>
+        </div>
+      </div>
+      <div style="margin-top:0.5rem">
+        <div class="detail-label">因果来源</div>
+        <span class="causal-tag" style="border-color:var(--layer-tool);color:var(--layer-tool)" onclick="event.stopPropagation();scrollTo('D4')">← D4 注册表+路由（基础设施复用：权限、Hook、降级全适用）</span>
+      </div>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--text-muted)">代码：<code>agents/sub_agent.py</code></div>
+    </div>
+  </div>
+
+  <!-- D10 -->
+  <div class="decision-card" id="D10" data-layer="agent" onclick="toggle(this)">
+    <span class="decision-id">D10</span>
+    <div class="decision-title">三策略能力阶梯 — 可组合因为都委托 AgentLoop</div>
+    <div class="decision-subtitle">ReAct（基础）→ PlanAndSolve（加分解）→ Reflection（加自评）</div>
+    <div class="decision-detail">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">问题</div>
+          <div class="detail-value">不同复杂度的任务需要不同策略：简单任务直接 ReAct，复杂任务先规划再执行，质量敏感任务需要自我评估</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">选择</div>
+          <div class="detail-value">三种策略不是继承关系，而是包装关系：PlanAndSolve 每步创建新 AgentLoop，Reflection 每轮创建新 AgentLoop。理论上 PlanAndSolve 的每步可以用 ReflectionAgent</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">放弃</div>
+          <div class="detail-value">❌ 共享上下文执行步骤 → 上下文污染<br>❌ 增量计划调整 → 简化为整体重规划<br>❌ 思维树/束搜索 → 太复杂，线性计划+失败重规划更务实</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">代价</div>
+          <div class="detail-value">每步/每轮创建新 Loop = 无状态共享（文件系统中的 artifact 仍在）；Reflection 的评估维度（正确性/完整性/清晰度）硬编码</div>
+        </div>
+      </div>
+      <div style="margin-top:0.5rem">
+        <div class="detail-label">因果来源</div>
+        <span class="causal-tag" style="border-color:var(--layer-agent);color:var(--layer-agent)" onclick="event.stopPropagation();scrollTo('D8')">← D8 ReAct 原子（所有策略都委托给它）</span>
+      </div>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--text-muted)">代码：<code>agents/plan_and_solve.py</code> · <code>agents/reflection.py</code></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================================================ -->
+<!-- 第四层：基础设施层 -->
+<!-- ============================================================ -->
+<div class="layer-section" data-layer="infra">
+  <div class="layer-header">
+    <div class="layer-number" style="background:var(--layer-infra)">4</div>
+    <span class="layer-question">怎么让安全、记忆、钩子横向切进去，而不侵入核心？</span>
+  </div>
+  <p class="subtitle">记忆管理、提示词组装、安全边界、会话转录、生命周期钩子、技能系统</p>
+
+  <!-- D11 -->
+  <div class="decision-card" id="D11" data-layer="infra" onclick="toggle(this)">
+    <span class="decision-id">D11</span>
+    <div class="decision-title">双层记忆 — 语义（启动注入）vs 情景（按需搜索）</div>
+    <div class="decision-subtitle">两种根本不同的访问模式：一种零成本始终在，一种按查询付费</div>
+    <div class="decision-detail">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">问题</div>
+          <div class="detail-value">短期详细日志和长期提炼知识有完全不同的存取需求。单层方案要么淹没长期记忆，要么丢失重要事件</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">选择</div>
+          <div class="detail-value"><code>MemoryLayer</code> 枚举只有两个值。语义层（Markdown + YAML frontmatter，启动时注入 system prompt）；情景层（按日期分区的追加式 Markdown 日志，关键词搜索）</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">放弃</div>
+          <div class="detail-value">❌ 统一存储 + 相关度阈值 → 混淆不同访问模式<br>❌ 三层模型（工作/短期/长期）→ 过度设计<br>❌ 向量数据库 → 文件数 < 50，不需要</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">代价</div>
+          <div class="detail-value">需要维护两种存储格式；语义记忆需要三阶段提取管线（对话→事件→知识，每次 3 个 LLM 调用）</div>
+        </div>
+      </div>
+      <div style="margin-top:0.5rem">
+        <div class="detail-label">因果影响</div>
+        <span class="causal-tag" style="border-color:var(--layer-infra);color:var(--layer-infra)" onclick="event.stopPropagation();scrollTo('D12')">→ D12 文件即 DB（双层都用文件）</span>
+        <span class="causal-tag" style="border-color:var(--layer-infra);color:var(--layer-infra)" onclick="event.stopPropagation();scrollTo('D13')">→ D13 LLM 评分（语义搜索不用向量，用 LLM 选文件）</span>
+      </div>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--text-muted)">代码：<code>memory/types.py</code> · <code>memory/store.py</code>（门面）</div>
+    </div>
+  </div>
+
+  <!-- D12 -->
+  <div class="decision-card" id="D12" data-layer="infra" onclick="toggle(this)">
+    <span class="decision-id">D12</span>
+    <div class="decision-title">文件系统即数据库 — 零基础设施部署</div>
+    <div class="decision-subtitle">Memory/Transcript/Skills/Profiles 全用 Markdown/JSONL，不用 SQLite/Redis/向量库</div>
+    <div class="decision-detail">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">问题</div>
+          <div class="detail-value">Agent 框架需要持久化多种数据，但引入数据库增加部署复杂度、丧失人可读性、需要 schema 迁移</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">选择</div>
+          <div class="detail-value">全文件：语义记忆用 Markdown+frontmatter，情景日志用日期分区 Markdown，Transcript 用 JSONL 追加写入，Skills 用 Markdown，索引用 MEMORY.md。关键路径原子写入（write-to-temp + os.replace）</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">放弃</div>
+          <div class="detail-value">❌ SQLite → 人不可读、需 schema<br>❌ Redis/向量库 → 外部依赖<br>❌ 单 JSON 数组文件 → 不支持追加写入</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">代价</div>
+          <div class="detail-value">文件数上限（语义记忆 50 个候选）；O(n) 线性搜索；不支持多会话并发写（显式标注在 docstring 中）；同步 IO（agent loop 单会话串行，无竞争）</div>
+        </div>
+      </div>
+      <div style="margin-top:0.5rem">
+        <div class="detail-label">因果来源</div>
+        <span class="causal-tag" style="border-color:var(--layer-infra);color:var(--layer-infra)" onclick="event.stopPropagation();scrollTo('D11')">← D11 双层记忆（驱动了文件方案的选择）</span>
+        <span class="causal-tag" style="border-color:var(--layer-orch);color:var(--layer-orch)" onclick="event.stopPropagation();scrollTo('D15')">→ D15 Teams 也用 JSONL 文件做消息总线</span>
+      </div>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--text-muted)">代码：<code>memory/</code> · <code>transcript/</code> · <code>skills/</code></div>
+    </div>
+  </div>
+
+  <!-- D13 -->
+  <div class="decision-card" id="D13" data-layer="infra" onclick="toggle(this)">
+    <span class="decision-id">D13</span>
+    <div class="decision-title">LLM 评分召回 — 不用向量库，用 LLM 当裁判</div>
+    <div class="decision-subtitle">列出所有文件摘要，让 LLM 选最相关的，适合小语料（<50 文件）</div>
+    <div class="decision-detail">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">问题</div>
+          <div class="detail-value">语义记忆按文件存储，没有向量索引。需要选出与查询相关的文件</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">选择</div>
+          <div class="detail-value">两阶段：扫描所有 .md 文件的 frontmatter（name + description）→ 发给 LLM 要求返回 JSON <code>{"selected": ["file1.md"]}</code>。有路径穿越防护</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">放弃</div>
+          <div class="detail-value">❌ 向量嵌入 + 余弦相似度 → 需要嵌入模型+索引+重嵌入管线，< 50 文件不划算<br>❌ BM25/TF-IDF → "用户偏好 TypeScript" 搜不到 "语言偏好"</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">代价</div>
+          <div class="detail-value">每次语义搜索 1 次 LLM 调用（非零延迟和成本）；50 文件上限；LLM JSON 解析失败静默返回空</div>
+        </div>
+      </div>
+      <div style="margin-top:0.5rem">
+        <div class="detail-label">因果来源</div>
+        <span class="causal-tag" style="border-color:var(--layer-infra);color:var(--layer-infra)" onclick="event.stopPropagation();scrollTo('D11')">← D11 双层记忆 + D12 文件即DB → 文件数小，LLM 评分可行</span>
+      </div>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--text-muted)">代码：<code>memory/retriever.py</code></div>
+    </div>
+  </div>
+
+  <!-- D14 -->
+  <div class="decision-card" id="D14" data-layer="infra" onclick="toggle(this)">
+    <span class="decision-id">D14</span>
+    <div class="decision-title">四步级联权限 — DENY → MODE → ALLOW → ASK</div>
+    <div class="decision-subtitle">确定性、可审计、短路的权限管道，不走 LLM 判断</div>
+    <div class="decision-detail">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">问题</div>
+          <div class="detail-value">Agent 调用工具必须经过安全评估。权限决策必须快速、确定性、可审计</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">选择</div>
+          <div class="detail-value">4 步短路级联：① DENY（全局黑名单 + profile disallowed）→ ② MODE（deny-all/accept-all）→ ③ ALLOW（profile allowed 白名单）→ ④ ASK（根据工具注解：readOnly→自动允许，destructive→询问）</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">放弃</div>
+          <div class="detail-value">❌ 可配置优先级的规则引擎 → 固定级联不可误配<br>❌ 单个 trusted 布尔标记 → 太粗糙<br>❌ LLM 做安全判断 → 不确定性+延迟</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">代价</div>
+          <div class="detail-value">级联顺序固定（不能"模式 deny 但允许某个工具"）；注解需要预先注册</div>
+        </div>
+      </div>
+      <div style="margin-top:0.5rem">
+        <div class="detail-label">因果影响</div>
+        <span class="causal-tag" style="border-color:var(--layer-infra);color:var(--layer-infra)" onclick="event.stopPropagation();scrollTo('D15')">→ D15 HITL（ASK 结果触发人工审批）</span>
+        <span class="causal-tag" style="border-color:var(--layer-tool);color:var(--layer-tool)" onclick="event.stopPropagation();scrollTo('D6')">→ D6 路由管线（嵌入为第一阶段）</span>
+      </div>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--text-muted)">代码：<code>safety/permissions.py</code></div>
+    </div>
+  </div>
+
+  <!-- D15 -->
+  <div class="decision-card" id="D15" data-layer="infra" onclick="toggle(this)">
+    <span class="decision-id">D15</span>
+    <div class="decision-title">子进程 Hook + HITL 异步门 — 安全隔离 + 人工介入</div>
+    <div class="decision-subtitle">Hook 用子进程执行（防崩溃传播）；HITL 用 asyncio.Future（不阻塞事件循环）</div>
+    <div class="decision-detail">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">问题</div>
+          <div class="detail-value">需要行为注入机制（Hook），且当权限返回 ASK 时，Agent Loop 要异步等待人类决策</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">选择</div>
+          <div class="detail-value"><b>Hook</b>：<code>bash -c</code> 子进程执行，exit code 语义：0=通过(可改参数)，2=注入消息，其他=阻断。JSON 上下文通过 stdin 管道传入<br><b>HITL</b>：<code>asyncio.Future</code> 字典，Agent Loop await 挂起，UI 层调用 resolve() 恢复</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">放弃</div>
+          <div class="detail-value">❌ 进程内 Python 回调 → 有 bug 会崩框架<br>❌ 阻塞 input() → 冻结事件循环<br>❌ Redis 消息队列 → 框架是进程内的</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">代价</div>
+          <div class="detail-value">Hook 增加子进程启动延迟；JSON-in/exit-code-out 协议简单但受限；HITL 只支持进程内</div>
+        </div>
+      </div>
+      <div style="margin-top:0.5rem">
+        <div class="detail-label">因果来源</div>
+        <span class="causal-tag" style="border-color:var(--layer-infra);color:var(--layer-infra)" onclick="event.stopPropagation();scrollTo('D14')">← D14 四步权限（ASK 结果需要 HITL 兜底）</span>
+      </div>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--text-muted)">代码：<code>hooks/manager.py</code> · <code>safety/hitl.py</code></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================================================ -->
+<!-- 第五层：编排协作层 -->
+<!-- ============================================================ -->
+<div class="layer-section" data-layer="orch">
+  <div class="layer-header">
+    <div class="layer-number" style="background:var(--layer-orch)">5</div>
+    <span class="layer-question">怎么让多个 Agent 协作，而不是只能单打独斗？</span>
+  </div>
+  <p class="subtitle">Orchestrator 规划、Team 总线、Task 管理、A2A 协议、可视化</p>
+
+  <!-- D14 编排 -->
+  <div class="decision-card" id="D14-orch" data-layer="orch" onclick="toggle(this)">
+    <span class="decision-id">D14</span>
+    <div class="decision-title">LLM 自路由编排 — Coordinator 本身就是 AgentLoop</div>
+    <div class="decision-subtitle">没有硬编码分解逻辑；LLM 通过 spawn_worker/send_message/list_workers 工具自行编排</div>
+    <div class="decision-detail">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">问题</div>
+          <div class="detail-value">单 Agent 处理复杂多面任务质量下降；需要分解子任务给专业 Worker 执行</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">选择</div>
+          <div class="detail-value">Coordinator 是一个 AgentLoop，只有 3 个编排工具。LLM 自己理解任务、决定分解方式、决定执行顺序。Worker 是叶节点（没有编排工具）</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">放弃</div>
+          <div class="detail-value">❌ 硬编码 DAG 执行器 → 无法适应新任务结构<br>❌ 层级递归分解 → Worker 不能再 spawn Worker<br>❌ MapReduce → 当前是顺序 spawn</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">代价</div>
+          <div class="detail-value">分解质量完全依赖 LLM；Worker 看不到 Coordinator 的对话（上下文隔离）；spawn 是 await 的（阻塞）</div>
+        </div>
+      </div>
+      <div style="margin-top:0.5rem">
+        <div class="detail-label">因果来源</div>
+        <span class="causal-tag" style="border-color:var(--layer-agent);color:var(--layer-agent)" onclick="event.stopPropagation();scrollTo('D8')">← D8 ReAct 原子（编排器复用 AgentLoop 而非新建体系）</span>
+        <span class="causal-tag" style="border-color:var(--layer-agent);color:var(--layer-agent)" onclick="event.stopPropagation();scrollTo('D9')">← D9 子Agent工具化（同样的 ToolSpec 模式）</span>
+      </div>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--text-muted)">代码：<code>orchestrator/engine.py</code> · <code>orchestrator/coordinator_tools.py</code></div>
+    </div>
+  </div>
+
+  <!-- D15 Teams -->
+  <div class="decision-card" id="D15" data-layer="orch" onclick="toggle(this)">
+    <span class="decision-id">D15</span>
+    <div class="decision-title">JSONL 文件消息总线 — 崩溃恢复优先</div>
+    <div class="decision-subtitle">每个 Agent 一个 inbox.jsonl 文件；追加写入，读取后原子清空</div>
+    <div class="decision-detail">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">问题</div>
+          <div class="detail-value">多个长生命周期 Agent 需要异步协作。进程崩溃后消息不能丢失</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">选择</div>
+          <div class="detail-value"><code>inbox/&lt;name&gt;.jsonl</code>，每条消息一行 JSON。读取用 write-to-temp + os.replace 原子清空。Teammate 持久循环，空闲时每 2 秒轮询 inbox</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">放弃</div>
+          <div class="detail-value">❌ asyncio.Queue → 进程崩溃消息全丢<br>❌ Redis/gRPC → 引入外部依赖<br>❌ WebSocket 推送 → 轮询 2 秒间隔够用</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">代价</div>
+          <div class="detail-value">2 秒轮询延迟；破坏性读取（处理中崩溃会丢未处理消息）；单进程限定</div>
+        </div>
+      </div>
+      <div style="margin-top:0.5rem">
+        <div class="detail-label">因果来源</div>
+        <span class="causal-tag" style="border-color:var(--layer-infra);color:var(--layer-infra)" onclick="event.stopPropagation();scrollTo('D12')">← D12 文件即DB（与记忆/转录保持一致）</span>
+      </div>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--text-muted)">代码：<code>teams/bus.py</code> · <code>teams/manager.py</code></div>
+    </div>
+  </div>
+
+  <!-- D16 -->
+  <div class="decision-card" id="D16" data-layer="orch" onclick="toggle(this)">
+    <span class="decision-id">D16</span>
+    <div class="description-title" style="font-weight:600;font-size:0.95rem;margin-right:3rem">A2A 纯 ASGI — 跨进程 Agent 通信的最小实现</div>
+    <div class="decision-subtitle">手写 ASGI（不依赖 FastAPI），HTTP+轮询，远程 Agent 注册为本地工具</div>
+    <div class="decision-detail">
+      <div class="detail-grid">
+        <div class="detail-item">
+          <div class="detail-label">问题</div>
+          <div class="detail-value">Teams 只在同一进程内工作。不同进程/容器/机器的 Agent 需要通信</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">选择</div>
+          <div class="detail-value">手写 ASGI 4 路由（agent-card 发现 / 提交任务 / 查询状态 / 取消）。Client 用 httpx 轮询（2 秒间隔，最长 300 秒）。<code>register_as_tool()</code> 让远程 Agent 变成本地工具</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">放弃</div>
+          <div class="detail-value">❌ gRPC → 需要生成 stubs + grpcio 依赖<br>❌ FastAPI/Starlette → 手写 ASGI 更轻，任何 ASGI server 都能跑<br>❌ WebSocket → 任务模型是提交-轮询，不需要流式</div>
+        </div>
+        <div class="detail-item">
+          <div class="detail-label">代价</div>
+          <div class="detail-value">任务状态纯内存（重启丢失）；2 秒轮询开销；API key 比较非常量时间（安全隐患）；无流式结果</div>
+        </div>
+      </div>
+      <div style="margin-top:0.5rem">
+        <div class="detail-label">因果来源</div>
+        <span class="causal-tag" style="border-color:var(--layer-tool);color:var(--layer-tool)" onclick="event.stopPropagation();scrollTo('D4')">← D4 注册表+路由（register_as_tool() 复用整个工具调度体系）</span>
+        <span class="causal-tag" style="border-color:var(--layer-agent);color:var(--layer-agent)" onclick="event.stopPropagation();scrollTo('D9')">← D9 子Agent工具化（同一个"一切皆工具"模式）</span>
+      </div>
+      <div style="margin-top:0.5rem;font-size:0.82rem;color:var(--text-muted)">代码：<code>a2a/server.py</code> · <code>a2a/client.py</code> · <code>a2a/models.py</code></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ============================================================ -->
+<!-- 跨层总结 -->
+<!-- ============================================================ -->
+<h2>🧭 跨层设计原则</h2>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin:1rem 0">
+
+<div style="padding:1rem;background:var(--bg-card);border-radius:var(--radius);border:1px solid var(--border)">
+  <h3 style="margin:0 0 0.3rem;font-size:0.95rem">一切皆工具</h3>
+  <p style="font-size:0.85rem;color:var(--text-muted)">子Agent、远程Agent、团队协作、任务管理——全部注册为 ToolSpec。LLM 只需要一种交互方式</p>
+</div>
+
+<div style="padding:1rem;background:var(--bg-card);border-radius:var(--radius);border:1px solid var(--border)">
+  <h3 style="margin:0 0 0.3rem;font-size:0.95rem">LLM 是组件，不是控制器</h3>
+  <p style="font-size:0.85rem;color:var(--text-muted)">LLM 用于提取/评分/判断（管线内），但所有架构决策（权限级联/Hook执行/记忆合并）是确定性代码</p>
+</div>
+
+<div style="padding:1rem;background:var(--bg-card);border-radius:var(--radius);border:1px solid var(--border)">
+  <h3 style="margin:0 0 0.3rem;font-size:0.95rem">构造器注入一切</h3>
+  <p style="font-size:0.85rem;color:var(--text-muted)">AgentLoop 的所有外部依赖（LLM/工具/记忆/Hook/Task/Team）通过 <code>__init__</code> 注入，默认 None，可独立测试</p>
+</div>
+
+<div style="padding:1rem;background:var(--bg-card);border-radius:var(--radius);border:1px solid var(--border)">
+  <h3 style="margin:0 0 0.3rem;font-size:0.95rem">单进程异步优先</h3>
+  <p style="font-size:0.85rem;color:var(--text-muted)">无分布式状态、无 Redis、无消息队列。熔断器内存态，消息总线文件态，事件总线 asyncio.Queue</p>
+</div>
+
+<div style="padding:1rem;background:var(--bg-card);border-radius:var(--radius);border:1px solid var(--border)">
+  <h3 style="margin:0 0 0.3rem;font-size:0.95rem">优雅降级</h3>
+  <p style="font-size:0.85rem;color:var(--text-muted)">JSON 解析失败、文件缺失、空目录——全部 warning + 空返回，不抛异常。系统设计为部分数据下仍可运行</p>
+</div>
+
+<div style="padding:1rem;background:var(--bg-card);border-radius:var(--radius);border:1px solid var(--border)">
+  <h3 style="margin:0 0 0.3rem;font-size:0.95rem">逃逸口优于虚假通用</h3>
+  <p style="font-size:0.85rem;color:var(--text-muted)"><code>provider_extras</code>、<code>provider_event</code>、<code>ctx.extra</code>——高级用法可以访问 Provider 特有功能，但不污染核心抽象</p>
+</div>
+
+</div>
+
+<script>
+// 展开/收起决策卡片
+function toggle(el) {
+  el.classList.toggle('active');
+}
+
+// 全部展开/收起
+let allExpanded = false;
+function toggleAll() {
+  allExpanded = !allExpanded;
+  document.querySelectorAll('.decision-card').forEach(c => {
+    if (allExpanded) c.classList.add('active');
+    else c.classList.remove('active');
+  });
+}
+
+// 滚动到指定决策
+function scrollTo(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.classList.add('active');
+  // 高亮闪烁
+  el.style.transition = 'box-shadow 0.3s';
+  el.style.boxShadow = '0 0 0 3px var(--accent)';
+  setTimeout(() => { el.style.boxShadow = ''; }, 1500);
+}
+
+// 层级筛选
+document.querySelectorAll('.filter-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const filter = btn.dataset.filter;
+    document.querySelectorAll('.layer-section').forEach(sec => {
+      if (filter === 'all') { sec.style.display = ''; return; }
+      const layerMap = { llm: 'llm', tool: 'tool', agent: 'agent', infra: 'infra', orch: 'orch' };
+      sec.style.display = sec.dataset.layer === layerMap[filter] ? '' : 'none';
+    });
+  });
+});
+</script>
+
+</body>
+</html>

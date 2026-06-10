@@ -22,9 +22,13 @@ ALLOWED_ORIGINS = os.getenv("APP_CORS_ORIGINS", "http://localhost:30001").split(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # --- 读取配置 ---
     settings = Settings()
+
+    # --- 初始化 Agent 工厂 ---
     factory = AgentFactory.from_settings(settings)
-    storage_dir = Path(__file__).parent / "data" / "sessions"
+
+    # --- 连接 Redis（可选，失败时降级为本地文件存储）---
     rdb = None
     try:
         rdb = redis_lib.Redis.from_url(settings.redis_url, decode_responses=True)
@@ -32,12 +36,19 @@ async def lifespan(app: FastAPI):
     except Exception:
         logger.warning("Redis unavailable, caching disabled")
         rdb = None
+
+    # --- 初始化会话管理器，启动定期清理任务 ---
+    storage_dir = Path(__file__).parent / "data" / "sessions"
     sm = SessionManager(storage_dir=storage_dir, redis_client=rdb)
     sm.start_cleanup()
 
+    # --- 挂载到 app.state，供各路由通过 request.app.state 访问 ---
     app.state.session_manager = sm
     app.state.agent_factory = factory
-    yield
+
+    yield  # 应用运行中
+
+    # --- 应用关闭时清理资源 ---
     sm.cancel_all()
     sm.stop_cleanup()
     if rdb:
