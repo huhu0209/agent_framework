@@ -7,17 +7,7 @@ export function SidebarToggle() {
   return (
     <button
       onClick={toggleSidebar}
-      className="p-1.5 rounded-lg transition-colors"
-      style={{
-        color: 'var(--text-secondary)',
-        backgroundColor: 'transparent',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.backgroundColor = 'var(--surface-sand)'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.backgroundColor = 'transparent'
-      }}
+      className="p-1.5 rounded-lg transition-colors text-[var(--text-secondary)] hover:bg-[var(--surface-sand)]"
       aria-label={sidebarOpen ? '收起侧边栏' : '展开侧边栏'}
     >
       <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">

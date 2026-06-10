@@ -1,14 +1,23 @@
 import { create } from 'zustand'
+import { z } from 'zod'
 import type { AgentBlock, AgentBlockInit, ChatMessage, MessageRole, SessionInfo, VizEvent } from './types'
+
+const ssePayloadSchema = z.object({
+  text: z.string().optional(),
+  tool_name: z.string().optional(),
+  params: z.record(z.string(), z.unknown()).optional(),
+  content: z.union([z.string(), z.array(z.record(z.string(), z.unknown()))]).optional(),
+  error: z.string().optional(),
+}).passthrough()
 
 function toFrontendBlocks(rawBlocks: Record<string, unknown>[]): AgentBlock[] {
   return rawBlocks.map((b, i) => {
-    const t = b.type as string
+    const t = typeof b.type === 'string' ? b.type : ''
     const id = `blk-restored-${i}-${Date.now()}`
-    if (t === 'text') return { id, kind: 'text_response' as const, text: (b.text as string) ?? '' }
-    if (t === 'tool_use') return { id, kind: 'tool_call' as const, toolName: (b.name as string) ?? '', params: (b.input as Record<string, unknown>) ?? {} }
-    if (t === 'tool_result') return { id, kind: 'tool_result' as const, content: typeof b.content === 'string' ? b.content : JSON.stringify(b.content) }
-    return { id, kind: 'text_response' as const, text: JSON.stringify(b) }
+    if (t === 'text') return { id, kind: 'text_response' as const, text: typeof b.text === 'string' ? b.text : '' }
+    if (t === 'tool_use') return { id, kind: 'tool_call' as const, toolName: typeof b.name === 'string' ? b.name : '', params: typeof b.input === 'object' && b.input !== null ? b.input as Record<string, unknown> : {} }
+    if (t === 'tool_result') return { id, kind: 'tool_result' as const, content: typeof b.content === 'string' ? b.content : '' }
+    return { id, kind: 'text_response' as const, text: '[Unrecognized block]' }
   })
 }
 
@@ -106,6 +115,9 @@ interface ChatStore {
   messageCache: Map<string, ChatMessage[]>
   hasMore: boolean
   loadingOlder: boolean
+  errorToast: string | null
+  setError: (msg: string) => void
+  clearError: () => void
   loadOlderMessages: () => Promise<void>
   sendMessage: (text: string) => Promise<void>
   addSystemMessage: (text: string) => void
@@ -131,6 +143,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   messageCache: new Map(),
   hasMore: false,
   loadingOlder: false,
+  errorToast: null,
+
+  setError: (msg: string) => {
+    set({ errorToast: msg })
+    console.error('[ChatStore]', msg)
+    setTimeout(() => set({ errorToast: null }), 5000)
+  },
+  clearError: () => set({ errorToast: null }),
 
   addSystemMessage: (text: string) => {
     const msg: ChatMessage = {
@@ -193,9 +213,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         const sessions = Array.isArray(data) ? data : []
         set({ sessions, sessionsLoading: false })
       } else {
+        get().setError(`加载会话列表失败: HTTP ${res.status}`)
         set({ sessionsLoading: false })
       }
     } catch {
+      get().setError('加载会话列表失败')
       set({ sessionsLoading: false })
     }
   },
@@ -213,33 +235,42 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       cache.set(id, messages)
       set({ messages, sessionId: id, streamingMessage: null, switchingSession: false, messageCache: cache, hasMore })
     } catch {
+      get().setError('切换会话失败')
       set({ switchingSession: false })
     }
   },
 
   deleteSession: async (id: string) => {
-    const res = await fetch(`${API_BASE}/api/v1/sessions/${id}`, { method: 'DELETE' })
-    if (!res.ok) return
-    const { sessions, sessionId } = get()
-    const next = sessions.filter((s) => s.session_id !== id)
-    set({ sessions: next })
-    if (sessionId === id) {
-      get().newSession()
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/sessions/${id}`, { method: 'DELETE' })
+      if (!res.ok) return
+      const { sessions, sessionId } = get()
+      const next = sessions.filter((s) => s.session_id !== id)
+      set({ sessions: next })
+      if (sessionId === id) {
+        get().newSession()
+      }
+    } catch {
+      get().setError('删除会话失败')
     }
   },
 
   renameSession: async (id: string, title: string) => {
-    const res = await fetch(`${API_BASE}/api/v1/sessions/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title }),
-    })
-    if (!res.ok) return
-    set((s) => ({
-      sessions: s.sessions.map((sess) =>
-        sess.session_id === id ? { ...sess, title } : sess,
-      ),
-    }))
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/sessions/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      })
+      if (!res.ok) return
+      set((s) => ({
+        sessions: s.sessions.map((sess) =>
+          sess.session_id === id ? { ...sess, title } : sess,
+        ),
+      }))
+    } catch {
+      get().setError('重命名失败')
+    }
   },
 
   newSession: () => {
@@ -293,6 +324,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const all = [...older, ...get().messages]
       set({ messages: all, hasMore: data.has_more ?? false, loadingOlder: false })
     } catch {
+      get().setError('加载历史消息失败')
       set({ loadingOlder: false })
     }
   },
@@ -335,7 +367,11 @@ async function sendViaSse(
     }
   }
 
-  const reader = res.body!.getReader()
+  const body = res.body
+  if (!body) {
+    throw new Error('No response body received')
+  }
+  const reader = body.getReader()
   const decoder = new TextDecoder()
   let buffer = ''
 
@@ -358,8 +394,19 @@ async function sendViaSse(
       }
 
       if (eventType && eventData) {
-        const payload = JSON.parse(eventData)
-        handleSseEvent(eventType, payload, get, set)
+        let raw: unknown
+        try {
+          raw = JSON.parse(eventData)
+        } catch {
+          console.warn('SSE JSON parse failed:', eventData)
+          continue
+        }
+        const payload = ssePayloadSchema.safeParse(raw)
+        if (!payload.success) {
+          console.warn('SSE payload validation failed:', payload.error.message)
+          continue
+        }
+        handleSseEvent(eventType, payload.data, get, set)
       }
     }
   }
@@ -374,7 +421,10 @@ function handleSseEvent(
   if (type === 'idle' || type === 'shutdown') return
 
   const blockInit = vizEventToBlock({ type: type as VizEvent['type'], agent: 'Agent', payload, timestamp: Date.now() })
-  if (!blockInit) return
+  if (!blockInit) {
+    console.warn('Unhandled SSE event type:', type)
+    return
+  }
 
   set((s) => {
     if (!s.streamingMessage) return s

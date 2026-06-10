@@ -1,6 +1,9 @@
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
+// SECURITY: rehype-sanitize 提供 HTML 消毒纵深防御
+// 严禁添加 rehype-raw 除非同时配置 rehype-sanitize
+import rehypeSanitize from 'rehype-sanitize'
 import 'highlight.js/styles/github.css'
 import type { AgentBlock } from '../types'
 import { MarkdownTable } from './markdown/MarkdownTable'
@@ -29,7 +32,7 @@ export function TextResponseBlock({ block }: { block: AgentBlock }) {
     >
       <Markdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeHighlight]}
+        rehypePlugins={[rehypeHighlight, rehypeSanitize]}
         components={{
           table: MarkdownTable,
           pre: MarkdownPre,

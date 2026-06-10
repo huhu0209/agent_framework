@@ -11,9 +11,15 @@ function groupBlocks(blocks: AgentBlock[]) {
     if (paired.has(blocks[i].id)) continue
 
     if (blocks[i].kind === 'tool_call') {
-      const next = blocks[i + 1]
-      const result = next?.kind === 'tool_result' ? next : undefined
-      if (result) paired.add(result.id)
+      let result: AgentBlock | undefined
+      for (let j = i + 1; j < Math.min(i + 6, blocks.length); j++) {
+        if (blocks[j].kind === 'tool_result' && !paired.has(blocks[j].id)) {
+          result = blocks[j]
+          paired.add(result.id)
+          break
+        }
+        if (blocks[j].kind === 'tool_call') break
+      }
       grouped.push({ block: blocks[i], result })
     } else {
       grouped.push({ block: blocks[i] })

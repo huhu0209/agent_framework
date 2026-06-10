@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { useChatStore } from '../store'
 import type { SessionInfo } from '../types'
 
@@ -38,6 +38,12 @@ function SessionItem({
   const [confirmDelete, setConfirmDelete] = useState(false)
   const hoverRef = useRef<ReturnType<typeof setTimeout>>(undefined)
 
+  useEffect(() => {
+    return () => {
+      if (hoverRef.current) clearTimeout(hoverRef.current)
+    }
+  }, [])
+
   if (isEditing) {
     return (
       <div className="px-2 py-1.5">
@@ -76,19 +82,17 @@ function SessionItem({
 
   return (
     <div
-      className="group flex items-center gap-1 px-3 py-2 cursor-pointer rounded-r-lg transition-colors"
+      className="group flex items-center gap-1 px-3 py-2 cursor-pointer rounded-r-lg transition-colors hover:bg-[var(--bg-ivory)]"
       style={{
         backgroundColor: isActive ? 'var(--bg-ivory)' : 'transparent',
         borderLeft: isActive ? '3px solid var(--accent-terracotta)' : '3px solid transparent',
       }}
       onClick={confirmDelete ? undefined : onSelect}
-      onMouseEnter={(e) => {
+      onMouseEnter={() => {
         hoverRef.current = setTimeout(onHover, 200)
-        if (!isActive) e.currentTarget.style.backgroundColor = 'var(--bg-ivory)'
       }}
-      onMouseLeave={(e) => {
+      onMouseLeave={() => {
         if (hoverRef.current) clearTimeout(hoverRef.current)
-        if (!isActive) e.currentTarget.style.backgroundColor = 'transparent'
       }}
     >
       <div className="flex-1 min-w-0">
@@ -139,14 +143,7 @@ function SessionItem({
               setEditTitle(session.title)
               setIsEditing(true)
             }}
-            className="p-1 rounded transition-colors"
-            style={{ color: 'var(--text-tertiary)' }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = 'var(--text-secondary)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = 'var(--text-tertiary)'
-            }}
+            className="p-1 rounded transition-colors text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
             aria-label="重命名"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -155,14 +152,7 @@ function SessionItem({
           </button>
           <button
             onClick={() => setConfirmDelete(true)}
-            className="p-1 rounded transition-colors"
-            style={{ color: 'var(--text-tertiary)' }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.color = '#b53333'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.color = 'var(--text-tertiary)'
-            }}
+            className="p-1 rounded transition-colors text-[var(--text-tertiary)] hover:text-[#b53333]"
             aria-label="删除"
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
@@ -204,16 +194,10 @@ export function SessionSidebar() {
       <div className="px-3 pt-3 pb-2">
         <button
           onClick={newSession}
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors"
+          className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors hover:bg-[var(--border-warm)]"
           style={{
             backgroundColor: 'var(--surface-sand)',
             color: 'var(--text-primary)',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.backgroundColor = 'var(--border-warm)'
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.backgroundColor = 'var(--surface-sand)'
           }}
         >
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">

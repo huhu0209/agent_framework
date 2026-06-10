@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react'
+import { useRef, useCallback, useState, useEffect } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useChatStore } from '../store'
 import { UserBubble } from './UserBubble'
@@ -26,6 +26,7 @@ export function MessageList() {
   const loadOlderMessages = useChatStore((s) => s.loadOlderMessages)
 
   const parentRef = useRef<HTMLDivElement>(null)
+  const [isAtBottom, setIsAtBottom] = useState(true)
 
   const allItems = [...messages, ...(streamingMessage ? [streamingMessage] : [])]
 
@@ -38,12 +39,32 @@ export function MessageList() {
   })
 
   const handleScroll = useCallback(() => {
-    if (!parentRef.current) return
-    const { scrollTop } = parentRef.current
-    if (scrollTop < 100 && hasMore && !loadingOlder) {
+    const el = parentRef.current
+    if (!el) return
+
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
+    setIsAtBottom(distanceFromBottom < 100)
+
+    if (el.scrollTop < 100 && hasMore && !loadingOlder) {
       loadOlderMessages()
     }
   }, [hasMore, loadingOlder, loadOlderMessages])
+
+  useEffect(() => {
+    if (!isAtBottom) return
+    const count = allItems.length
+    if (count === 0) return
+    virtualizer.scrollToIndex(count - 1, { align: 'end' })
+  }, [allItems.length, isAtBottom, virtualizer])
+
+  useEffect(() => {
+    if (switchingSession) return
+    requestAnimationFrame(() => {
+      if (allItems.length > 0) {
+        virtualizer.scrollToIndex(allItems.length - 1, { align: 'end' })
+      }
+    })
+  }, [switchingSession])
 
   if (switchingSession) {
     return (
