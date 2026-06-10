@@ -76,6 +76,14 @@ Plans:
 4. WebSocket 添加 token 认证（可配置）
 5. try-except-pass 改为 logger.warning/debug 记录
 6. 全部 964+ 测试通过
+**Plans:** 4 plans
+
+Plans:
+- [ ] 16-01-PLAN.md — memory/ + result_truncator 同步 I/O 改 aiofiles async (FW-SEC-02, FW-SEC-07)
+- [ ] 16-02-PLAN.md — MCP 环境变量白名单 + 敏感 key 过滤扩展 (FW-SEC-03, FW-SEC-08)
+- [ ] 16-03-PLAN.md — PromptAssembler XML 标签 + Skill 边界标记 (FW-SEC-04, FW-SEC-05)
+- [ ] 16-04-PLAN.md — WebSocket token 认证 + try-except-pass 修复 (FW-SEC-06, FW-SEC-09)
+
 **Depends on:** Phase 15
 
 ### Phase 17: Framework 逻辑与架构修复
@@ -140,7 +148,7 @@ Plans:
 | 13. Backend 代码审查 | v0.0.4 | 2/2 | Complete | 2026-06-09 |
 | 14. Frontend 代码审查 | v0.0.4 | 2/2 | Complete | 2026-06-09 |
 | 15. Framework 死代码清理 | v0.0.5 | 1/1 | Complete    | 2026-06-10 |
-| 16. Framework 安全修复 | v0.0.5 | 0/? | Not started | — |
+| 16. Framework 安全修复 | v0.0.5 | 0/4 | Planning | — |
 | 17. Framework 逻辑修复 | v0.0.5 | 0/? | Not started | — |
 | 18. Backend 全面修复 | v0.0.5 | 0/? | Not started | — |
 | 19. Frontend 全面修复 | v0.0.5 | 0/? | Not started | — |
