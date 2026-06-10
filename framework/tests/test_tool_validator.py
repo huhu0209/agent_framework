@@ -84,3 +84,49 @@ class TestToolValidator:
         assert validator.validate(spec, {"n": "abc"}) is not None
         assert validator.validate(spec, {"n": 3.14}) is None
         assert validator.validate(spec, {"n": 42}) is None
+
+    def test_enum_rejects_invalid_value(self):
+        """参数值不在 enum 列表中时返回错误。"""
+        spec = _make_spec(
+            properties={"event_type": {"type": "string", "enum": ["decision", "preference"]}},
+            required=["event_type"],
+        )
+        result = validator.validate(spec, {"event_type": "invalid"})
+        assert isinstance(result, ToolResult)
+        assert result.is_error is True
+        assert "enum" in result.content
+
+    def test_enum_passes_valid_value(self):
+        """参数值在 enum 列表中时通过。"""
+        spec = _make_spec(
+            properties={"event_type": {"type": "string", "enum": ["decision", "preference"]}},
+            required=["event_type"],
+        )
+        assert validator.validate(spec, {"event_type": "decision"}) is None
+
+    def test_enum_passes_when_no_enum_defined(self):
+        """schema 中没有 enum 时不做枚举校验。"""
+        spec = _make_spec(
+            properties={"name": {"type": "string"}},
+            required=["name"],
+        )
+        assert validator.validate(spec, {"name": "anything"}) is None
+
+    def test_unknown_parameter_rejected(self):
+        """参数名不在 schema.properties 中时返回错误。"""
+        spec = _make_spec(
+            properties={"path": {"type": "string"}},
+            required=["path"],
+        )
+        result = validator.validate(spec, {"path": "/tmp/a", "unknown_field": 42})
+        assert isinstance(result, ToolResult)
+        assert result.is_error is True
+        assert "unknown" in result.content
+
+    def test_known_parameter_not_unknown(self):
+        """参数名在 schema.properties 中时不被标记为 unknown。"""
+        spec = _make_spec(
+            properties={"path": {"type": "string"}},
+            required=["path"],
+        )
+        assert validator.validate(spec, {"path": "/tmp/a"}) is None
