@@ -30,7 +30,7 @@ def messages_to_openai(messages: list) -> list[dict]:
     注意：DeepSeek 版本需要额外处理 reasoning_content，
     由 messages_to_deepseek() 函数处理。
     """
-    from ..types import Message, SystemMessage, ToolMessage
+    from ..types import SystemMessage, ToolMessage
 
     result: list[dict] = []
 

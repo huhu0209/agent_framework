@@ -6,7 +6,6 @@ import asyncio
 import logging
 
 from agent_framework.agents.agent_loop import AgentLoop
-from agent_framework.agents.base import Agent
 from agent_framework.llm.base import ILLMAdapter
 from agent_framework.tasks.manager import TaskManager
 from agent_framework.tasks.types import RuntimeTask, RuntimeTaskStatus, TaskStatus

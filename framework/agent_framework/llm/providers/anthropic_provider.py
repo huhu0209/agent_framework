@@ -26,9 +26,6 @@ from pydantic import SecretStr
 
 from ..base import (
     ILLMAdapter,
-    InvalidRequestError,
-    LLMAdapterError,
-    RateLimitError,
     ServiceUnavailableError,
     handle_http_error,
 )
@@ -41,12 +38,9 @@ from ..transform import (
 from ..types import (
     CompletionConfig,
     CompletionResult,
-    ContentBlock,
-    Message,
     ProviderInfo,
     StreamEvent,
     StreamEventType,
-    ThinkingBlock,
     UsageStats,
 )
 

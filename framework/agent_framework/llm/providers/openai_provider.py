@@ -12,7 +12,6 @@ OpenAI 是生态中心，协议最标准。与 DeepSeek 的主要区别：
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from collections.abc import AsyncIterator
@@ -22,9 +21,7 @@ from pydantic import SecretStr
 
 from ..base import (
     ILLMAdapter,
-    InvalidRequestError,
     LLMAdapterError,
-    RateLimitError,
     ServiceUnavailableError,
     handle_http_error,
 )
@@ -38,11 +35,9 @@ from ..transform import (
 from ..types import (
     CompletionConfig,
     CompletionResult,
-    Message,
     ProviderInfo,
     StreamEvent,
     StreamEventType,
-    UsageStats,
 )
 
 logger = logging.getLogger(__name__)

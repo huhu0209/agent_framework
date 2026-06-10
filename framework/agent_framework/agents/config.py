@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agent_framework.agents.agent_loop import AgentLoop
-from agent_framework.agents.base import Agent
 from agent_framework.llm.base import ILLMAdapter
 from agent_framework.memory.frontmatter import parse_frontmatter
 from agent_framework.tools.router import ToolRouter

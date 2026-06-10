@@ -6,7 +6,6 @@ import logging
 import uuid
 from typing import TYPE_CHECKING
 
-from agent_framework.agents.base import AgentEvent
 from agent_framework.orchestrator.models import WorkerHandle
 
 if TYPE_CHECKING:

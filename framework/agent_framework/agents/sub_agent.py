@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from agent_framework.agents.agent_loop import AgentLoop
-from agent_framework.agents.base import Agent
 from agent_framework.llm.base import ILLMAdapter
 from agent_framework.llm.types import ToolParameterSchema
 from agent_framework.tools.router import ToolRouter

@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
-from typing import Any
 
 from .types import (
     CompletionResult,

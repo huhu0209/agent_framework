@@ -28,7 +28,6 @@ from .base import (
     InvalidRequestError,
     LLMAdapterError,
     RateLimitError,
-    ServiceUnavailableError,
 )
 
 logger = logging.getLogger(__name__)

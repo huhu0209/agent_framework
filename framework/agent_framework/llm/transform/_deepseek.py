@@ -16,7 +16,6 @@ from ..types import (
     ToolUseBlock,
     UsageStats,
 )
-from ._openai import _map_openai_stop_reason, _parse_openai_usage
 
 
 def messages_to_deepseek(messages: list[Message]) -> list[dict]:

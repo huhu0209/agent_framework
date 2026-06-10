@@ -10,7 +10,6 @@ import uuid
 from collections import defaultdict
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
 
 from agent_framework.hooks.types import HookConfig, HookContext, HookEvent, HookResult, HookType
 

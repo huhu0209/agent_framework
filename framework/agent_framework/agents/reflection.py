@@ -6,7 +6,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Any, AsyncGenerator
+from typing import AsyncGenerator
 
 from agent_framework.agents.base import Agent, AgentEvent
 from agent_framework.agents.agent_loop import AgentLoop

@@ -16,7 +16,6 @@ DeepSeek V4 特殊处理：
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from collections.abc import AsyncIterator
@@ -27,8 +26,6 @@ from pydantic import SecretStr
 from ..base import (
     ILLMAdapter,
     InvalidRequestError,
-    LLMAdapterError,
-    RateLimitError,
     ServiceUnavailableError,
     handle_http_error,
 )
@@ -47,7 +44,6 @@ from ..types import (
     ProviderInfo,
     StreamEvent,
     StreamEventType,
-    UsageStats,
 )
 
 logger = logging.getLogger(__name__)

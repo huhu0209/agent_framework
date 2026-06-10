@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from agent_framework.llm.types import (
-    AssistantMessage,
     CompletionConfig,
     Message,
     ProviderInfo,
@@ -13,7 +12,6 @@ from agent_framework.llm.types import (
     ToolResultBlock,
     ToolUseBlock,
     UsageStats,
-    UserMessage,
 )
 
 # 估算系数：4 字符 ≈ 1 token，乘 1.33 补偿非英语文本开销
