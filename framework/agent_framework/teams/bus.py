@@ -48,6 +48,7 @@ class MessageBus:
                 data = json.loads(line)
                 msgs.append(TeamMessage(**data))
             except Exception:
+                logger.debug("跳过无法解析的消息行: %s", line[:200])
                 continue
 
         # 原子清零：write-to-temp + os.replace，防止崩溃时丢失

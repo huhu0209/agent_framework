@@ -16,16 +16,33 @@ logger = logging.getLogger(__name__)
 _active_runners: dict[str, asyncio.Task[None]] = {}
 
 
-async def serve_ws(bus: EventBus, host: str = "localhost", port: int = 8765) -> None:
+async def serve_ws(
+    bus: EventBus, host: str = "localhost", port: int = 8765, *, token: str | None = None,
+) -> None:
     """启动 WebSocket 服务端。"""
 
-    async with serve(lambda ws: _handler(ws, bus), host, port) as server:
-        logger.info("WebSocket server listening on ws://%s:%d", host, port)
+    if token is not None:
+        logger.info("WebSocket server listening on ws://%s:%d (auth enabled)", host, port)
+    else:
+        logger.info("WebSocket server listening on ws://%s:%d (no auth, development mode)", host, port)
+
+    async with serve(lambda ws: _handler(ws, bus, token), host, port) as server:
         await server.wait_closed()
 
 
-async def _handler(websocket: ServerConnection, bus: EventBus) -> None:
+async def _handler(websocket: ServerConnection, bus: EventBus, token: str | None = None) -> None:
     """处理单个 WebSocket 连接：推送事件 + 接收命令。"""
+
+    # Token authentication check
+    if token is not None:
+        from urllib.parse import parse_qs, urlparse
+
+        query = parse_qs(urlparse(websocket.request.path).query)
+        client_token = query.get("token", [None])[0]
+        if client_token != token:
+            await websocket.close(code=4001, reason="Unauthorized")
+            return
+
     queue = await bus.subscribe()
     try:
         recv_task = asyncio.create_task(_handle_commands(websocket, bus))
@@ -39,7 +56,7 @@ async def _handler(websocket: ServerConnection, bus: EventBus) -> None:
             try:
                 task.result()
             except Exception:
-                pass
+                logger.debug("Task cleanup error", exc_info=True)
     finally:
         await bus.unsubscribe(queue)
 
