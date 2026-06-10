@@ -33,8 +33,8 @@ async def lifespan(app: FastAPI):
     try:
         rdb = redis_lib.Redis.from_url(settings.redis_url, decode_responses=True)
         rdb.ping()
-    except Exception:
-        logger.warning("Redis unavailable, caching disabled")
+    except (redis_lib.ConnectionError, redis_lib.TimeoutError) as exc:
+        logger.error("Redis connection failed: %s. Caching disabled.", exc)
         rdb = None
 
     # --- 初始化会话管理器，启动定期清理任务 ---
@@ -60,7 +60,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "DELETE", "PATCH"],
+    allow_headers=["Content-Type", "X-Session-Id"],
 )
 app.include_router(chat_router, prefix="/api/v1")
