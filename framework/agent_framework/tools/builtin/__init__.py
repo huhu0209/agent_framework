@@ -9,12 +9,13 @@ from agent_framework.tools.types import ToolSpec
 from .file_tools import read_file, write_file
 from .memory_tools import handle_memory_search, handle_memory_write
 from .plan_tools import handle_update_plan_status
-from .search_tools import web_search
+from .search_tools import SearchClient
 
 
 def create_builtin_registry() -> ToolRegistry:
     """创建包含所有内建工具的注册表。"""
     registry = ToolRegistry()
+    search_client = SearchClient()
 
     registry.register(ToolSpec(
         name="read_file",
@@ -65,7 +66,7 @@ def create_builtin_registry() -> ToolRegistry:
             },
             required=["query"],
         ),
-        handler=web_search,
+        handler=search_client.search,
         timeout_ms=15_000,
     ))
 
