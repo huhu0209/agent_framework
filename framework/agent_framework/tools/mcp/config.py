@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, field_validator
 
+from agent_framework.config.loader import ConfigLoader
 from agent_framework.llm.types import ToolParameterSchema
 from agent_framework.tools.mcp.client import McpClient, McpToolError
 from agent_framework.tools.mcp.transport import McpTransport, StdioTransport
@@ -64,6 +67,44 @@ class McpManager:
     def __init__(self, configs: list[McpServerConfig]) -> None:
         self._configs = configs
         self._clients: dict[str, McpClient] = {}
+
+    @classmethod
+    def from_loader(cls, loader: ConfigLoader) -> McpManager:
+        """从 ConfigLoader.discover("mcp") 路径加载 server 配置。
+
+        按 natural order（global → project）迭代，后写入覆盖先写入。
+        项目级同名 server 覆盖全局配置，并记录 warning。
+        无效条目跳过并记录 warning。
+        """
+        server_map: dict[str, McpServerConfig] = {}
+
+        for mcp_dir in loader.discover("mcp"):
+            servers_file = mcp_dir / "servers.json"
+            if not servers_file.exists():
+                continue
+
+            try:
+                raw = json.loads(servers_file.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError) as exc:
+                logger.warning("无法读取 %s: %s，跳过", servers_file, exc)
+                continue
+
+            entries = raw.get("servers", [])
+            for entry in entries:
+                try:
+                    cfg = McpServerConfig.model_validate(entry)
+                except Exception as exc:
+                    name = entry.get("name", "<unknown>")
+                    logger.warning("MCP server '%s' 配置无效: %s，跳过", name, exc)
+                    continue
+
+                if cfg.name in server_map:
+                    logger.warning(
+                        "MCP server '%s' 重复定义，使用项目级覆盖全局", cfg.name,
+                    )
+                server_map[cfg.name] = cfg
+
+        return cls(configs=list(server_map.values()))
 
     async def start(self, registry: ToolRegistry) -> None:
         """启动时全量连接，逐个注册。单个失败跳过。"""
