@@ -11,6 +11,7 @@ from collections import defaultdict
 from dataclasses import replace
 from pathlib import Path
 
+from agent_framework.config.loader import ConfigLoader
 from agent_framework.hooks.types import HookConfig, HookContext, HookEvent, HookResult, HookType
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,22 @@ class HookManager:
     @property
     def trusted(self) -> bool:
         return self._trusted
+
+    @classmethod
+    def from_loader(
+        cls, loader: ConfigLoader, trusted: bool = False
+    ) -> HookManager:
+        """从 ConfigLoader.discover("hooks") 路径创建 HookManager。
+
+        discover() 返回 [global, project] 低到高优先级，
+        按顺序加载 hooks.json，global 先注册，project 后追加。
+        """
+        manager = cls(trusted=trusted)
+        for hook_dir in loader.discover("hooks"):
+            hook_file = hook_dir / "hooks.json"
+            if hook_file.exists():
+                manager.load_from_json(hook_file)
+        return manager
 
     def register(self, config: HookConfig) -> None:
         self._hooks[config.event].append(config)
