@@ -119,6 +119,13 @@ class SessionManager:
 
         return page, has_more, next_cursor
 
+    async def count_messages(self, session_id: str) -> int | None:
+        """获取会话消息总数。"""
+        all_messages = await self._get_all_messages(session_id)
+        if all_messages is None:
+            return None
+        return len(all_messages)
+
     async def _get_all_messages(self, session_id: str) -> list[dict] | None:
         """三层查找：内存 → Redis → JSONL。"""
         # 1. 内存

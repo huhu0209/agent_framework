@@ -223,6 +223,9 @@ async def get_history(
 # GET /sessions — 列出历史会话
 # ---------------------------------------------------------------------------
 
+PREVIEW_SESSION_LIMIT = 10  # Only enrich the N most recent sessions to limit I/O
+
+
 @router.get("/sessions")
 async def list_sessions(request: Request, preview: int = Query(0, ge=0, le=50)) -> list[dict]:
     sm = request.app.state.session_manager
@@ -230,17 +233,21 @@ async def list_sessions(request: Request, preview: int = Query(0, ge=0, le=50)) 
     if preview > 0:
         result = []
         for i, session in enumerate(sessions):
-            new_session = {**session}  # copy to avoid mutating cache
-            if i < 10:
+            new_session = {**session}
+            if i < PREVIEW_SESSION_LIMIT:
+                # Fetch limited messages for preview
                 msgs = await sm.get_messages(session["session_id"], limit=preview)
                 if msgs is not None:
                     messages, has_more, _ = msgs
                     new_session["preview"] = messages
                     if has_more:
-                        all_msgs = await sm._get_all_messages(session["session_id"])
-                        new_session["message_count"] = len(all_msgs) if all_msgs else preview
+                        # Need full count — use public method
+                        count = await sm.count_messages(session["session_id"])
+                        new_session["message_count"] = count if count is not None else len(messages)
                     else:
                         new_session["message_count"] = len(messages)
+                else:
+                    new_session["preview"] = None
             else:
                 new_session["preview"] = None
             result.append(new_session)
