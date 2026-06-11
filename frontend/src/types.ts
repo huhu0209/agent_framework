@@ -37,4 +37,12 @@ export interface SessionInfo {
   session_id: string
   title: string
   created_at: number
+  preview?: ChatMessage[]
+  message_count?: number
+}
+
+export interface CacheEntry {
+  messages: ChatMessage[]
+  hasMore: boolean
+  cachedAt: number
 }
