@@ -87,7 +87,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Settings Pydantic model instantiates with all-default values when no config files exist (fresh-install safe)
   3. APP_* environment variables override scalar Settings fields at validation time using env_nested_delimiter='__'
   4. All 1002 existing tests pass unchanged after this phase
-**Plans**: 2 plans
+**Plans**: 1 plan
 
 Plans:
 - [x] 20-01: Settings model + merge engine
@@ -102,7 +102,7 @@ Plans:
   3. load_agents_md() concatenates the full instruction chain: global AGENTS.md → project AGENTS.md → local AGENTS.md → parent directory traversal (stopping at .git boundary) → user.md
   4. Profile loading reads profiles/<name>/ directory files (soul.md, agents.md, identity.md, tool_guidance.md) from discovered paths
   5. All 1002 existing tests pass unchanged after this phase
-**Plans**: 2 plans
+**Plans**: 1 plan
 
 Plans:
 - [x] 21-01: discover_paths() + ConfigLoader core
@@ -118,10 +118,10 @@ Plans:
   3. CommandRegistry.from_loader(loader) loads commands from all discovered command directories
   4. All existing constructor signatures remain unchanged — from_loader() is purely additive
   5. All 1002 existing tests pass unchanged after this phase
-**Plans**: 2 plans
+**Plans**: 1 plan
 
 Plans:
-- [ ] 22-01: Simple adapters (Skills, Hooks, Commands from_loader)
+- [ ] 22-01 — Three from_loader() factory methods (SkillRegistry, HookManager, CommandDispatcher) with TDD
 
 ### Phase 23: Complex Module Adapters — Agents, Profiles, MCP, Tasks, Permissions
 **Goal**: 所有剩余模块适配器完成，支持多目录扫描和名称冲突处理
@@ -133,7 +133,7 @@ Plans:
   3. McpManager.from_loader() merges MCP server configs from all discovered paths
   4. TaskManager defaults tasks_dir to .agent-framework/tasks/
   5. PermissionPipeline receives allow/deny lists from Settings.permissions automatically
-**Plans**: 2 plans
+**Plans**: 1 plan
 
 Plans:
 - [ ] 23-01: Agents and Profiles adapters
@@ -149,7 +149,7 @@ Plans:
   3. rules/*.md files support frontmatter paths conditions for scoped loading (path-scoped rules)
   4. PromptAssembler integrates the full instruction chain into the <user-provided> block and Profile files into corresponding tags
   5. Full end-to-end test: ConfigLoader loads settings → discovers modules → adapters create registries → all 1002+ existing tests pass
-**Plans**: 2 plans
+**Plans**: 1 plan
 
 Plans:
 - [ ] 24-01: Backend integration + config leaf dependency
