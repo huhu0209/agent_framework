@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
+from agent_framework.config.loader import ConfigLoader
 from pydantic import BaseModel
 
 
@@ -50,6 +51,30 @@ class AgentProfile(BaseModel):
             soul=soul,
             agents_rules=agents_rules,
             identity=identity,
+            tool_guidance=tool_guidance_raw or None,
+        )
+
+    @classmethod
+    def from_profile(cls, loader: ConfigLoader, name: str) -> AgentProfile:
+        """通过 ConfigLoader.load_profile() 加载指定 profile。
+
+        load_profile() 已完成 global+project 字段级合并。
+        返回 dict 中 "agents" 键映射到 agents_rules 字段。
+        """
+        fields = loader.load_profile(name)
+        if not fields:
+            raise ValueError(f"Profile '{name}' 不存在")
+
+        # 映射: "agents" -> "agents_rules"，其他键直接映射
+        agents_rules = fields.get("agents", "")
+        tool_guidance_raw = fields.get("tool_guidance", "")
+
+        return cls(
+            name=name,
+            description=f"从 profile '{name}' 加载",
+            soul=fields.get("soul", ""),
+            agents_rules=agents_rules,
+            identity=fields.get("identity", ""),
             tool_guidance=tool_guidance_raw or None,
         )
 
