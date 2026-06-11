@@ -416,3 +416,117 @@ class TestLoadAgentsMd:
         result = loader.load_agents_md()
         assert result.count("# Source:") == 1
         assert "real content" in result
+
+
+class TestLoadProfile:
+    """load_profile() 双路径合并 Profile 加载测试。"""
+
+    PROFILE_FILES = ["soul.md", "agents.md", "identity.md", "tool_guidance.md"]
+
+    def _make_loader(self, tmp_path: Path) -> ConfigLoader:
+        """创建使用 tmp_path 的 ConfigLoader。"""
+        global_base = tmp_path / "global"
+        project_base = tmp_path / "project"
+        global_base.mkdir(parents=True, exist_ok=True)
+        project_base.mkdir(parents=True, exist_ok=True)
+        return ConfigLoader(global_dir=global_base, project_dir=project_base)
+
+    def _write(self, path: Path, content: str) -> None:
+        """写入文件，自动创建父目录。"""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    def _global_profile_dir(self, tmp_path: Path, name: str = "default") -> Path:
+        return tmp_path / "global" / ".agent-framework" / "profiles" / name
+
+    def _project_profile_dir(self, tmp_path: Path, name: str = "default") -> Path:
+        return tmp_path / "project" / ".agent-framework" / "profiles" / name
+
+    def test_only_global_profile(self, tmp_path: Path) -> None:
+        """Test 1: 仅 global profile — 返回全部 4 个字段。"""
+        loader = self._make_loader(tmp_path)
+        g = self._global_profile_dir(tmp_path)
+        self._write(g / "soul.md", "global soul")
+        self._write(g / "agents.md", "global agents")
+        self._write(g / "identity.md", "global identity")
+        self._write(g / "tool_guidance.md", "global tools")
+
+        result = loader.load_profile("default")
+        assert result == {
+            "soul": "global soul",
+            "agents": "global agents",
+            "identity": "global identity",
+            "tool_guidance": "global tools",
+        }
+
+    def test_project_overrides_global(self, tmp_path: Path) -> None:
+        """Test 2: global + project 合并 — project 非空字段覆盖 global。"""
+        loader = self._make_loader(tmp_path)
+        g = self._global_profile_dir(tmp_path)
+        p = self._project_profile_dir(tmp_path)
+        self._write(g / "soul.md", "global soul")
+        self._write(p / "soul.md", "project soul")
+
+        result = loader.load_profile("default")
+        assert result["soul"] == "project soul"
+
+    def test_project_nonempty_overrides_global_empty(self, tmp_path: Path) -> None:
+        """Test 3: project 非空覆盖 global 空。"""
+        loader = self._make_loader(tmp_path)
+        g = self._global_profile_dir(tmp_path)
+        p = self._project_profile_dir(tmp_path)
+        self._write(g / "soul.md", "")
+        self._write(p / "soul.md", "has value")
+
+        result = loader.load_profile("default")
+        assert result["soul"] == "has value"
+
+    def test_project_empty_does_not_override_global(self, tmp_path: Path) -> None:
+        """Test 4: project 空不覆盖 global 非空。"""
+        loader = self._make_loader(tmp_path)
+        g = self._global_profile_dir(tmp_path)
+        p = self._project_profile_dir(tmp_path)
+        self._write(g / "soul.md", "global value")
+        self._write(p / "soul.md", "")
+
+        result = loader.load_profile("default")
+        assert result["soul"] == "global value"
+
+    def test_neither_path_exists(self, tmp_path: Path) -> None:
+        """Test 5: 两个路径都不存在 profile — 返回空 dict。"""
+        loader = self._make_loader(tmp_path)
+        result = loader.load_profile("nonexistent")
+        assert result == {}
+
+    def test_partial_subfiles(self, tmp_path: Path) -> None:
+        """Test 6: 只有部分子文件 — 只有存在的字段。"""
+        loader = self._make_loader(tmp_path)
+        g = self._global_profile_dir(tmp_path)
+        self._write(g / "soul.md", "only soul")
+
+        result = loader.load_profile("default")
+        assert result == {"soul": "only soul"}
+        assert "identity" not in result
+
+    def test_four_subfile_names(self, tmp_path: Path) -> None:
+        """Test 7: 4 种子文件名确认 — soul/agents/identity/tool_guidance。"""
+        loader = self._make_loader(tmp_path)
+        g = self._global_profile_dir(tmp_path)
+        for filename in self.PROFILE_FILES:
+            self._write(g / filename, f"content of {filename}")
+
+        result = loader.load_profile("default")
+        expected_keys = {"soul", "agents", "identity", "tool_guidance"}
+        assert set(result.keys()) == expected_keys
+
+    def test_returns_dict_str_str(self, tmp_path: Path) -> None:
+        """Test 8: 返回类型 dict[str, str] — key 为去掉 .md 后缀的文件名。"""
+        loader = self._make_loader(tmp_path)
+        g = self._global_profile_dir(tmp_path)
+        self._write(g / "soul.md", "soul content")
+
+        result = loader.load_profile("default")
+        assert isinstance(result, dict)
+        assert all(isinstance(k, str) for k in result)
+        assert all(isinstance(v, str) for v in result.values())
+        assert "soul" in result
