@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v0.0.6
 milestone_name: 路径文件的统一
-status: planning
+status: executing
 stopped_at: Phase 20 context gathered
-last_updated: "2026-06-11T06:07:43.843Z"
-last_activity: "2026-06-11 — Roadmap created for v0.0.6 (5 phases: 20-24)"
+last_updated: "2026-06-11T06:59:42.251Z"
+last_activity: 2026-06-11 -- Phase 20 execution started
 progress:
   total_phases: 5
   completed_phases: 0
-  total_plans: 0
+  total_plans: 1
   completed_plans: 0
   percent: 0
 ---
@@ -21,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-11)
 
 **Core value:** 可靠的 Agent 编排框架，提供安全、可测试、可扩展的基础设施
-**Current focus:** v0.0.6 路径文件的统一 — Phase 20 ready to plan
+**Current focus:** Phase 20 — config-foundation-settings-model-merge-engine
 
 ## Milestone History
 
@@ -34,10 +34,10 @@ See: .planning/PROJECT.md (updated 2026-06-11)
 
 ## Current Position
 
-Phase: 20 of 24 (Config Foundation — Settings Model + Merge Engine)
-Plan: 0 of ? in current phase
-Status: Ready to plan
-Last activity: 2026-06-11 — Roadmap created for v0.0.6 (5 phases: 20-24)
+Phase: 20 (config-foundation-settings-model-merge-engine) — EXECUTING
+Plan: 1 of 1
+Status: Executing Phase 20
+Last activity: 2026-06-11 -- Phase 20 execution started
 
 Progress: [          ] 0%
 
