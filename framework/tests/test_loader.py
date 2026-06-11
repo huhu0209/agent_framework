@@ -231,3 +231,188 @@ class TestBarrelExport:
         from agent_framework.config import ConfigLoader as CL
 
         assert CL is ConfigLoader
+
+
+class TestLoadAgentsMd:
+    """load_agents_md() 指令链加载测试。"""
+
+    def _make_loader(
+        self, tmp_path: Path, *, global_dir: Path | None = None, project_dir: Path | None = None
+    ) -> ConfigLoader:
+        """创建使用 tmp_path 子目录的 ConfigLoader。"""
+        g = global_dir or (tmp_path / "global")
+        p = project_dir or (tmp_path / "project")
+        g.mkdir(parents=True, exist_ok=True)
+        p.mkdir(parents=True, exist_ok=True)
+        return ConfigLoader(global_dir=g, project_dir=p)
+
+    def _write(self, path: Path, content: str) -> None:
+        """写入文件，自动创建父目录。"""
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content, encoding="utf-8")
+
+    def test_full_chain_concatenation(self, tmp_path: Path) -> None:
+        """Test 1: 全层级拼接 — 验证顺序和 '# Source:' 标题。"""
+        loader = self._make_loader(tmp_path)
+
+        global_af = tmp_path / "global" / ".agent-framework"
+        project_af = tmp_path / "project" / ".agent-framework"
+        project_root = tmp_path / "project"
+
+        # 创建 .git 在 project_root 上层
+        git_root = tmp_path / "repo"
+        git_root.mkdir()
+        (git_root / ".git").mkdir()
+        # project 在 repo/a/b/
+        project_in_repo = git_root / "a" / "b"
+        project_in_repo.mkdir(parents=True)
+
+        # 重新创建 loader 指向 repo 内的 project
+        loader = ConfigLoader(global_dir=tmp_path / "global", project_dir=project_in_repo)
+
+        global_af = tmp_path / "global" / ".agent-framework"
+        project_af = project_in_repo / ".agent-framework"
+
+        # global AGENTS.md
+        self._write(global_af / "AGENTS.md", "global agents")
+        # project AGENTS.md
+        self._write(project_af / "AGENTS.md", "project agents")
+        # project AGENTS.local.md
+        self._write(project_af / "AGENTS.local.md", "local agents")
+        # 父目录链: repo/a/AGENTS.md, repo/a/b/AGENTS.md
+        # project_in_repo = repo/a/b, _project_dir = repo/a/b/.agent-framework
+        # _parent_agents_chain: project_root = repo/a/b, git_root = repo
+        # chain: [repo/a, repo/a/b] reversed -> already low-to-high from git_root
+        self._write(git_root / "a" / "AGENTS.md", "parent a agents")
+        self._write(git_root / "a" / "b" / "AGENTS.md", "parent b agents")
+        # global user.md
+        self._write(global_af / "user.md", "user content")
+
+        result = loader.load_agents_md()
+
+        # 验证顺序: global -> project -> local -> 父目录链 -> user
+        assert "# Source: ~/.agent-framework/AGENTS.md" in result
+        assert "# Source: .agent-framework/AGENTS.md" in result
+        assert "# Source: .agent-framework/AGENTS.local.md" in result
+        assert "# Source: ~/.agent-framework/user.md" in result
+
+        # 验证内容
+        assert "global agents" in result
+        assert "project agents" in result
+        assert "local agents" in result
+        assert "user content" in result
+
+        # 验证顺序: global 在 project 前面
+        assert result.index("global agents") < result.index("project agents")
+        assert result.index("project agents") < result.index("local agents")
+        assert result.index("local agents") < result.index("user content")
+
+    def test_only_global_agents_md(self, tmp_path: Path) -> None:
+        """Test 2: 仅 global AGENTS.md — 其他文件不存在。"""
+        loader = self._make_loader(tmp_path)
+        global_af = tmp_path / "global" / ".agent-framework"
+        self._write(global_af / "AGENTS.md", "only global")
+
+        result = loader.load_agents_md()
+        assert "# Source: ~/.agent-framework/AGENTS.md" in result
+        assert "only global" in result
+        assert result.count("# Source:") == 1
+
+    def test_no_files_returns_empty(self, tmp_path: Path) -> None:
+        """Test 3: 全部文件不存在 — 返回空字符串。"""
+        loader = self._make_loader(tmp_path)
+        result = loader.load_agents_md()
+        assert result == ""
+
+    def test_parent_chain_direction(self, tmp_path: Path) -> None:
+        """Test 4: 父目录链方向 — 从 .git 根向下，低到高优先级。"""
+        # repo/.git, project_dir = repo/a/b
+        git_root = tmp_path / "repo"
+        (git_root / ".git").mkdir()
+        project_dir = git_root / "a" / "b"
+        project_dir.mkdir(parents=True)
+
+        global_base = tmp_path / "global"
+        global_base.mkdir()
+        loader = ConfigLoader(global_dir=global_base, project_dir=project_dir)
+
+        # 父目录链文件
+        self._write(git_root / "a" / "AGENTS.md", "level a")
+        self._write(git_root / "a" / "b" / "AGENTS.md", "level b")
+
+        result = loader.load_agents_md()
+        # level a 应在 level b 前面（低优先级在前）
+        assert "level a" in result
+        assert "level b" in result
+        assert result.index("level a") < result.index("level b")
+
+    def test_no_git_dir_empty_chain(self, tmp_path: Path) -> None:
+        """Test 5: 无 .git 目录 — 父目录链为空，不影响其他层。"""
+        loader = self._make_loader(tmp_path)
+        global_af = tmp_path / "global" / ".agent-framework"
+        project_af = tmp_path / "project" / ".agent-framework"
+        self._write(global_af / "AGENTS.md", "global")
+        self._write(project_af / "AGENTS.md", "project")
+
+        result = loader.load_agents_md()
+        assert "global" in result
+        assert "project" in result
+        # 无 .git，父目录链为空，只有 global + project 两个 Source
+        assert result.count("# Source:") == 2
+
+    def test_git_at_project_dir_empty_chain(self, tmp_path: Path) -> None:
+        """Test 6: .git 在 project_dir 本身 — 父目录链为空。"""
+        project_dir = tmp_path / "myproject"
+        project_dir.mkdir()
+        (project_dir / ".git").mkdir()
+
+        global_base = tmp_path / "global"
+        global_base.mkdir()
+        loader = ConfigLoader(global_dir=global_base, project_dir=project_dir)
+
+        project_af = project_dir / ".agent-framework"
+        self._write(project_af / "AGENTS.md", "project only")
+
+        result = loader.load_agents_md()
+        assert result.count("# Source:") == 1
+        assert "project only" in result
+
+    def test_double_newline_separation(self, tmp_path: Path) -> None:
+        """Test 7: 片段间双换行分隔。"""
+        loader = self._make_loader(tmp_path)
+        global_af = tmp_path / "global" / ".agent-framework"
+        project_af = tmp_path / "project" / ".agent-framework"
+        self._write(global_af / "AGENTS.md", "first")
+        self._write(project_af / "AGENTS.md", "second")
+
+        result = loader.load_agents_md()
+        # 两个片段之间应有 "\n\n"
+        assert "# Source: ~/.agent-framework/AGENTS.md\nfirst" in result
+        assert "# Source: .agent-framework/AGENTS.md\nsecond" in result
+        # 验证片段间是 "\n\n"
+        assert "first\n\n# Source:" in result
+
+    def test_source_header_format(self, tmp_path: Path) -> None:
+        """Test 8: '# Source:' 标题格式 — 每个片段以 '# Source: <label>\\n' 开头。"""
+        loader = self._make_loader(tmp_path)
+        global_af = tmp_path / "global" / ".agent-framework"
+        self._write(global_af / "AGENTS.md", "content")
+        self._write(global_af / "user.md", "user info")
+
+        result = loader.load_agents_md()
+        lines = result.split("\n")
+        # 第一个非空行应为 # Source:
+        first_non_empty = next(line for line in lines if line.strip())
+        assert first_non_empty.startswith("# Source:")
+
+    def test_empty_content_file_skipped(self, tmp_path: Path) -> None:
+        """Test 9: 空内容文件跳过 — 文件存在但内容为空白。"""
+        loader = self._make_loader(tmp_path)
+        global_af = tmp_path / "global" / ".agent-framework"
+        self._write(global_af / "AGENTS.md", "   \n  \n  ")
+        project_af = tmp_path / "project" / ".agent-framework"
+        self._write(project_af / "AGENTS.md", "real content")
+
+        result = loader.load_agents_md()
+        assert result.count("# Source:") == 1
+        assert "real content" in result
