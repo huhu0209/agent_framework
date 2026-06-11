@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v0.0.6
 milestone_name: 路径文件的统一
-status: planning
+status: executing
 stopped_at: Phase 21 context gathered
-last_updated: "2026-06-11T10:42:35.992Z"
-last_activity: 2026-06-11
+last_updated: "2026-06-11T11:23:40.851Z"
+last_activity: 2026-06-11 -- Phase 21 execution started
 progress:
   total_phases: 5
   completed_phases: 1
-  total_plans: 1
+  total_plans: 3
   completed_plans: 1
   percent: 20
 ---
@@ -21,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-11)
 
 **Core value:** 可靠的 Agent 编排框架，提供安全、可测试、可扩展的基础设施
-**Current focus:** Phase 21 — discovery + loader + agents.md chain
+**Current focus:** Phase 21 — discovery-loader-agents-md-chain
 
 ## Milestone History
 
@@ -34,10 +34,10 @@ See: .planning/PROJECT.md (updated 2026-06-11)
 
 ## Current Position
 
-Phase: 21
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-06-11
+Phase: 21 (discovery-loader-agents-md-chain) — EXECUTING
+Plan: 1 of 2
+Status: Executing Phase 21
+Last activity: 2026-06-11 -- Phase 21 execution started
 
 Progress: [          ] 0%
 
