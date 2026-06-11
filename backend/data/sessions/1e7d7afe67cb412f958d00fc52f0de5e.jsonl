@@ -1,5 +1,0 @@
-{"type": "system", "timestamp": 1780967525.824492, "content": "你是一个有用的助手。可以使用工具来完成任务。\n\n当收到复杂任务时，先制定执行计划。用以下格式输出：\n\n<plan>\n1. 第一步描述\n2. 第二步描述\n</plan>\n\n每完成一步，调用 update_plan_status 工具更新状态。\n简单任务不需要计划，直接执行即可。", "tool_call_id": null, "tool_name": null}
-{"type": "user", "timestamp": 1780967525.824533, "content": "现在几点了", "tool_call_id": null, "tool_name": null}
-{"type": "assistant", "timestamp": 1780967528.7803478, "content": [{"type": "text", "text": "抱歉，我手头没有直接获取当前系统时间的工具。不过我可以帮你搜索一下当前的北京时间，让我试试看。"}, {"type": "tool_use", "id": "call_00_hoeFCQLC6QwU7VxOwG0s6678", "name": "web_search", "input": {"query": "当前北京时间"}}], "tool_call_id": null, "tool_name": null}
-{"type": "tool_result", "timestamp": 1780967528.7922392, "content": "搜索失败：TAVILY_API_KEY 未配置", "tool_call_id": "call_00_hoeFCQLC6QwU7VxOwG0s6678", "tool_name": "web_search"}
-{"type": "assistant", "timestamp": 1780967530.983685, "content": [{"type": "text", "text": "很抱歉，我目前没有获取当前时间的工具可用（没有系统时间接口，网络搜索功能也未配置）。所以无法准确告诉你现在几点了。\n\n建议你可以：\n1. 查看电脑桌面右下角或手机屏幕上的时间\n2. 或者如果你能告诉我你所在的时区，我可以帮你推理（但准确时间仍需设备显示为准）"}], "tool_call_id": null, "tool_name": null}

@@ -27,7 +27,6 @@ Thumbs.db
 .claude/
 CLAUDE.md
 DESIGN.md
-docs/plans/
 
 # Testing
 htmlcov/
@@ -35,9 +34,20 @@ htmlcov/
 .pytest_cache/
 frontend/coverage/
 
-
+# 非项目代码目录
 .understand-anything/
 .playwright-mcp/
 .planning/
-docs/
+.agent_results/
+.ruff_cache/
 .superpowers/
+docs/
+notes/
+
+# backend 内部不追踪
+backend/data/
+backend/tests/
+
+# framework 内部不追踪
+framework/tests/
+framework/.ruff_cache/

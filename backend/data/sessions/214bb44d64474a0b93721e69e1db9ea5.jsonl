@@ -1,3 +1,0 @@
-{"type": "system", "timestamp": 1780925929.822956, "content": "你是一个有用的助手。可以使用工具来完成任务。\n\n当收到复杂任务时，先制定执行计划。用以下格式输出：\n\n<plan>\n1. 第一步描述\n2. 第二步描述\n</plan>\n\n每完成一步，调用 update_plan_status 工具更新状态。\n简单任务不需要计划，直接执行即可。", "tool_call_id": null, "tool_name": null}
-{"type": "user", "timestamp": 1780925929.822997, "content": "给我背首古诗", "tool_call_id": null, "tool_name": null}
-{"type": "assistant", "timestamp": 1780925932.415065, "content": [{"type": "text", "text": "好的，我来为你背一首经典的唐代古诗——李白的 **《静夜思》**：\n\n---\n\n### **《静夜思》**  \n**唐·李白**\n\n床前明月光，  \n疑是地上霜。  \n举头望明月，  \n低头思故乡。\n\n---\n\n这首诗语言朴素自然，却情感真挚深沉。诗人借明月寄托了游子对故乡的思念之情，千百年来广为传诵。"}], "tool_call_id": null, "tool_name": null}

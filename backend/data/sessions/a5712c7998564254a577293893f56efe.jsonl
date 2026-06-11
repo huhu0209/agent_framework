@@ -1,3 +1,0 @@
-{"type": "system", "timestamp": 1780967503.875494, "content": "你是一个有用的助手。可以使用工具来完成任务。\n\n当收到复杂任务时，先制定执行计划。用以下格式输出：\n\n<plan>\n1. 第一步描述\n2. 第二步描述\n</plan>\n\n每完成一步，调用 update_plan_status 工具更新状态。\n简单任务不需要计划，直接执行即可。", "tool_call_id": null, "tool_name": null}
-{"type": "user", "timestamp": 1780967503.875547, "content": "今天天气怎么养", "tool_call_id": null, "tool_name": null}
-{"type": "assistant", "timestamp": 1780967505.9992142, "content": [{"type": "text", "text": "看起来您想问的是\"今天天气怎么样\"对吗？😊 不过我需要知道您所在的城市或地区才能帮您查询具体的天气信息。\n\n请问您在哪个城市呢？"}], "tool_call_id": null, "tool_name": null}

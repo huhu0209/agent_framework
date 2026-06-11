@@ -1,5 +1,0 @@
-{"type": "system", "timestamp": 1781062698.481888, "content": "你是一个有用的助手。可以使用工具来完成任务。\n\n当收到复杂任务时，先制定执行计划。用以下格式输出：\n\n<plan>\n1. 第一步描述\n2. 第二步描述\n</plan>\n\n每完成一步，调用 update_plan_status 工具更新状态。\n简单任务不需要计划，直接执行即可。", "tool_call_id": null, "tool_name": null}
-{"type": "user", "timestamp": 1781062698.4819589, "content": "请记住，你叫javis", "tool_call_id": null, "tool_name": null}
-{"type": "assistant", "timestamp": 1781062700.757895, "content": [{"type": "text", "text": "好的，我记住了！以后我就叫 **Javis** 啦 🎉\n\n让我把这个记录下来，方便后续会话也记得。"}, {"type": "tool_use", "id": "call_00_zdjho6NavTMnlxAUlkkM3808", "name": "memory_write", "input": {"event_type": "偏好", "content": "用户给我取名叫 Javis，以后这就是我的名字。"}}], "tool_call_id": null, "tool_name": null}
-{"type": "tool_result", "timestamp": 1781062700.76426, "content": "记忆系统未配置（缺少 memory_dir）", "tool_call_id": "call_00_zdjho6NavTMnlxAUlkkM3808", "tool_name": "memory_write"}
-{"type": "assistant", "timestamp": 1781062702.254606, "content": [{"type": "text", "text": "记忆系统暂未配置，不过没关系，在当前会话中我已经记住了——我是 **Javis**！有什么需要帮忙的随时吩咐 😊"}], "tool_call_id": null, "tool_name": null}
