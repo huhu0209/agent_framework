@@ -24,6 +24,7 @@ export function MessageList() {
   const hasMore = useChatStore((s) => s.hasMore)
   const loadingOlder = useChatStore((s) => s.loadingOlder)
   const loadOlderMessages = useChatStore((s) => s.loadOlderMessages)
+  const loadingFullHistory = useChatStore((s) => s.loadingFullHistory)
 
   const parentRef = useRef<HTMLDivElement>(null)
   const [isAtBottom, setIsAtBottom] = useState(true)
@@ -87,6 +88,11 @@ export function MessageList() {
       {loadingOlder && (
         <div className="text-center text-xs py-2" style={{ color: 'var(--text-tertiary)' }}>
           加载更多...
+        </div>
+      )}
+      {loadingFullHistory && (
+        <div className="text-center text-xs py-2" style={{ color: 'var(--text-tertiary)' }}>
+          加载完整历史...
         </div>
       )}
       <div className="max-w-3xl mx-auto" style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
