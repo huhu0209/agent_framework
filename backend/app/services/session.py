@@ -214,8 +214,8 @@ class SessionManager:
             self._redis.delete(f"session:{session_id}:meta")
         return updated
 
-    async def list_sessions(self) -> list[dict]:
-        """列出所有历史会话（带缓存）。"""
+    async def list_sessions(self, *, preview: int = 0, preview_limit: int = 10) -> list[dict]:
+        """列出所有历史会话（带缓存）。preview > 0 时附带最近 N 条消息。"""
         if self._session_list_cache is not None:
             return self._session_list_cache
         if not self._storage_dir:
@@ -234,6 +234,19 @@ class SessionManager:
             if transcript_path.exists():
                 sessions.append(entry)
         sessions.reverse()  # 最新的在前
+
+        if preview > 0:
+            for session in sessions[:preview_limit]:
+                result = await self.get_messages(session["session_id"], limit=preview)
+                if result is not None:
+                    messages, has_more, _ = result
+                    session["preview"] = messages
+                    if has_more:
+                        all_msgs = await self._get_all_messages(session["session_id"])
+                        session["message_count"] = len(all_msgs) if all_msgs else preview
+                    else:
+                        session["message_count"] = len(messages)
+
         self._session_list_cache = sessions
         return sessions
 

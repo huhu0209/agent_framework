@@ -441,3 +441,36 @@ def test_get_history_without_pagination(client_with_storage: TestClient) -> None
     data = res.json()
     assert data["has_more"] is False
     assert len(data["messages"]) >= 1
+
+
+def test_list_sessions_with_preview(client_with_storage: TestClient) -> None:
+    """GET /sessions?preview=2 应在每个会话中附带最近2条消息。"""
+    res = client_with_storage.post("/api/v1/chat", json={"message": "first"})
+    sid = res.headers["X-Session-Id"]
+    client_with_storage.post("/api/v1/chat", json={"message": "second"}, headers={"X-Session-Id": sid})
+
+    res = client_with_storage.get("/api/v1/sessions?preview=2")
+    assert res.status_code == 200
+    data = res.json()
+    assert isinstance(data, list)
+    assert len(data) >= 1
+
+    session = next(s for s in data if s["session_id"] == sid)
+    assert "preview" in session
+    assert isinstance(session["preview"], list)
+    assert len(session["preview"]) <= 2
+    assert "message_count" in session
+    assert session["message_count"] >= 2
+
+
+def test_list_sessions_without_preview(client_with_storage: TestClient) -> None:
+    """GET /sessions 不带 preview 时不应返回 preview 字段（向后兼容）。"""
+    client_with_storage.post("/api/v1/chat", json={"message": "hello"})
+
+    res = client_with_storage.get("/api/v1/sessions")
+    assert res.status_code == 200
+    data = res.json()
+    assert isinstance(data, list)
+    assert len(data) >= 1
+    assert "preview" not in data[0]
+    assert "message_count" not in data[0]

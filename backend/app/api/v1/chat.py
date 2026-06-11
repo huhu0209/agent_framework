@@ -224,9 +224,9 @@ async def get_history(
 # ---------------------------------------------------------------------------
 
 @router.get("/sessions")
-async def list_sessions(request: Request) -> list[dict]:
+async def list_sessions(request: Request, preview: int = 0) -> list[dict]:
     sm = request.app.state.session_manager
-    return await sm.list_sessions()
+    return await sm.list_sessions(preview=preview)
 
 
 # ---------------------------------------------------------------------------
