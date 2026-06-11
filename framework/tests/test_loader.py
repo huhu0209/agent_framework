@@ -530,3 +530,60 @@ class TestLoadProfile:
         assert all(isinstance(k, str) for k in result)
         assert all(isinstance(v, str) for v in result.values())
         assert "soul" in result
+
+
+class TestSecurityFixes:
+    """Code review CR-01 / WR-01 / WR-02 修复测试。"""
+
+    def test_profile_path_traversal_rejected(self, tmp_path: Path) -> None:
+        """CR-01: 包含 .. 的 profile 名称 raise ValueError。"""
+        loader = ConfigLoader(
+            global_dir=tmp_path / "global", project_dir=tmp_path / "project"
+        )
+        with pytest.raises(ValueError, match="无效的 profile 名称"):
+            loader.load_profile("../../../etc/passwd")
+
+    def test_profile_slash_rejected(self, tmp_path: Path) -> None:
+        """CR-01: 包含 / 的 profile 名称 raise ValueError。"""
+        loader = ConfigLoader(
+            global_dir=tmp_path / "global", project_dir=tmp_path / "project"
+        )
+        with pytest.raises(ValueError, match="无效的 profile 名称"):
+            loader.load_profile("sub/dir")
+
+    def test_profile_empty_name_rejected(self, tmp_path: Path) -> None:
+        """CR-01: 空 profile 名称 raise ValueError。"""
+        loader = ConfigLoader(
+            global_dir=tmp_path / "global", project_dir=tmp_path / "project"
+        )
+        with pytest.raises(ValueError, match="无效的 profile 名称"):
+            loader.load_profile("")
+
+    def test_load_settings_invalid_values_raise_valueerror(self, tmp_path: Path) -> None:
+        """WR-01: Settings 验证失败时 raise ValueError（带上下文）。"""
+        loader = ConfigLoader(
+            global_dir=tmp_path / "global", project_dir=tmp_path / "project"
+        )
+        (tmp_path / "project" / ".agent-framework").mkdir(parents=True, exist_ok=True)
+        bad_cfg = tmp_path / "project" / ".agent-framework" / "settings.json"
+        bad_cfg.write_text(json.dumps({"model": 12345}), encoding="utf-8")
+
+        with pytest.raises(ValueError, match="配置验证失败"):
+            loader.load_settings()
+
+    def test_read_json_oserror(self, tmp_path: Path) -> None:
+        """WR-02: 文件不可读时 raise ValueError（带上下文）。"""
+        loader = ConfigLoader(
+            global_dir=tmp_path / "global", project_dir=tmp_path / "project"
+        )
+        bad_file = tmp_path / "global" / ".agent-framework" / "settings.json"
+        bad_file.parent.mkdir(parents=True, exist_ok=True)
+        bad_file.write_text("{}", encoding="utf-8")
+        import stat
+        bad_file.chmod(0o000)
+
+        try:
+            with pytest.raises(ValueError, match="配置文件读取失败"):
+                loader._read_json(bad_file)
+        finally:
+            bad_file.chmod(0o644)

@@ -44,6 +44,12 @@ def _find_git_root(start: Path) -> Path | None:
 PROFILE_FILES: list[str] = ["soul.md", "agents.md", "identity.md", "tool_guidance.md"]
 
 
+def _validate_profile_name(name: str) -> None:
+    """验证 profile 名称不含路径遍历字符。"""
+    if not name or "/" in name or "\\" in name or ".." in name:
+        raise ValueError(f"无效的 profile 名称: {name}")
+
+
 class ConfigLoader:
     """配置加载统一入口。
 
@@ -72,6 +78,10 @@ class ConfigLoader:
             raise ValueError(
                 f"配置文件格式错误: {path}"
             ) from exc
+        except OSError as exc:
+            raise ValueError(
+                f"配置文件读取失败: {path}"
+            ) from exc
 
     def load_settings(self) -> Settings:
         """四级覆盖链加载 settings.json，返回 Settings 实例。
@@ -84,7 +94,12 @@ class ConfigLoader:
         local_cfg = self._read_json(self._project_dir / "settings.local.json")
         merged = merge_settings(global_cfg, project_cfg, local_cfg)
         final = apply_env_vars(merged, dict(os.environ))
-        return Settings.model_validate(final)
+        try:
+            return Settings.model_validate(final)
+        except Exception as exc:
+            raise ValueError(
+                f"配置验证失败: {exc}"
+            ) from exc
 
     def discover(self, module_name: str) -> list[Path]:
         """返回优先级从低到高的模块目录路径列表。
@@ -173,6 +188,7 @@ class ConfigLoader:
             {field_name: content}，field_name 去掉 .md 后缀。
         """
         result: dict[str, str] = {}
+        _validate_profile_name(name)
 
         # 先加载 global
         global_profile_dir = self._global_dir / "profiles" / name
