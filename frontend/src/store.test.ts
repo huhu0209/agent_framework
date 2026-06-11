@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useChatStore, resetIdCounter } from './store'
 
+vi.mock('./lib/cache', () => ({
+  persistCacheEntry: vi.fn().mockResolvedValue(undefined),
+}))
+
 // Mock fetch for SSE
 const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
@@ -55,6 +59,7 @@ beforeEach(() => {
     messageCache: new Map(),
     hasMore: false,
     loadingOlder: false,
+    loadingFullHistory: false,
   })
 })
 
@@ -225,7 +230,7 @@ describe('useChatStore', () => {
     await useChatStore.getState().loadSessions()
 
     expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining('/api/v1/sessions'),
+      expect.stringContaining('/api/v1/sessions?preview=5'),
     )
     expect(useChatStore.getState().sessions).toEqual(sessions)
   })
@@ -391,7 +396,9 @@ describe('useChatStore', () => {
 
     const cache = useChatStore.getState().messageCache
     expect(cache.has('cache-test')).toBe(true)
-    expect(cache.get('cache-test')!.length).toBe(2)
+    const entry = cache.get('cache-test')!
+    expect(entry.messages.length).toBe(2)
+    expect(entry.hasMore).toBe(false)
   })
 
   it('prefetchSession populates messageCache', async () => {
@@ -412,7 +419,7 @@ describe('useChatStore', () => {
 
   it('prefetchSession skips if already cached', async () => {
     const cache = new Map()
-    cache.set('cached-1', [{ id: '1', role: 'user' as const, timestamp: 0, content: 'hi' }])
+    cache.set('cached-1', { messages: [{ id: '1', role: 'user' as const, timestamp: 0, content: 'hi' }], hasMore: false, cachedAt: Date.now() })
     useChatStore.setState({ messageCache: cache })
 
     await useChatStore.getState().prefetchSession('cached-1')

@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { z } from 'zod'
-import type { AgentBlock, AgentBlockInit, ChatMessage, MessageRole, SessionInfo, VizEvent } from './types'
+import type { AgentBlock, AgentBlockInit, CacheEntry, ChatMessage, MessageRole, SessionInfo, VizEvent } from './types'
+import { persistCacheEntry } from './lib/cache'
 
 const ssePayloadSchema = z.object({
   text: z.string().optional(),
@@ -112,9 +113,10 @@ interface ChatStore {
   sidebarOpen: boolean
   sessionsLoading: boolean
   switchingSession: boolean
-  messageCache: Map<string, ChatMessage[]>
+  messageCache: Map<string, CacheEntry>
   hasMore: boolean
   loadingOlder: boolean
+  loadingFullHistory: boolean
   errorToast: string | null
   setError: (msg: string) => void
   clearError: () => void
@@ -143,6 +145,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   messageCache: new Map(),
   hasMore: false,
   loadingOlder: false,
+  loadingFullHistory: false,
   errorToast: null,
 
   setError: (msg: string) => {
@@ -193,7 +196,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       set((s) => {
         const msgs = final ? [...s.messages, final] : s.messages
         const cache = new Map(s.messageCache)
-        if (s.sessionId) cache.set(s.sessionId, msgs)
+        if (s.sessionId) {
+          const entry: CacheEntry = { messages: msgs, hasMore: false, cachedAt: Date.now() }
+          cache.set(s.sessionId, entry)
+          persistCacheEntry(s.sessionId, entry)
+        }
         return {
           messages: msgs,
           streamingMessage: null,
@@ -207,11 +214,35 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   loadSessions: async () => {
     set({ sessionsLoading: true })
     try {
-      const res = await fetch(`${API_BASE}/api/v1/sessions`)
+      const res = await fetch(`${API_BASE}/api/v1/sessions?preview=5`)
       if (res.ok) {
         const data = await res.json()
-        const sessions = Array.isArray(data) ? data : []
-        set({ sessions, sessionsLoading: false })
+        const sessions: SessionInfo[] = Array.isArray(data) ? data : []
+        // Write preview data into messageCache (don't overwrite fuller cached entries)
+        const cache = new Map(get().messageCache)
+        for (const session of sessions) {
+          if (session.preview && session.preview.length > 0) {
+            const existing = cache.get(session.session_id)
+            if (existing && !existing.hasMore) {
+              // Already have full data from IndexedDB — keep it
+              continue
+            }
+            const entry: CacheEntry = {
+              messages: session.preview.map((m: Record<string, unknown>, i: number) => ({
+                id: `preview-${i}-${Date.now()}`,
+                role: m.role as MessageRole,
+                timestamp: (m.timestamp as number) ?? Date.now(),
+                ...(m.content ? { content: m.content as string } : {}),
+                ...(m.blocks ? { blocks: toFrontendBlocks(m.blocks as Record<string, unknown>[]) } : {}),
+              })),
+              hasMore: (session.message_count ?? 0) > session.preview.length,
+              cachedAt: Date.now(),
+            }
+            cache.set(session.session_id, entry)
+            persistCacheEntry(session.session_id, entry)
+          }
+        }
+        set({ sessions, sessionsLoading: false, messageCache: cache })
       } else {
         get().setError(`加载会话列表失败: HTTP ${res.status}`)
         set({ sessionsLoading: false })
@@ -225,14 +256,38 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   switchSession: async (id: string) => {
     const cached = get().messageCache.get(id)
     if (cached) {
-      set({ messages: cached, sessionId: id, streamingMessage: null })
+      set({ messages: cached.messages, sessionId: id, streamingMessage: null, hasMore: cached.hasMore })
+      // If preview data, fetch full history in background
+      if (cached.hasMore) {
+        set({ loadingFullHistory: true })
+        fetchMessages(id).then(({ messages, hasMore }) => {
+          const entry: CacheEntry = { messages, hasMore, cachedAt: Date.now() }
+          const cache = new Map(get().messageCache)
+          cache.set(id, entry)
+          persistCacheEntry(id, entry)
+          // Only update if still on this session
+          if (get().sessionId === id) {
+            set({ messages, hasMore, messageCache: cache, loadingFullHistory: false })
+          } else {
+            set({ messageCache: cache, loadingFullHistory: false })
+          }
+        }).catch(() => {
+          set({ loadingFullHistory: false })
+        })
+      }
+      return
+    }
+    if (id.startsWith('temp-')) {
+      set({ messages: [], sessionId: id, streamingMessage: null })
       return
     }
     set({ switchingSession: true })
     try {
       const { messages, hasMore } = await fetchMessages(id)
+      const entry: CacheEntry = { messages, hasMore, cachedAt: Date.now() }
       const cache = new Map(get().messageCache)
-      cache.set(id, messages)
+      cache.set(id, entry)
+      persistCacheEntry(id, entry)
       set({ messages, sessionId: id, streamingMessage: null, switchingSession: false, messageCache: cache, hasMore })
     } catch {
       get().setError('切换会话失败')
@@ -246,7 +301,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       if (!res.ok) return
       const { sessions, sessionId } = get()
       const next = sessions.filter((s) => s.session_id !== id)
-      set({ sessions: next })
+      const cache = new Map(get().messageCache)
+      cache.delete(id)
+      set({ sessions: next, messageCache: cache })
       if (sessionId === id) {
         get().newSession()
       }
@@ -293,12 +350,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   prefetchSession: async (id: string) => {
-    if (get().messageCache.has(id)) return
+    if (id.startsWith('temp-')) return
+    const existing = get().messageCache.get(id)
+    if (existing && !existing.hasMore) return
     try {
-      const { messages } = await fetchMessages(id)
+      const { messages, hasMore } = await fetchMessages(id)
+      const entry: CacheEntry = { messages, hasMore, cachedAt: Date.now() }
       const cache = new Map(get().messageCache)
-      cache.set(id, messages)
+      cache.set(id, entry)
       set({ messageCache: cache })
+      persistCacheEntry(id, entry)
     } catch {
       // prefetch failure is silent
     }
@@ -322,7 +383,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       }))
       if (older.length === 0) { set({ loadingOlder: false, hasMore: false }); return }
       const all = [...older, ...get().messages]
-      set({ messages: all, hasMore: data.has_more ?? false, loadingOlder: false })
+      const hasMore = data.has_more ?? false
+      const entry: CacheEntry = { messages: all, hasMore, cachedAt: Date.now() }
+      const cache = new Map(get().messageCache)
+      cache.set(sessionId, entry)
+      persistCacheEntry(sessionId, entry)
+      set({ messages: all, hasMore, loadingOlder: false, messageCache: cache })
     } catch {
       get().setError('加载历史消息失败')
       set({ loadingOlder: false })
