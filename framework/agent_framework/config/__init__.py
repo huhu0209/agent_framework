@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_framework.config.loader import ConfigLoader
 from agent_framework.config.merge import merge_settings
 from agent_framework.config.settings import (
     ENV_VAR_MAP,
@@ -21,5 +22,6 @@ __all__ = [
     "ServerConfig",
     "Settings",
     "apply_env_vars",
+    "ConfigLoader",
     "merge_settings",
 ]
