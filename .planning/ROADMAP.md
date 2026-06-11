@@ -121,7 +121,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 22-01 — Three from_loader() factory methods (SkillRegistry, HookManager, CommandDispatcher) with TDD
+- [ ] 22-01 — Three from_loader() factory methods (SkillRegistry, HookManager, CommandDispatcher) with TDD *(Wave 1)*
 
 ### Phase 23: Complex Module Adapters — Agents, Profiles, MCP, Tasks, Permissions
 **Goal**: 所有剩余模块适配器完成，支持多目录扫描和名称冲突处理

@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v0.0.6
 milestone_name: 路径文件的统一
-status: planning
-stopped_at: Phase 22 context gathered
-last_updated: "2026-06-11T12:58:38.187Z"
+status: ready to execute
+stopped_at: Phase 22 planned
+last_updated: "2026-06-11T13:05:00.000Z"
 last_activity: 2026-06-11
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 3
+  total_plans: 4
   completed_plans: 3
   percent: 40
 ---
@@ -35,11 +35,11 @@ See: .planning/PROJECT.md (updated 2026-06-11)
 ## Current Position
 
 Phase: 22
-Plan: Not started
-Status: Ready to plan
+Plan: 22-01 (1 plan, 3 tasks)
+Status: Ready to execute
 Last activity: 2026-06-11
 
-Progress: [          ] 0%
+Progress: [██        ] 20%
 
 ## Velocity
 
@@ -84,6 +84,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-11T12:58:38.182Z
-Stopped at: Phase 22 context gathered
-Resume file: .planning/phases/22-simple-module-adapters-skills-hooks-commands/22-CONTEXT.md
+Last session: 2026-06-11T13:05:00.000Z
+Stopped at: Phase 22 planned (1 plan, 3 tasks)
+Resume file: .planning/phases/22-simple-module-adapters-skills-hooks-commands/22-01-PLAN.md
