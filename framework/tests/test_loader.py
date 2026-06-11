@@ -328,7 +328,7 @@ class TestLoadAgentsMd:
         """Test 4: 父目录链方向 — 从 .git 根向下，低到高优先级。"""
         # repo/.git, project_dir = repo/a/b
         git_root = tmp_path / "repo"
-        (git_root / ".git").mkdir()
+        (git_root / ".git").mkdir(parents=True)
         project_dir = git_root / "a" / "b"
         project_dir.mkdir(parents=True)
 

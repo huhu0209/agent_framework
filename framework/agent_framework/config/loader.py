@@ -23,6 +23,23 @@ MODULE_DIRS: dict[str, str] = {
 }
 
 
+def _read_text_file(path: Path) -> str:
+    """读取文件内容，不存在返回空字符串。"""
+    if path.exists():
+        return path.read_text(encoding="utf-8")
+    return ""
+
+
+def _find_git_root(start: Path) -> Path | None:
+    """从 start 向上查找包含 .git/ 的目录。"""
+    if (start / ".git").is_dir():
+        return start
+    for parent in start.parents:
+        if (parent / ".git").is_dir():
+            return parent
+    return None
+
+
 class ConfigLoader:
     """配置加载统一入口。
 
@@ -86,6 +103,58 @@ class ConfigLoader:
             if module_path.is_dir():
                 paths.append(module_path)
         return paths
+
+    def _parent_agents_chain(self) -> list[tuple[Path, str]]:
+        """收集从 .git 根到 project_root 的父目录链中 AGENTS.md 路径。
+
+        低优先级在前（靠近 .git 根），高优先级在后（靠近 project_root）。
+        """
+        project_root = self._project_dir.parent
+        git_root = _find_git_root(project_root)
+        if git_root is None or git_root == project_root:
+            return []
+
+        # 从 project_root 向上收集到 git_root 的中间目录
+        chain_dirs: list[Path] = []
+        current = project_root
+        while current != git_root and current != current.parent:
+            chain_dirs.append(current)
+            current = current.parent
+
+        # 反转: 从 git_root 附近到 project_root 附近（低到高优先级）
+        result: list[tuple[Path, str]] = []
+        for d in reversed(chain_dirs):
+            try:
+                label = str(d.relative_to(project_root)) + "/AGENTS.md"
+            except ValueError:
+                label = str(d) + "/AGENTS.md"
+            result.append((d / "AGENTS.md", label))
+        return result
+
+    def load_agents_md(self) -> str:
+        """拼接完整的 AGENTS.md 指令链。
+
+        顺序: global -> project -> local -> 父目录链 -> user.md
+        每个片段带 '# Source: <label>' 标题，片段间双换行分隔。
+        文件缺失或空内容静默跳过。
+        """
+        sources: list[tuple[Path, str]] = [
+            (self._global_dir / "AGENTS.md", "~/.agent-framework/AGENTS.md"),
+            (self._project_dir / "AGENTS.md", ".agent-framework/AGENTS.md"),
+            (self._project_dir / "AGENTS.local.md", ".agent-framework/AGENTS.local.md"),
+        ]
+        sources.extend(self._parent_agents_chain())
+        sources.append(
+            (self._global_dir / "user.md", "~/.agent-framework/user.md")
+        )
+
+        parts: list[str] = []
+        for path, label in sources:
+            content = _read_text_file(path)
+            if content.strip():
+                parts.append(f"# Source: {label}\n{content}")
+
+        return "\n\n".join(parts)
 
     def load_profile(self, name: str) -> dict[str, str]:
         """加载指定 profile — 占位，Phase 21-02 实现。"""
