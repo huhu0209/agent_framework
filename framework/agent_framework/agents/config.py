@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
 from agent_framework.agents.agent_loop import AgentLoop
+from agent_framework.config.loader import ConfigLoader
 from agent_framework.llm.base import ILLMAdapter
 from agent_framework.memory.frontmatter import parse_frontmatter
 from agent_framework.tools.router import ToolRouter
 from agent_framework.tools.types import ToolUseContext
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -22,6 +26,24 @@ class AgentConfig:
     model: str = "claude-sonnet-4-6-20250514"
     max_steps: int = 10
     tools: list[str] | None = None
+
+    @classmethod
+    def from_loader(cls, loader: ConfigLoader) -> dict[str, AgentConfig]:
+        """从 ConfigLoader 的多目录扫描加载所有 Agent 配置。
+
+        按 discover() 自然顺序 [global, project] 迭代，project 后写入
+        覆盖 global。名称冲突时记录 warning。
+        """
+        paths = loader.discover("agents")
+        result: dict[str, AgentConfig] = {}
+        for path in paths:
+            for name, config in load_agent_configs(path).items():
+                if name in result:
+                    logger.warning(
+                        "Agent '%s' from %s overrides global", name, path,
+                    )
+                result[name] = config
+        return result
 
 
 def _extract_body(text: str) -> str:
