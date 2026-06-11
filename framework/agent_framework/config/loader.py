@@ -40,6 +40,10 @@ def _find_git_root(start: Path) -> Path | None:
     return None
 
 
+# Profile 子文件名列表
+PROFILE_FILES: list[str] = ["soul.md", "agents.md", "identity.md", "tool_guidance.md"]
+
+
 class ConfigLoader:
     """配置加载统一入口。
 
@@ -157,5 +161,33 @@ class ConfigLoader:
         return "\n\n".join(parts)
 
     def load_profile(self, name: str) -> dict[str, str]:
-        """加载指定 profile — 占位，Phase 21-02 实现。"""
-        raise NotImplementedError("load_profile 将在后续 plan 中实现")
+        """加载并合并指定 profile 的字段。
+
+        先加载 global profiles/<name>/ 的子文件，再用 project
+        profiles/<name>/ 的非空子文件覆盖。缺失子文件静默跳过。
+
+        Args:
+            name: profile 目录名（如 "default"）。
+
+        Returns:
+            {field_name: content}，field_name 去掉 .md 后缀。
+        """
+        result: dict[str, str] = {}
+
+        # 先加载 global
+        global_profile_dir = self._global_dir / "profiles" / name
+        for filename in PROFILE_FILES:
+            field = filename.removesuffix(".md")
+            content = _read_text_file(global_profile_dir / filename).strip()
+            if content:
+                result[field] = content
+
+        # 再用 project 的非空字段覆盖
+        project_profile_dir = self._project_dir / "profiles" / name
+        for filename in PROFILE_FILES:
+            field = filename.removesuffix(".md")
+            content = _read_text_file(project_profile_dir / filename).strip()
+            if content:
+                result[field] = content
+
+        return result
