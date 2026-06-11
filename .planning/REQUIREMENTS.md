@@ -80,15 +80,15 @@
 
 ### ADP — Module Adapters（模块适配器）
 
-- [ ] **ADP-01**: SkillRegistry.from_loader() 工厂方法，从 discover("skills") 路径列表加载
-- [ ] **ADP-02**: HookManager.from_loader() 工厂方法，从 discover("hooks") 路径列表合并 hooks.json
-- [ ] **ADP-03**: CommandRegistry.from_loader() 工厂方法，从 discover("commands") 路径列表加载
+- [x] **ADP-01**: SkillRegistry.from_loader() 工厂方法，从 discover("skills") 路径列表加载
+- [x] **ADP-02**: HookManager.from_loader() 工厂方法，从 discover("hooks") 路径列表合并 hooks.json
+- [x] **ADP-03**: CommandRegistry.from_loader() 工厂方法，从 discover("commands") 路径列表加载
 - [ ] **ADP-04**: AgentProfile.from_loader() 工厂方法，从 discover("agents") 路径列表加载，同名项目覆盖全局并 warning
 - [ ] **ADP-05**: AgentProfile.from_profile() 支持 discover("profiles") 目录加载
 - [ ] **ADP-06**: McpManager.from_loader() 工厂方法，从 discover("mcp") 合并 servers.json
 - [ ] **ADP-07**: TaskManager 集成 — tasks_dir 默认值改为 .agent-framework/tasks/
 - [ ] **ADP-08**: PermissionPipeline 从 settings.permissions 自动注入 allow/deny 列表
-- [ ] **ADP-09**: 所有适配器保持向后兼容 — 现有构造函数签名不变，工厂方法为新增 API
+- [x] **ADP-09**: 所有适配器保持向后兼容 — 现有构造函数签名不变，工厂方法为新增 API
 
 ### INT — Integration & Testing（集成与测试）
 
@@ -143,10 +143,10 @@
 | INS-02 | Phase 21 | Complete |
 | INS-04 | Phase 21 | Complete |
 | INS-05 | Phase 21 | Complete |
-| ADP-01 | Phase 22 | Pending |
-| ADP-02 | Phase 22 | Pending |
-| ADP-03 | Phase 22 | Pending |
-| ADP-09 | Phase 22 | Pending |
+| ADP-01 | Phase 22 | Complete |
+| ADP-02 | Phase 22 | Complete |
+| ADP-03 | Phase 22 | Complete |
+| ADP-09 | Phase 22 | Complete |
 | ADP-04 | Phase 23 | Pending |
 | ADP-05 | Phase 23 | Pending |
 | ADP-06 | Phase 23 | Pending |

@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.0.6
 milestone_name: 路径文件的统一
-status: ready to execute
-stopped_at: Phase 22 planned
-last_updated: "2026-06-11T13:05:00.000Z"
+status: executing
+stopped_at: Phase 22 Plan 01 complete
+last_updated: "2026-06-11T13:17:51.000Z"
 last_activity: 2026-06-11
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 4
-  completed_plans: 3
+  completed_plans: 4
   percent: 40
 ---
 
@@ -35,11 +35,11 @@ See: .planning/PROJECT.md (updated 2026-06-11)
 ## Current Position
 
 Phase: 22
-Plan: 22-01 (1 plan, 3 tasks)
-Status: Ready to execute
+Plan: 22-01 complete (1/1 plans)
+Status: Phase 22 complete
 Last activity: 2026-06-11
 
-Progress: [██        ] 20%
+Progress: [██        ] 40%
 
 ## Velocity
 
@@ -63,11 +63,10 @@ Recent decisions affecting current work:
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
-- **Name collision direction**: SkillRegistry keeps first-encountered, but discover() returns [global, project] low-to-high. Must resolve during Phase 22: reverse scan order or collect-then-resolve.
 - **Backend circular import risk**: backend/app/config importing from framework config/. Spike needed in Phase 24 to verify no circular chain.
 
 ## Deferred Items
@@ -84,6 +83,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-11T13:05:00.000Z
-Stopped at: Phase 22 planned (1 plan, 3 tasks)
-Resume file: .planning/phases/22-simple-module-adapters-skills-hooks-commands/22-01-PLAN.md
+Last session: 2026-06-11T13:17:51.000Z
+Stopped at: Phase 22 Plan 01 complete — 3 from_loader() factory methods, 1096 tests passing
+Resume file: .planning/phases/22-simple-module-adapters-skills-hooks-commands/22-01-SUMMARY.md
