@@ -9,7 +9,7 @@ import logging
 import time
 from typing import Any, AsyncGenerator
 
-from fastapi import APIRouter, HTTPException, Path, Request
+from fastapi import APIRouter, HTTPException, Path, Query, Request
 from starlette.responses import StreamingResponse
 
 from agent_framework.agents.agent_loop import LoopEvent
@@ -224,9 +224,28 @@ async def get_history(
 # ---------------------------------------------------------------------------
 
 @router.get("/sessions")
-async def list_sessions(request: Request, preview: int = 0) -> list[dict]:
+async def list_sessions(request: Request, preview: int = Query(0, ge=0, le=50)) -> list[dict]:
     sm = request.app.state.session_manager
-    return await sm.list_sessions(preview=preview)
+    sessions = await sm.list_sessions()
+    if preview > 0:
+        result = []
+        for i, session in enumerate(sessions):
+            new_session = {**session}  # copy to avoid mutating cache
+            if i < 10:
+                msgs = await sm.get_messages(session["session_id"], limit=preview)
+                if msgs is not None:
+                    messages, has_more, _ = msgs
+                    new_session["preview"] = messages
+                    if has_more:
+                        all_msgs = await sm._get_all_messages(session["session_id"])
+                        new_session["message_count"] = len(all_msgs) if all_msgs else preview
+                    else:
+                        new_session["message_count"] = len(messages)
+            else:
+                new_session["preview"] = None
+            result.append(new_session)
+        return result
+    return sessions
 
 
 # ---------------------------------------------------------------------------

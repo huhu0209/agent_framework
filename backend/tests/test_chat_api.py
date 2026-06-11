@@ -395,24 +395,24 @@ def test_get_history_after_eviction(client_with_storage: TestClient) -> None:
     assert any(m["role"] == "user" for m in data["messages"])
 
 
-def test_list_sessions_uses_cache(client_with_storage: TestClient) -> None:
+async def test_list_sessions_uses_cache(client_with_storage: TestClient) -> None:
     """list_sessions 应使用缓存，第二次调用返回同一对象。"""
     client_with_storage.post("/api/v1/chat", json={"message": "hello"})
 
     sm = client_with_storage.app.state.session_manager
-    first = sm.list_sessions()
+    first = await sm.list_sessions()
     assert len(first) >= 1
 
     assert sm._session_list_cache is not None
-    second = sm.list_sessions()
+    second = await sm.list_sessions()
     assert second is first  # same object reference = cache hit
 
 
-def test_list_sessions_cache_invalidated_on_create(client_with_storage: TestClient) -> None:
+async def test_list_sessions_cache_invalidated_on_create(client_with_storage: TestClient) -> None:
     """创建 session 后缓存应失效。"""
     client_with_storage.post("/api/v1/chat", json={"message": "first"})
     sm = client_with_storage.app.state.session_manager
-    sm.list_sessions()
+    await sm.list_sessions()
 
     client_with_storage.post("/api/v1/chat", json={"message": "second"})
     assert sm._session_list_cache is None
