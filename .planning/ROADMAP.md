@@ -183,7 +183,7 @@ Phases execute in numeric order: 20 → 21 → 22 → 23 → 24
 | 18. Backend 全面修复 | v0.0.5 | 3/3 | Complete | 2026-06-10 |
 | 19. Frontend 全面修复 | v0.0.5 | 2/2 | Complete | 2026-06-10 |
 | 20. Settings + Merge | v0.0.6 | 1/1 | Complete    | 2026-06-11 |
-| 21. Discovery + Loader | v0.0.6 | 2/2 | Complete   | 2026-06-11 |
+| 21. Discovery + Loader | v0.0.6 | 2/2 | Complete    | 2026-06-11 |
 | 22. Simple Adapters | v0.0.6 | 0/? | Not started | - |
 | 23. Complex Adapters | v0.0.6 | 0/? | Not started | - |
 | 24. Integration + E2E | v0.0.6 | 0/? | Not started | - |
