@@ -5,6 +5,8 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
+from agent_framework.config.loader import ConfigLoader
+from agent_framework.config.settings import Settings
 from agent_framework.prompts.profiles import AgentProfile
 
 
@@ -47,6 +49,42 @@ class PermissionPipeline:
         self._profile = profile
         self._critical_tools = critical_tools
         self._annotations: dict[str, dict[str, Any]] = {}
+
+    @classmethod
+    def from_loader(
+        cls,
+        loader: ConfigLoader,
+        profile_name: str,
+        *,
+        _profile: AgentProfile | None = None,
+    ) -> PermissionPipeline:
+        """从 ConfigLoader 加载 profile 和 settings，合并权限配置。
+
+        调用 AgentProfile.from_profile(loader, profile_name) 获取 profile，
+        再从 loader.load_settings() 获取 Settings，将 settings.permissions
+        的 allow/deny 合并到 profile 的 allowed_tools/disallowed_tools。
+        不重复添加已存在的工具名。
+
+        _profile 参数仅用于测试注入，生产代码不传此参数。
+        """
+        profile = _profile if _profile is not None else AgentProfile.from_profile(loader, profile_name)
+        settings = loader.load_settings()
+
+        allowed = list(profile.allowed_tools or [])
+        for tool in settings.permissions.allow:
+            if tool not in allowed:
+                allowed.append(tool)
+
+        disallowed = list(profile.disallowed_tools or [])
+        for tool in settings.permissions.deny:
+            if tool not in disallowed:
+                disallowed.append(tool)
+
+        merged_profile = profile.model_copy(update={
+            "allowed_tools": allowed,
+            "disallowed_tools": disallowed,
+        })
+        return cls(profile=merged_profile)
 
     def register_annotations(self, tool_name: str, annotations: dict[str, Any]) -> None:
         """注册工具的注解信息。"""

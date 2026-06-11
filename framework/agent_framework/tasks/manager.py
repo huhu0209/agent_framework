@@ -32,7 +32,9 @@ class TaskManager:
     注意：此类非线程安全，仅适用于 asyncio 单线程环境。
     """
 
-    def __init__(self, tasks_dir: Path):
+    def __init__(self, tasks_dir: Path | None = None):
+        if tasks_dir is None:
+            tasks_dir = Path.cwd() / ".agent-framework" / "tasks"
         self._dir = tasks_dir
         self._dir.mkdir(parents=True, exist_ok=True)
         self._next_id = self._load_max_id() + 1
