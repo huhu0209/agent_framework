@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.0.6
 milestone_name: 路径文件的统一
-status: ready_to_plan
-stopped_at: Phase 21 complete (2/2) — ready to discuss Phase 22
-last_updated: 2026-06-11T11:53:24.532Z
-last_activity: 2026-06-11 -- Phase 21 execution started
+status: planning
+stopped_at: Phase 22 context gathered
+last_updated: "2026-06-11T12:58:38.187Z"
+last_activity: 2026-06-11
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 3
-  completed_plans: 33
-  percent: 20
+  completed_plans: 3
+  percent: 40
 ---
 
 # STATE.md
@@ -84,6 +84,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-06-11T10:42:35.981Z
-Stopped at: Phase 21 context gathered
-Resume file: .planning/phases/21-discovery-loader-agents-md-chain/21-CONTEXT.md
+Last session: 2026-06-11T12:58:38.182Z
+Stopped at: Phase 22 context gathered
+Resume file: .planning/phases/22-simple-module-adapters-skills-hooks-commands/22-CONTEXT.md
