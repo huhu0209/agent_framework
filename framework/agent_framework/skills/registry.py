@@ -6,6 +6,7 @@ import logging
 from pathlib import Path, PurePosixPath
 from xml.sax.saxutils import quoteattr
 
+from agent_framework.config.loader import ConfigLoader
 from agent_framework.skills.parser import (
     _parse_bool,
     _parse_list,
@@ -34,6 +35,17 @@ class SkillRegistry:
         self._documents: dict[str, SkillDocument] = {}
         self._dir_mtimes: dict[Path, float] = {}
         self._full_refresh()
+
+    @classmethod
+    def from_loader(cls, loader: ConfigLoader) -> SkillRegistry:
+        """从 ConfigLoader.discover("skills") 路径创建注册表。
+
+        discover() 返回 [global, project] 低到高优先级，
+        反转后 [project, global] 传给 __init__ 的 first-found-wins 语义，
+        使 project 级同名 skill 覆盖 global。
+        """
+        paths = loader.discover("skills")
+        return cls(skills_dirs=list(reversed(paths)))
 
     def describe_available(self) -> str:
         """L1: 轻量目录，注入 system prompt。自动检查更新。仅显示 active skills。"""
