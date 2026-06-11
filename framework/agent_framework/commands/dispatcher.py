@@ -10,6 +10,7 @@ from agent_framework.commands.types import (
     CommandResult,
     SlashCommand,
 )
+from agent_framework.config.loader import ConfigLoader
 from agent_framework.skills.registry import SkillRegistry
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,12 @@ class CommandDispatcher:
         self._skill_registry = skill_registry
         self._builtins: dict[str, SlashCommand] = {}
         register_all(self._builtins, skill_registry=skill_registry)
+
+    @classmethod
+    def from_loader(cls, loader: ConfigLoader) -> CommandDispatcher:
+        """从 ConfigLoader 创建 CommandDispatcher，自动加载 SkillRegistry。"""
+        skill_registry = SkillRegistry.from_loader(loader)
+        return cls(skill_registry=skill_registry)
 
     def resolve(self, user_input: str) -> CommandResult:
         """解析 /command args -> CommandResult。
