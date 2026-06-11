@@ -227,14 +227,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               // Already have full data from IndexedDB — keep it
               continue
             }
+            const previewMsgs = (session.preview as unknown as Record<string, unknown>[]).map((m, i) => ({
+              id: `preview-${i}-${Date.now()}`,
+              role: m.role as MessageRole,
+              timestamp: (m.timestamp as number) ?? Date.now(),
+              ...(m.content ? { content: m.content as string } : {}),
+              ...(m.blocks ? { blocks: toFrontendBlocks(m.blocks as Record<string, unknown>[]) } : {}),
+            }))
             const entry: CacheEntry = {
-              messages: session.preview.map((m: Record<string, unknown>, i: number) => ({
-                id: `preview-${i}-${Date.now()}`,
-                role: m.role as MessageRole,
-                timestamp: (m.timestamp as number) ?? Date.now(),
-                ...(m.content ? { content: m.content as string } : {}),
-                ...(m.blocks ? { blocks: toFrontendBlocks(m.blocks as Record<string, unknown>[]) } : {}),
-              })),
+              messages: previewMsgs,
               hasMore: (session.message_count ?? 0) > session.preview.length,
               cachedAt: Date.now(),
             }
