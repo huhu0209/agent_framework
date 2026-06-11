@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+
 
 def merge_settings(*dicts: dict) -> dict:
     """合并多个配置字典，从低到高优先级。
@@ -24,17 +26,22 @@ def merge_settings(*dicts: dict) -> dict:
     for d in dicts:
         for key, value in d.items():
             if key not in result:
-                result[key] = value
+                result[key] = copy.deepcopy(value)
             elif isinstance(value, dict) and isinstance(result[key], dict):
                 result[key] = merge_settings(result[key], value)
-            elif isinstance(value, list) and isinstance(result[key], list):
-                seen: set = set()
-                merged: list = []
+            elif (
+                isinstance(value, list)
+                and isinstance(result[key], list)
+                and all(isinstance(item, str) for item in result[key])
+                and all(isinstance(item, str) for item in value)
+            ):
+                seen: set[str] = set()
+                merged: list[str] = []
                 for item in result[key] + value:
                     if item not in seen:
                         seen.add(item)
                         merged.append(item)
                 result[key] = merged
             else:
-                result[key] = value
+                result[key] = copy.deepcopy(value)
     return result
