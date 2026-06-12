@@ -7,7 +7,7 @@
 - ✅ **v0.0.3 Agent 可视化平台 MVP** — Phases 9-11 (shipped 2026-05-31)
 - ✅ **v0.0.4 全面代码审查** — Phases 12-14 (shipped 2026-06-09)
 - ✅ **v0.0.5 Review 问题修复** — Phases 15-19 (shipped 2026-06-10)
-- 🚧 **v0.0.6 路径文件的统一** — Phases 20-24 (in progress)
+- 🚧 **v0.0.6 路径文件的统一** — Phases 20-25 (in progress)
 
 ## Phases
 
@@ -75,6 +75,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 22: Simple Module Adapters — Skills, Hooks, Commands** - 为已有 list[Path] 构造函数的模块添加 from_loader() 工厂方法 (completed 2026-06-11)
 - [x] **Phase 23: Complex Module Adapters — Agents, Profiles, MCP, Tasks, Permissions** - 多目录扫描、名称冲突处理、复杂配置合并
 - [x] **Phase 24: Backend Integration + E2E Wiring + Path-Scoped Rules** - 应用层集成、端到端验证、零回归确认 (3/3 plans) — completed 2026-06-12
+- [ ] **Phase 25: Address Tech Debt — Integration Warnings + Stale Docs** - 清理集成测试警告和过时文档 (4 plans)
 
 ## Phase Details
 
@@ -156,10 +157,24 @@ Plans:
 - [x] 24-02-PLAN.md — PromptAssembler integration + test signature updates *(Wave 2)*
 - [x] 24-03-PLAN.md — Backend wiring + AgentFactory.from_configloader + E2E test *(Wave 3)*
 
-## Progress
+### Phase 25: Address Tech Debt — Integration Warnings + Stale Docs
+**Goal**: 清理 v0.0.6 遗留的技术债务：集成测试中的 asyncio 警告 (WR-01/02/03) 和过时文档
+**Depends on**: Phase 24
+**Requirements**: D-01 through D-17 (from CONTEXT.md decisions)
+**Success Criteria** (what must be TRUE):
+  1. All integration test warnings resolved — no asyncio timing/cleanup warnings in test output
+  2. Stale documentation updated to reflect current API and architecture
+  3. All 1146+ existing tests pass unchanged after this phase
+**Plans**: 4 plans
+
+Plans:
+- [ ] 25-01-PLAN.md — Asyncio warning verification + STATE.md update *(Wave 1)*
+- [ ] 25-02-PLAN.md — REQUIREMENTS.md completion markers + traceability *(Wave 1)*
+- [ ] 25-03-PLAN.md — README.md full refresh (class names, modules, roadmap) *(Wave 1)*
+- [ ] 25-04-PLAN.md — PROJECT.md + CONCERNS.md updates *(Wave 1)*
 
 **Execution Order:**
-Phases execute in numeric order: 20 → 21 → 22 → 23 → 24
+Phases execute in numeric order: 20 → 21 → 22 → 23 → 24 → 25
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -187,3 +202,4 @@ Phases execute in numeric order: 20 → 21 → 22 → 23 → 24
 | 22. Simple Adapters | v0.0.6 | 1/1 | Complete | 2026-06-11 |
 | 23. Complex Adapters | v0.0.6 | 2/2 | Complete | 2026-06-12 |
 | 24. Integration + E2E | v0.0.6 | 3/3 | Complete | 2026-06-12 |
+| 25. Tech Debt Warnings + Docs | v0.0.6 | 0/4 | Not started | — |
