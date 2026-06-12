@@ -2,16 +2,26 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from agent_framework.agents.agent_loop import AgentLoop
+from agent_framework.agents.config import AgentConfig
+from agent_framework.commands.dispatcher import CommandDispatcher
+from agent_framework.config.loader import ConfigLoader
+from agent_framework.hooks.manager import HookManager
 from agent_framework.llm import create_adapter
 from agent_framework.llm.resilient import ResilientLLMAdapter
+from agent_framework.prompts.assembler import PromptAssembler
+from agent_framework.prompts.profiles import AgentProfile
+from agent_framework.skills.registry import SkillRegistry
 from agent_framework.tools.builtin import create_builtin_registry
 from agent_framework.tools.router import ToolRouter
 from agent_framework.tools.types import ToolUseContext
 
 from app.config import Settings
+
+logger = logging.getLogger(__name__)
 
 
 class AgentFactory:
@@ -32,6 +42,45 @@ class AgentFactory:
             base_url=settings.llm_base_url,
         )
         return cls(adapter=adapter, model=settings.llm_model, storage_dir=storage_dir)
+
+    @classmethod
+    def from_configloader(cls, loader: ConfigLoader, backend_settings: Settings) -> AgentFactory:
+        """单次调用全初始化 — per D-13, D-14。
+
+        从 ConfigLoader 初始化所有模块注册表，创建完整的 AgentFactory。
+        backend_settings 用于 LLM adapter 创建（env vars 已为最高优先级 per D-01）。
+        """
+        # LLM adapter — 使用 backend_settings（env var 已注入）
+        adapter = create_adapter(
+            provider=backend_settings.llm_provider,
+            api_key=backend_settings.llm_api_key.get_secret_value(),
+            model=backend_settings.llm_model,
+            base_url=backend_settings.llm_base_url,
+        )
+        factory = cls(adapter=adapter, model=backend_settings.llm_model)
+
+        # 存储 loader 引用
+        factory._loader = loader
+
+        # 初始化模块注册表 per D-14
+        factory._skill_registry = SkillRegistry.from_loader(loader)
+        factory._hook_manager = HookManager.from_loader(loader)
+        factory._command_dispatcher = CommandDispatcher.from_loader(loader)
+
+        # 加载 Agent 配置
+        factory._agent_configs = AgentConfig.from_loader(loader)
+
+        # 加载默认 profile — 不存在时为 None
+        factory._default_profile = None
+        try:
+            factory._default_profile = AgentProfile.from_profile(loader, "default")
+        except ValueError:
+            logger.info("default profile 不存在，跳过")
+
+        # PromptAssembler with skill registry
+        factory._assembler = PromptAssembler(skill_registry=factory._skill_registry)
+
+        return factory
 
     def create_loop(self) -> AgentLoop:
         ctx = ToolUseContext()
