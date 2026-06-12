@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v0.0.6
 milestone_name: 路径文件的统一
-status: executing
-last_updated: "2026-06-12T06:24:44.575Z"
+status: milestone_complete
+last_updated: 2026-06-12T06:32:42.465Z
 last_activity: 2026-06-12 -- Phase 25 execution started
 progress:
   total_phases: 6
   completed_phases: 5
   total_plans: 13
-  completed_plans: 9
-  percent: 69
+  completed_plans: 43
+  percent: 83
+stopped_at: Milestone complete (Phase 25 was final phase)
 ---
 
 # STATE.md
@@ -20,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-11)
 
 **Core value:** 可靠的 Agent 编排框架，提供安全、可测试、可扩展的基础设施
-**Current focus:** Phase 25 — tech-debt-integration-warnings-stale-docs
+**Current focus:** Milestone complete
 
 ## Milestone History
 
@@ -33,10 +34,10 @@ See: .planning/PROJECT.md (updated 2026-06-11)
 
 ## Current Position
 
-Phase: 25 (tech-debt-integration-warnings-stale-docs) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 25
-Last activity: 2026-06-12 -- Phase 25 execution started
+Phase: 25
+Plan: Not started
+Status: Milestone complete
+Last activity: 2026-06-12
 
 Progress: [████████░░] 83%
 

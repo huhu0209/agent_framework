@@ -75,7 +75,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 22: Simple Module Adapters — Skills, Hooks, Commands** - 为已有 list[Path] 构造函数的模块添加 from_loader() 工厂方法 (completed 2026-06-11)
 - [x] **Phase 23: Complex Module Adapters — Agents, Profiles, MCP, Tasks, Permissions** - 多目录扫描、名称冲突处理、复杂配置合并
 - [x] **Phase 24: Backend Integration + E2E Wiring + Path-Scoped Rules** - 应用层集成、端到端验证、零回归确认 (3/3 plans) — completed 2026-06-12
-- [ ] **Phase 25: Address Tech Debt — Integration Warnings + Stale Docs** - 清理集成测试警告和过时文档 (4 plans)
+- [x] **Phase 25: Address Tech Debt — Integration Warnings + Stale Docs** - 清理集成测试警告和过时文档 (4 plans) (completed 2026-06-12)
 
 ## Phase Details
 
@@ -168,10 +168,10 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 25-01-PLAN.md — Asyncio warning verification + STATE.md update *(Wave 1)*
-- [ ] 25-02-PLAN.md — REQUIREMENTS.md completion markers + traceability *(Wave 1)*
-- [ ] 25-03-PLAN.md — README.md full refresh (class names, modules, roadmap) *(Wave 1)*
-- [ ] 25-04-PLAN.md — PROJECT.md + CONCERNS.md updates *(Wave 1)*
+- [x] 25-01-PLAN.md — Asyncio warning verification + STATE.md update *(Wave 1)*
+- [x] 25-02-PLAN.md — REQUIREMENTS.md completion markers + traceability *(Wave 1)*
+- [x] 25-03-PLAN.md — README.md full refresh (class names, modules, roadmap) *(Wave 1)*
+- [x] 25-04-PLAN.md — PROJECT.md + CONCERNS.md updates *(Wave 1)*
 
 **Execution Order:**
 Phases execute in numeric order: 20 → 21 → 22 → 23 → 24 → 25
@@ -202,4 +202,4 @@ Phases execute in numeric order: 20 → 21 → 22 → 23 → 24 → 25
 | 22. Simple Adapters | v0.0.6 | 1/1 | Complete | 2026-06-11 |
 | 23. Complex Adapters | v0.0.6 | 2/2 | Complete | 2026-06-12 |
 | 24. Integration + E2E | v0.0.6 | 3/3 | Complete | 2026-06-12 |
-| 25. Tech Debt Warnings + Docs | v0.0.6 | 0/4 | Not started | — |
+| 25. Tech Debt Warnings + Docs | v0.0.6 | 4/4 | Complete    | 2026-06-12 |
