@@ -41,12 +41,14 @@ def create_settings(framework_settings: FrameworkSettings | None = None) -> Sett
     # 只传递与默认值不同的 framework 值作为 kwargs。
     # 不传 kwargs 时 pydantic-settings 从 env vars / env_file / defaults 解析，
     # 确保 APP_LLM_API_KEY env var 优先于 framework 的空值。
+    # 使用 Settings.model_fields 获取实际默认值，避免硬编码字符串耦合。
     kwargs: dict = {}
+    defaults = Settings.model_fields
 
-    if framework_settings.model != "claude-sonnet-4-20250514":
+    if framework_settings.model != defaults["llm_model"].default:
         kwargs["llm_model"] = framework_settings.model
 
-    if framework_settings.llm.provider != "anthropic":
+    if framework_settings.llm.provider != defaults["llm_provider"].default:
         kwargs["llm_provider"] = framework_settings.llm.provider
 
     fw_api_key = framework_settings.llm.api_key

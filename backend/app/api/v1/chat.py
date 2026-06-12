@@ -60,7 +60,7 @@ def _classify_error(exc: Exception) -> ErrorCategory:
     if isinstance(exc, LLMAdapterError):
         return ErrorCategory.LLM_TIMEOUT
     if isinstance(exc, asyncio.TimeoutError):
-        return ErrorCategory.TOOL_ERROR
+        return ErrorCategory.LLM_TIMEOUT
     return ErrorCategory.UNKNOWN_ERROR
 
 

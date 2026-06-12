@@ -197,3 +197,19 @@ class TestE2EIntegration:
         instructions_idx = result.index("<instructions>")
         skills_idx = result.index("<skills>")
         assert user_idx < rules_idx < soul_idx < instructions_idx < skills_idx
+
+    def test_prompt_assembler_with_context_path(self, tmp_path: Path) -> None:
+        """context_path 通过 assembler 全链路传递 — 路径限定规则正确加载。"""
+        loader = _setup_framework(tmp_path)
+        registry = SkillRegistry.from_loader(loader)
+        profile = AgentProfile.from_profile(loader, "default")
+        assembler = PromptAssembler(skill_registry=registry)
+
+        # 传入 context_path 匹配 scoped-rule 的 paths 模式 (src/**.py)
+        blocks = assembler.assemble(loader, profile, context_path="src/main.py")
+        rules_block = next(b for b in blocks if b.name == "RULES")
+
+        # 全局规则始终加载
+        assert "全局安全规则" in rules_block.content
+        # 路径限定规则因 context_path 匹配而加载
+        assert "Python 文件规则" in rules_block.content
