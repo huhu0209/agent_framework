@@ -74,7 +74,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 21: Discovery + Loader + AGENTS.md Chain** - 完成路径发现、ConfigLoader 入口类和指令链加载 (completed 2026-06-11)
 - [x] **Phase 22: Simple Module Adapters — Skills, Hooks, Commands** - 为已有 list[Path] 构造函数的模块添加 from_loader() 工厂方法 (completed 2026-06-11)
 - [x] **Phase 23: Complex Module Adapters — Agents, Profiles, MCP, Tasks, Permissions** - 多目录扫描、名称冲突处理、复杂配置合并
-- [ ] **Phase 24: Backend Integration + E2E Wiring + Path-Scoped Rules** - 应用层集成、端到端验证、零回归确认 (3/3 plans)
+- [x] **Phase 24: Backend Integration + E2E Wiring + Path-Scoped Rules** - 应用层集成、端到端验证、零回归确认 (3/3 plans) — completed 2026-06-12
 
 ## Phase Details
 
@@ -154,7 +154,7 @@ Plans:
 Plans:
 - [x] 24-01-PLAN.md — RuleLoader module + config leaf dependency test *(Wave 1)*
 - [x] 24-02-PLAN.md — PromptAssembler integration + test signature updates *(Wave 2)*
-- [ ] 24-03-PLAN.md — Backend wiring + AgentFactory.from_configloader + E2E test *(Wave 3)*
+- [x] 24-03-PLAN.md — Backend wiring + AgentFactory.from_configloader + E2E test *(Wave 3)*
 
 ## Progress
 
@@ -186,4 +186,4 @@ Phases execute in numeric order: 20 → 21 → 22 → 23 → 24
 | 21. Discovery + Loader | v0.0.6 | 2/2 | Complete    | 2026-06-11 |
 | 22. Simple Adapters | v0.0.6 | 1/1 | Complete | 2026-06-11 |
 | 23. Complex Adapters | v0.0.6 | 2/2 | Complete | 2026-06-12 |
-| 24. Integration + E2E | v0.0.6 | 2/3 | In Progress|  |
+| 24. Integration + E2E | v0.0.6 | 3/3 | Complete | 2026-06-12 |
