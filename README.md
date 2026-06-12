@@ -62,10 +62,12 @@ framework/agent_framework/
 ├── tasks/         # Task 管理（Manager / Runner）
 ├── skills/        # 技能系统（Manifest / Registry）
 ├── commands/      # Slash 命令路由
+├── config/        # 配置层级（ConfigLoader / Settings / Merge）
 ├── hooks/         # 生命周期钩子
 ├── safety/        # 安全层
 ├── memory/        # 记忆系统
 ├── prompts/       # Prompt 管理
+├── rules/         # 规则加载（RuleLoader / path-scoped filtering）
 ├── orchestrator/  # 编排引擎
 └── viz/           # 可视化（WebSocket / Event Bus）
 ```
@@ -81,26 +83,26 @@ framework/agent_framework/
 | `a2a/` | `A2AClient`, `A2AServer` | 跨框架 Agent 互联 |
 | `tasks/` | `TaskManager`, `TaskRunner` | 任务管理 |
 | `skills/` | `SkillRegistry`, `SkillManifest` | 技能注册与加载 |
-| `commands/` | `CommandRouter` | Slash 命令 |
+| `commands/` | `CommandDispatcher` | Slash 命令 |
+| `config/` | `ConfigLoader`, `Settings` | 配置层级加载与合并 |
 | `hooks/` | `HookManager` | 生命周期钩子 |
 | `safety/` | `PermissionPipeline`, `HITLManager`, `CommandPolicy` | 安全层 |
 | `memory/` | `MemoryIndexManager`, `LLMScoringRetriever` | 记忆系统 |
 | `prompts/` | `AgentProfile`, `PromptAssembler` | Prompt 管理 |
+| `rules/` | `RuleLoader` | 路径过滤规则加载 |
 | `orchestrator/` | `OrchestratorEngine`, `Planner` | 编排引擎 |
 | `viz/` | `AgentRunner`, `EventBus` | 实时可视化 |
 
 ## Roadmap
 
-| Phase | 模块 | 状态 |
-|-------|------|------|
-| 1-6 | 核心框架（LLM / Tools / Agents / Safety / Memory / Prompts） | ✅ 已完成 |
-| 7 | Skills — 知识注入 | ✅ 已完成 |
-| 8 | Commands — Slash 命令 | ✅ 已完成 |
-| 9 | Hooks — 生命周期扩展 | ✅ 已完成 |
-| 10 | Multi-Agent + Teams | ✅ 已完成 |
-| 11 | Frontend + 可视化 | ✅ 已完成 |
-| 12 | A2A — 跨框架互联 | ✅ 已完成 |
-| 13 | Plugin — 打包分发 | 📋 计划中 |
+| Milestone | Phases | Status |
+|-----------|--------|--------|
+| v0.0.1 彻底 Code Review | 1-5 | ✅ Shipped (2026-05-29, 687 tests) |
+| v0.0.2 Agent 扩展与编排 | 6-8 | ✅ Shipped (2026-05-29, 812 tests) |
+| v0.0.3 Agent 可视化平台 MVP | 9-11 | ✅ Shipped (2026-05-31, 964 tests) |
+| v0.0.4 全面代码审查 | 12-14 | ✅ Shipped (2026-06-09, 964 tests) |
+| v0.0.5 Review 问题修复 | 15-19 | ✅ Shipped (2026-06-10, 1002 tests) |
+| v0.0.6 路径文件的统一 | 20-25 | ✅ Shipped (2026-06-12, 1146 tests) |
 
 ## Quick Start
 
