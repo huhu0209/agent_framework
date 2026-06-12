@@ -44,14 +44,14 @@ v0.0.3 新增：EventBus 事件总线、WebSocket 实时推送、AgentRunner 包
 - ✓ 框架层全面代码审查（FRMW-01~05, 133 issues） — v0.0.4
 - ✓ 后端全面代码审查（BKND-01~05, 25 issues） — v0.0.4
 - ✓ 前端全面代码审查（FRNT-01~05, 31 issues） — v0.0.4
+- ✓ ConfigLoader + Settings + 合并引擎（CFG-01~06） — v0.0.6
+- ✓ AGENTS.md 指令链 + Profile 加载（INS-01~06） — v0.0.6
+- ✓ 8 模块适配器 from_loader()（ADP-01~09） — v0.0.6
+- ✓ Backend 集成 + E2E + Path-scoped rules（INT-01~06） — v0.0.6
 
 ### Active
 
-**v0.0.6 — 路径文件的统一** ✅ Shipped (2026-06-12, 1146 tests)
-- ConfigLoader + Settings + Merge + Discovery + Loader — complete
-- 8 module adapters (from_loader factory methods) — complete
-- AGENTS.md instruction chain + RuleLoader — complete
-- Backend integration + E2E wiring — complete
+(Next milestone requirements to be defined via `/gsd:new-milestone`)
 
 ### Out of Scope
 
@@ -148,6 +148,11 @@ frontend/src/
 | 内联样式 (非 Tailwind) | DESIGN.md 自定义颜色更自然 | ✓ Good — v0.0.3 |
 | useReducer+Context (非 Redux) | MVP 范围不需要复杂状态管理 | ✓ Good — v0.0.3 |
 | Phase 9 和 Phase 10 并行开发 | 前后端解耦，加速交付 | ✓ Good — v0.0.3 |
+| Zero new dependencies | 框架层保持轻量 | ✓ Good — v0.0.6 |
+| config/ module as leaf dependency | 防止循环导入 | ✓ Good — v0.0.6 |
+| Additive API only (from_loader) | 向后兼容 | ✓ Good — v0.0.6 |
+| Natural-order last-write-wins | 匹配 Claude Code 约定 | ✓ Good — v0.0.6 |
+| Shallow merge only for nested dicts | 设计文档明确，避免过度复杂 | ✓ Good — v0.0.6 |
 
 ## Constraints
 
@@ -170,11 +175,11 @@ frontend/src/
 - AGENTS.md 指令链 + RuleLoader path-scoped 过滤
 - Backend 集成 + 端到端验证
 
-**Current:** Phase 25 — 技术债务清理（asyncio 警告验证 + 过时文档更新）
+**Current:** Milestone v0.0.6 complete — planning next milestone
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
 
 ---
-*Last updated: 2026-06-12 — v0.0.6 shipped (1146 tests)*
+*Last updated: 2026-06-12 — v0.0.6 milestone archived*

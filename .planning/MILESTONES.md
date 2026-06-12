@@ -60,3 +60,25 @@
 **Known deferred items at close:** EventBus topic 过滤、事件持久化、多动物形象、消息气泡飞行、拖拽编排
 
 ---
+
+## v0.0.6 路径文件的统一 (Shipped: 2026-06-12)
+
+**Phases completed:** 6 phases, 13 plans
+**Timeline:** 2026-06-11 → 2026-06-12 (2 days)
+**Tests:** 1002 → 1146 (144 new, 0 regressions)
+**Framework LOC:** 11,332
+
+**Key accomplishments:**
+
+1. **ConfigLoader 统一入口** — Settings Pydantic 模型 + `_merge_settings()` 合并引擎 + 四级覆盖链 (env > local > project > global)
+2. **8 模块类型自动发现** — `discover_paths()` 支持 skills/agents/commands/hooks/rules/profiles/memory/mcp
+3. **8 个 `from_loader()` 工厂方法** — 所有模块适配器完成，保持向后兼容
+4. **AGENTS.md 指令链 + RuleLoader** — 5 层指令加载 + frontmatter path-scoped 规则过滤
+5. **Backend 集成 + E2E 验证** — `AgentFactory.from_configloader()` 一键初始化全部注册表
+6. **零回归 + 文档刷新** — README/PROJECT/REQUIREMENTS/CONCERNS 全部更新
+
+**Tech Debt:** 7 WARNING integration items (adapters loaded but not consumed in production paths)
+
+**Known deferred items at close:** 7 items (INT-W01~W07) — see v0.0.6-MILESTONE-AUDIT.md
+
+---

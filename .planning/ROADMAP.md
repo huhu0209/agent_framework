@@ -7,7 +7,7 @@
 - ✅ **v0.0.3 Agent 可视化平台 MVP** — Phases 9-11 (shipped 2026-05-31)
 - ✅ **v0.0.4 全面代码审查** — Phases 12-14 (shipped 2026-06-09)
 - ✅ **v0.0.5 Review 问题修复** — Phases 15-19 (shipped 2026-06-10)
-- 🚧 **v0.0.6 路径文件的统一** — Phases 20-25 (in progress)
+- ✅ **v0.0.6 路径文件的统一** — Phases 20-25 (shipped 2026-06-12)
 
 ## Phases
 
@@ -66,16 +66,19 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 </details>
 
-### 🚧 v0.0.6 路径文件的统一 (In Progress)
+### ✅ v0.0.6 路径文件的统一 (Shipped 2026-06-12)
 
-**Milestone Goal:** 参照 Claude Code 路径机制，实现统一配置层级体系和模块自动发现
+<details>
+<summary>✅ v0.0.6 路径文件的统一 (Phases 20-25) — SHIPPED 2026-06-12</summary>
 
-- [x] **Phase 20: Config Foundation — Settings Model + Merge Engine** - 构建 Settings Pydantic 模型和类型感知合并函数 (completed 2026-06-11)
-- [x] **Phase 21: Discovery + Loader + AGENTS.md Chain** - 完成路径发现、ConfigLoader 入口类和指令链加载 (completed 2026-06-11)
-- [x] **Phase 22: Simple Module Adapters — Skills, Hooks, Commands** - 为已有 list[Path] 构造函数的模块添加 from_loader() 工厂方法 (completed 2026-06-11)
-- [x] **Phase 23: Complex Module Adapters — Agents, Profiles, MCP, Tasks, Permissions** - 多目录扫描、名称冲突处理、复杂配置合并
-- [x] **Phase 24: Backend Integration + E2E Wiring + Path-Scoped Rules** - 应用层集成、端到端验证、零回归确认 (3/3 plans) — completed 2026-06-12
-- [x] **Phase 25: Address Tech Debt — Integration Warnings + Stale Docs** - 清理集成测试警告和过时文档 (4 plans) (completed 2026-06-12)
+- [x] Phase 20: Config Foundation — Settings Model + Merge Engine (1/1 plan) — completed 2026-06-11
+- [x] Phase 21: Discovery + Loader + AGENTS.md Chain (2/2 plans) — completed 2026-06-11
+- [x] Phase 22: Simple Module Adapters — Skills, Hooks, Commands (1/1 plan) — completed 2026-06-11
+- [x] Phase 23: Complex Module Adapters — Agents, Profiles, MCP, Tasks, Permissions (2/2 plans) — completed 2026-06-12
+- [x] Phase 24: Backend Integration + E2E Wiring + Path-Scoped Rules (3/3 plans) — completed 2026-06-12
+- [x] Phase 25: Tech Debt — Integration Warnings + Stale Docs (4/4 plans) — completed 2026-06-12
+
+</details>
 
 ## Phase Details
 
