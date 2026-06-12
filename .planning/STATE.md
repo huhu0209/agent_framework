@@ -2,14 +2,15 @@
 gsd_state_version: 1.0
 milestone: v0.0.6
 milestone_name: 路径文件的统一
-status: ready_to_execute
-last_updated: "2026-06-12T10:55:00.000Z"
+status: executing
+last_updated: "2026-06-12T03:03:58.939Z"
+last_activity: 2026-06-12 -- Phase 24 execution started
 progress:
   total_phases: 5
   completed_phases: 4
   total_plans: 9
-  completed_plans: 0
-  percent: 80
+  completed_plans: 6
+  percent: 67
 ---
 
 # STATE.md
@@ -19,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-11)
 
 **Core value:** 可靠的 Agent 编排框架，提供安全、可测试、可扩展的基础设施
-**Current focus:** Phase 24 — Backend Integration + E2E Wiring
+**Current focus:** Phase 24 — backend-integration-e2e-wiring-path-scoped-rules
 
 ## Milestone History
 
@@ -32,10 +33,10 @@ See: .planning/PROJECT.md (updated 2026-06-11)
 
 ## Current Position
 
-Phase: 24
-Plan: 24-01 + 24-02 + 24-03 planned (3 plans, ready to execute)
-Status: Ready to execute — 3 plans across 3 waves
-Last activity: Phase 24 planned (Research + Plan + Verify passed)
+Phase: 24 (backend-integration-e2e-wiring-path-scoped-rules) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 24
+Last activity: 2026-06-12 -- Phase 24 execution started
 
 Progress: [████████░░] 80%
 
