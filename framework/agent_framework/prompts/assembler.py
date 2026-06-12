@@ -4,16 +4,19 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from agent_framework.config.loader import ConfigLoader
 from agent_framework.prompts.profiles import AgentProfile, PromptBlock
+from agent_framework.rules.loader import RuleLoader
 
 if TYPE_CHECKING:
     from agent_framework.skills.registry import SkillRegistry
 
 _BLOCK_TAGS: dict[str, str] = {
+    "USER_PROVIDED": "user-provided",
+    "RULES": "rules",
     "SOUL": "soul",
     "AGENTS_RULES": "instructions",
     "IDENTITY": "identity",
-    "USER": "user-provided",
     "SKILLS": "skills",
     "TOOL_GUIDANCE": "tool-guidance",
 }
@@ -25,10 +28,41 @@ class PromptAssembler:
     def __init__(self, skill_registry: SkillRegistry | None = None) -> None:
         self._skill_registry = skill_registry
 
-    def assemble(self, profile: AgentProfile) -> list[PromptBlock]:
-        """组装 profile 为 PromptBlock 列表。"""
+    def assemble(
+        self,
+        loader: ConfigLoader,
+        profile: AgentProfile,
+        context_path: str | None = None,
+    ) -> list[PromptBlock]:
+        """组装 profile 为 PromptBlock 列表。
+
+        块顺序: USER_PROVIDED -> RULES -> SOUL -> AGENTS_RULES -> IDENTITY -> SKILLS -> TOOL_GUIDANCE
+        """
         blocks: list[PromptBlock] = []
 
+        # 1. USER_PROVIDED — 来自 ConfigLoader 的 AGENTS.md 链
+        user_content = loader.load_agents_md()
+        if user_content:
+            blocks.append(PromptBlock(
+                name="USER_PROVIDED",
+                content=user_content,
+                source="auto_generated",
+                stability="semi_static",
+                cache_breakpoint=True,
+            ))
+
+        # 2. RULES — 来自 RuleLoader 的路径过滤规则
+        rules_content = RuleLoader.load_rules(loader, context_path)
+        if rules_content:
+            blocks.append(PromptBlock(
+                name="RULES",
+                content=rules_content,
+                source="auto_generated",
+                stability="semi_static",
+                cache_breakpoint=True,
+            ))
+
+        # 3. SOUL
         if profile.soul:
             blocks.append(PromptBlock(
                 name="SOUL",
@@ -38,6 +72,7 @@ class PromptAssembler:
                 cache_breakpoint=True,
             ))
 
+        # 4. AGENTS_RULES
         if profile.agents_rules:
             blocks.append(PromptBlock(
                 name="AGENTS_RULES",
@@ -47,6 +82,7 @@ class PromptAssembler:
                 cache_breakpoint=True,
             ))
 
+        # 5. IDENTITY
         if profile.identity:
             blocks.append(PromptBlock(
                 name="IDENTITY",
@@ -56,16 +92,7 @@ class PromptAssembler:
                 cache_breakpoint=True,
             ))
 
-        if profile.user_context:
-            blocks.append(PromptBlock(
-                name="USER",
-                content=profile.user_context,
-                source="injected",
-                stability="semi_static",
-                cache_breakpoint=True,
-            ))
-
-        # SKILLS block — 在 TOOL_GUIDANCE 之前
+        # 6. SKILLS
         if self._skill_registry is not None:
             catalog = self._skill_registry.describe_available()
             blocks.append(PromptBlock(
@@ -76,6 +103,7 @@ class PromptAssembler:
                 cache_breakpoint=False,
             ))
 
+        # 7. TOOL_GUIDANCE
         if profile.tool_guidance:
             blocks.append(PromptBlock(
                 name="TOOL_GUIDANCE",
@@ -87,9 +115,14 @@ class PromptAssembler:
 
         return blocks
 
-    def render(self, profile: AgentProfile) -> str:
+    def render(
+        self,
+        loader: ConfigLoader,
+        profile: AgentProfile,
+        context_path: str | None = None,
+    ) -> str:
         """将 profile 渲染为完整的 system prompt 字符串。"""
-        blocks = self.assemble(profile)
+        blocks = self.assemble(loader, profile, context_path)
         parts = []
         for b in blocks:
             if not b.content:
