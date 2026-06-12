@@ -149,12 +149,12 @@ Plans:
   3. rules/*.md files support frontmatter paths conditions for scoped loading (path-scoped rules)
   4. PromptAssembler integrates the full instruction chain into the <user-provided> block and Profile files into corresponding tags
   5. Full end-to-end test: ConfigLoader loads settings → discovers modules → adapters create registries → all 1002+ existing tests pass
-**Plans**: 2 plans
+**Plans**: 3 plans
 
 Plans:
-- [ ] 24-01: Backend integration + config leaf dependency
-- [ ] 24-02: E2E wiring + PromptAssembler integration
-- [ ] 24-03: Path-scoped rules + zero-regression verification
+- [ ] 24-01-PLAN.md — RuleLoader module + config leaf dependency test *(Wave 1)*
+- [ ] 24-02-PLAN.md — PromptAssembler integration + test signature updates *(Wave 2)*
+- [ ] 24-03-PLAN.md — Backend wiring + AgentFactory.from_configloader + E2E test *(Wave 3)*
 
 ## Progress
 
@@ -186,4 +186,4 @@ Phases execute in numeric order: 20 → 21 → 22 → 23 → 24
 | 21. Discovery + Loader | v0.0.6 | 2/2 | Complete    | 2026-06-11 |
 | 22. Simple Adapters | v0.0.6 | 1/1 | Complete | 2026-06-11 |
 | 23. Complex Adapters | v0.0.6 | 2/2 | Complete | 2026-06-12 |
-| 24. Integration + E2E | v0.0.6 | 0/? | Not started | - |
+| 24. Integration + E2E | v0.0.6 | 0/3 | Not started | - |
