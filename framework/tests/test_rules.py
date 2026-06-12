@@ -110,7 +110,7 @@ class TestRuleLoader:
         rules_dir = tmp_path / "project" / ".agent-framework" / "rules"
         rules_dir.mkdir(parents=True)
         (rules_dir / "multi.md").write_text(
-            "---\npaths: src/**/*.py, tests/**/*.py\n---\n多模式规则",
+            "---\npaths: src/**.py, tests/**.py\n---\n多模式规则",
             encoding="utf-8",
         )
 
