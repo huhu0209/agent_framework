@@ -73,31 +73,31 @@
 
 - [x] **INS-01**: AGENTS.md 指令链按顺序加载（全局 → 项目 → local → 父目录链 → user.md）
 - [x] **INS-02**: 父目录链遍历从 CWD 到 root，遇到 .git/ 边界停止
-- [ ] **INS-03**: rules/*.md 收集全局 + 项目路径，支持 paths 前言条件匹配
+- [x] **INS-03**: rules/*.md 收集全局 + 项目路径，支持 paths 前言条件匹配
 - [x] **INS-04**: Profile 加载 profiles/<name>/ 目录下 soul.md/agents.md/identity.md/tool_guidance.md
 - [x] **INS-05**: load_agents_md() 拼接全部指令返回完整字符串
-- [ ] **INS-06**: PromptAssembler 集成 — 指令链注入 <user-provided> 块，Profile 注入对应标签
+- [x] **INS-06**: PromptAssembler 集成 — 指令链注入 <user-provided> 块，Profile 注入对应标签
 
 ### ADP — Module Adapters（模块适配器）
 
 - [x] **ADP-01**: SkillRegistry.from_loader() 工厂方法，从 discover("skills") 路径列表加载
 - [x] **ADP-02**: HookManager.from_loader() 工厂方法，从 discover("hooks") 路径列表合并 hooks.json
 - [x] **ADP-03**: CommandRegistry.from_loader() 工厂方法，从 discover("commands") 路径列表加载
-- [ ] **ADP-04**: AgentProfile.from_loader() 工厂方法，从 discover("agents") 路径列表加载，同名项目覆盖全局并 warning
-- [ ] **ADP-05**: AgentProfile.from_profile() 支持 discover("profiles") 目录加载
-- [ ] **ADP-06**: McpManager.from_loader() 工厂方法，从 discover("mcp") 合并 servers.json
-- [ ] **ADP-07**: TaskManager 集成 — tasks_dir 默认值改为 .agent-framework/tasks/
-- [ ] **ADP-08**: PermissionPipeline 从 settings.permissions 自动注入 allow/deny 列表
+- [x] **ADP-04**: AgentProfile.from_loader() 工厂方法，从 discover("agents") 路径列表加载，同名项目覆盖全局并 warning
+- [x] **ADP-05**: AgentProfile.from_profile() 支持 discover("profiles") 目录加载
+- [x] **ADP-06**: McpManager.from_loader() 工厂方法，从 discover("mcp") 合并 servers.json
+- [x] **ADP-07**: TaskManager 集成 — tasks_dir 默认值改为 .agent-framework/tasks/
+- [x] **ADP-08**: PermissionPipeline 从 settings.permissions 自动注入 allow/deny 列表
 - [x] **ADP-09**: 所有适配器保持向后兼容 — 现有构造函数签名不变，工厂方法为新增 API
 
 ### INT — Integration & Testing（集成与测试）
 
-- [ ] **INT-01**: backend/app/config/ 从 ConfigLoader.load_settings() 获取默认值
-- [ ] **INT-02**: backend AgentFactory 使用 ConfigLoader 初始化模块注册表
-- [ ] **INT-03**: config/ 模块作为叶依赖 — 不导入框架其他模块，避免循环依赖
-- [ ] **INT-04**: 端到端验证 — ConfigLoader 加载 settings → discover 模块 → 适配器创建注册表
-- [ ] **INT-05**: 全部 1002+ 现有测试通过（零回归）
-- [ ] **INT-06**: Path-scoped rules — rules/*.md 支持 frontmatter paths 条件匹配加载
+- [x] **INT-01**: backend/app/config/ 从 ConfigLoader.load_settings() 获取默认值
+- [x] **INT-02**: backend AgentFactory 使用 ConfigLoader 初始化模块注册表
+- [x] **INT-03**: config/ 模块作为叶依赖 — 不导入框架其他模块，避免循环依赖
+- [x] **INT-04**: 端到端验证 — ConfigLoader 加载 settings → discover 模块 → 适配器创建注册表
+- [x] **INT-05**: 全部 1002+ 现有测试通过（零回归）
+- [x] **INT-06**: Path-scoped rules — rules/*.md 支持 frontmatter paths 条件匹配加载
 
 ---
 
@@ -147,19 +147,19 @@
 | ADP-02 | Phase 22 | Complete |
 | ADP-03 | Phase 22 | Complete |
 | ADP-09 | Phase 22 | Complete |
-| ADP-04 | Phase 23 | Pending |
-| ADP-05 | Phase 23 | Pending |
-| ADP-06 | Phase 23 | Pending |
-| ADP-07 | Phase 23 | Pending |
-| ADP-08 | Phase 23 | Pending |
-| INS-03 | Phase 24 | Pending |
-| INS-06 | Phase 24 | Pending |
-| INT-01 | Phase 24 | Pending |
-| INT-02 | Phase 24 | Pending |
-| INT-03 | Phase 24 | Pending |
-| INT-04 | Phase 24 | Pending |
-| INT-05 | Phase 24 | Pending |
-| INT-06 | Phase 24 | Pending |
+| ADP-04 | Phase 23 | Complete |
+| ADP-05 | Phase 23 | Complete |
+| ADP-06 | Phase 23 | Complete |
+| ADP-07 | Phase 23 | Complete |
+| ADP-08 | Phase 23 | Complete |
+| INS-03 | Phase 24 | Complete |
+| INS-06 | Phase 24 | Complete |
+| INT-01 | Phase 24 | Complete |
+| INT-02 | Phase 24 | Complete |
+| INT-03 | Phase 24 | Complete |
+| INT-04 | Phase 24 | Complete |
+| INT-05 | Phase 24 | Complete |
+| INT-06 | Phase 24 | Complete |
 
 **Coverage:**
 - v0.0.6 requirements: 26 total
@@ -168,4 +168,4 @@
 
 ---
 *Requirements defined: 2026-06-11*
-*Last updated: 2026-06-11 — v0.0.6 traceability updated with phase mappings (20-24)*
+*Last updated: 2026-06-12 — v0.0.6 traceability updated (Phases 23-24 completed)*
