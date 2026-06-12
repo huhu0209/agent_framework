@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v0.0.6
 milestone_name: 路径文件的统一
 status: completed
-stopped_at: Phase 23 context gathered
-last_updated: "2026-06-11T13:38:04.513Z"
-last_activity: 2026-06-11
+stopped_at: Phase 23 complete
+last_updated: ""
+last_activity: 
 progress:
   total_phases: 5
-  completed_phases: 3
-  total_plans: 4
-  completed_plans: 4
-  percent: 60
+  completed_phases: 4
+  total_plans: 6
+  completed_plans: 6
+  percent: 80
 ---
 
 # STATE.md
@@ -21,7 +21,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-11)
 
 **Core value:** 可靠的 Agent 编排框架，提供安全、可测试、可扩展的基础设施
-**Current focus:** Phase 22 — simple module adapters — skills, hooks, commands
+**Current focus:** Phase 24 — Backend Integration + E2E Wiring
 
 ## Milestone History
 
@@ -34,12 +34,12 @@ See: .planning/PROJECT.md (updated 2026-06-11)
 
 ## Current Position
 
-Phase: 22
-Plan: 22-01 complete (1/1 plans)
-Status: Phase 22 complete
-Last activity: 2026-06-11
+Phase: 23
+Plan: 23-01 + 23-02 complete (2/2 plans)
+Status: Phase 23 complete — all 5 module adapters shipped
+Last activity: 
 
-Progress: [██        ] 40%
+Progress: [████████░░] 80%
 
 ## Velocity
 
@@ -48,7 +48,8 @@ Progress: [██        ] 40%
 - v0.0.3: 9 plans (3 phases, 3 days)
 - v0.0.4: 9 plans (3 phases, 1 day)
 - v0.0.5: 14 plans (5 phases, 1 day)
-- Total: 53 plans across 19 phases
+- v0.0.6: 6 plans (4 phases, 1 day so far)
+- Total: 59 plans across 23 phases
 
 ## Accumulated Context
 
@@ -57,9 +58,10 @@ Progress: [██        ] 40%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- v0.0.6: Zero new dependencies — custom _merge_settings() replaces pydantic-settings deep_merge (arrays replaced instead of union-merged)
-- v0.0.6: config/ module as leaf dependency — imports nothing from other framework modules, avoids circular imports
+- v0.0.6: Zero new dependencies — custom _merge_settings() replaces pydantic-settings deep_merge
+- v0.0.6: config/ module as leaf dependency — imports nothing from other framework modules
 - v0.0.6: Additive API only — from_loader() factory methods alongside untouched constructors
+- v0.0.6: Natural-order iteration (last-write-wins) for project-override-global in from_loader() methods
 
 ### Pending Todos
 
@@ -83,6 +85,6 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-06-11T13:38:04.507Z
-Stopped at: Phase 23 context gathered
-Resume file: .planning/phases/23-complex-module-adapters-agents-profiles-mcp-tasks-permission/23-CONTEXT.md
+Last session: 
+Stopped at: Phase 23 complete
+Resume file: .planning/phases/24-backend-integration-e2e-wiring-path-scoped-rules/
