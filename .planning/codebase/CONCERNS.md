@@ -9,18 +9,21 @@
 - Files: `backend/app/api/v1/agents.py`, `backend/app/api/v1/chat.py`, `backend/app/api/v1/tools.py`, `backend/app/config/__init__.py`, `backend/app/models/__init__.py`, `backend/app/services/__init__.py`, `backend/app/utils/__init__.py`, `backend/main.py`
 - Impact: No application layer exists. The framework cannot be exercised end-to-end through an HTTP API.
 - Fix approach: Implement backend incrementally, starting with `main.py` (FastAPI app) and `chat.py` (core chat endpoint).
+- **✅ RESOLVED (v0.0.3~v0.0.6):** Backend progressively implemented — EventBus (v0.0.3), code review fixes (v0.0.4~v0.0.5), ConfigLoader integration (v0.0.6). Files now contain real implementation.
 
 **Orchestrator engine and router are empty:**
 - Issue: `engine.py` and `router.py` in the orchestrator module are empty (0 lines). Only `planner.py` has implementation.
 - Files: `framework/agent_framework/orchestrator/engine.py`, `framework/agent_framework/orchestrator/router.py`
 - Impact: No multi-agent orchestration or LLM routing logic exists. Only the planner (plan parsing/drift detection) is implemented.
 - Fix approach: Implement `engine.py` for multi-agent coordination and `router.py` for LLM provider routing (model selection, fallback chains).
+- **✅ RESOLVED (v0.0.2):** Orchestrator engine implemented in Phase 7. Planner, plan parsing, drift detection all functional. Engine and router are no longer empty.
 
 **Agent tool dispatch is a stub:**
 - Issue: `_dispatch_agent` in `ToolRouter` returns a hardcoded "not implemented" error for all `agent__` prefixed tools.
 - Files: `framework/agent_framework/tools/router.py:179-183`
 - Impact: Agent-to-agent tool calling does not work. The routing prefix `agent__` is reserved but non-functional.
 - Fix approach: Implement agent tool dispatch or remove the `agent__` prefix reservation.
+- **✅ RESOLVED (v0.0.2):** Sub-Agent dispatch implemented via `run_subagent` tool in `agents/sub_agent.py`. Agent-to-agent tool calling works through `agent__` prefix routing.
 
 **VerificationRunner only implements regex_match:**
 - Issue: The `VerificationRule` schema supports 5 check types (`code_compiles`, `tests_pass`, `schema_valid`, `llm_judge`, `regex_match`), but `_run_single` only handles `regex_match` and returns `None` for all others.
@@ -33,6 +36,7 @@
 - Files: `framework/agent_framework/tools/builtin/search_tools.py:8-17`
 - Impact: Any agent using web search will receive fake data. Not safe for production.
 - Fix approach: Integrate a real search API (e.g., SerpAPI, Tavily) or clearly gate behind a feature flag.
+- **✅ RESOLVED (v0.0.2):** Replaced with Tavily API integration (`AsyncTavilyClient`). Returns real search results when `TAVILY_API_KEY` is configured.
 
 **CommandPolicy is a placeholder interface:**
 - Issue: `CommandPolicy` in `boundary.py` is described as "reserved interface, activate after bash tool implementation" but has no enforcement logic.

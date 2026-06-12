@@ -17,7 +17,7 @@ v0.0.3 新增：EventBus 事件总线、WebSocket 实时推送、AgentRunner 包
 - **Viz Backend:** EventBus (asyncio.Queue pub-sub), websockets 16, AgentRunner
 - **Frontend:** Vite + React + TypeScript + Tailwind + PixiJS v8
 - **Backend:** FastAPI
-- **Test:** pytest, pytest-asyncio (964 tests passing)
+- **Test:** pytest, pytest-asyncio (1146 tests passing)
 - **Search:** Tavily API (AsyncTavilyClient)
 - **A2A:** 纯 ASGI (httpx + asyncio), 无额外 Web 框架依赖
 
@@ -47,13 +47,11 @@ v0.0.3 新增：EventBus 事件总线、WebSocket 实时推送、AgentRunner 包
 
 ### Active
 
-**v0.0.6 — 路径文件的统一**
-- 参照 Claude Code 的路径机制，实现统一的配置层级体系
-- 统一目录结构：全局 `~/.agent-framework/` + 项目级 `.agent-framework/`
-- ConfigLoader 核心：层级加载 + 合并（settings.json 覆盖链）
-- 模块自动发现：skills/agents/commands/hooks/rules/profiles/memory/mcp
-- AGENTS.md 指令链：框架层 + Agent 层完整 system prompt 组装
-- 向后兼容：所有现有 API 保持不变，ConfigLoader 为新增统一入口
+**v0.0.6 — 路径文件的统一** ✅ Shipped (2026-06-12, 1146 tests)
+- ConfigLoader + Settings + Merge + Discovery + Loader — complete
+- 8 module adapters (from_loader factory methods) — complete
+- AGENTS.md instruction chain + RuleLoader — complete
+- Backend integration + E2E wiring — complete
 
 ### Out of Scope
 
@@ -164,11 +162,19 @@ frontend/src/
 
 **Shipped v0.0.5** — 1002 测试通过，全部 HIGH + 关键 MEDIUM issue 已修复。
 
-**Current: v0.0.6** — 路径文件的统一。参照 Claude Code 路径机制，实现统一配置层级体系。
+**Shipped v0.0.6** — 路径文件的统一（2026-06-12）。1146 测试通过（+144 新增）。
+参照 Claude Code 路径机制，实现统一配置层级体系：
+- ConfigLoader 统一入口（settings.json 四级覆盖链）
+- discover_paths() 8 种模块类型自动发现
+- from_loader() 工厂方法（Skills/Hooks/Commands/Agents/Profiles/MCP/Tasks/Permissions）
+- AGENTS.md 指令链 + RuleLoader path-scoped 过滤
+- Backend 集成 + 端到端验证
+
+**Current:** Phase 25 — 技术债务清理（asyncio 警告验证 + 过时文档更新）
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
 
 ---
-*Last updated: 2026-06-11 after v0.0.6 milestone initiated*
+*Last updated: 2026-06-12 — v0.0.6 shipped (1146 tests)*
