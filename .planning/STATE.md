@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.0.6
 milestone_name: 路径文件的统一
 status: executing
-last_updated: "2026-06-12T03:03:58.939Z"
+last_updated: "2026-06-12T05:57:13.924Z"
 last_activity: 2026-06-12 -- Phase 24 execution started
 progress:
-  total_phases: 5
-  completed_phases: 4
+  total_phases: 6
+  completed_phases: 5
   total_plans: 9
-  completed_plans: 6
-  percent: 67
+  completed_plans: 9
+  percent: 83
 ---
 
 # STATE.md
@@ -66,6 +66,10 @@ Recent decisions affecting current work:
 
 None.
 
+### Roadmap Evolution
+
+- Phase 25 added: Address tech debt — integration warnings + stale docs
+
 ### Blockers/Concerns
 
 - **Backend circular import risk**: backend/app/config importing from framework config/. Spike needed in Phase 24 to verify no circular chain.
@@ -85,5 +89,5 @@ None.
 ## Session Continuity
 
 Last session: 
-2026-06-12T10:55:00.000Z
-Resume file: .planning/phases/24-backend-integration-e2e-wiring-path-scoped-rules/24-01-PLAN.md
+2026-06-12T05:57:13.916Z
+Resume file: .planning/phases/25-tech-debt-integration-warnings-stale-docs/25-CONTEXT.md
