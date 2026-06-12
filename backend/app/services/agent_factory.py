@@ -32,6 +32,13 @@ class AgentFactory:
         self._model = model
         self._router = ToolRouter(create_builtin_registry())
         self._storage_dir = storage_dir
+        # from_configloader() 设置的组件（初始为 None）
+        self._loader: ConfigLoader | None = None
+        self._skill_registry: SkillRegistry | None = None
+        self._hook_manager: HookManager | None = None
+        self._command_dispatcher: CommandDispatcher | None = None
+        self._default_profile: AgentProfile | None = None
+        self._assembler: PromptAssembler | None = None
 
     @classmethod
     def from_settings(cls, settings: Settings, storage_dir: Path | None = None) -> AgentFactory:
@@ -83,12 +90,23 @@ class AgentFactory:
         return factory
 
     def create_loop(self) -> AgentLoop:
+        """创建 AgentLoop 实例，传递 from_configloader() 加载的所有组件。"""
         ctx = ToolUseContext()
         if self._storage_dir is not None:
             ctx.working_dir = str(self._storage_dir / "shared_workspace")
+
+        # 从 loader 获取 skill_dirs，让 AgentLoop 创建自己的 SkillRegistry
+        skill_dirs = None
+        if self._loader is not None:
+            skill_dirs = self._loader.discover("skills")
+
         return AgentLoop(
             adapter=self._adapter,
             model=self._model,
             router=self._router,
             ctx=ctx,
+            profile=self._default_profile,
+            hook_manager=self._hook_manager,
+            skill_dirs=skill_dirs,
+            config_loader=self._loader,
         )

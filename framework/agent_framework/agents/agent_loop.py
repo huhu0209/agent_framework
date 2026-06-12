@@ -94,6 +94,7 @@ class AgentLoop(Agent):
         task_runner: TaskRunner | None = None,
         enable_subagent: bool = False,
         team_manager: TeamManager | None = None,
+        config_loader: ConfigLoader | None = None,
     ) -> None:
         self.adapter = adapter
         self.model = model
@@ -116,6 +117,7 @@ class AgentLoop(Agent):
         self._hook_manager = hook_manager
         self._task_runner = task_runner
         self._team_manager = team_manager
+        self._config_loader = config_loader
 
         if self._skill_registry is not None:
             spec = create_load_skill_spec()
@@ -136,7 +138,7 @@ class AgentLoop(Agent):
 
         if self.profile is not None:
             self._system_prompt_text = self._assembler.render(
-                ConfigLoader(), self.profile
+                self._config_loader or ConfigLoader(), self.profile
             )
         elif self._skill_registry is not None:
             catalog = self._skill_registry.describe_available()
