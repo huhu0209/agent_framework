@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v0.0.6
 milestone_name: 路径文件的统一
-status: completed
-last_updated: "2026-06-12T02:18:27.172Z"
+status: ready_to_execute
+last_updated: "2026-06-12T10:55:00.000Z"
 progress:
   total_phases: 5
   completed_phases: 4
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 9
+  completed_plans: 0
   percent: 80
 ---
 
@@ -32,10 +32,10 @@ See: .planning/PROJECT.md (updated 2026-06-11)
 
 ## Current Position
 
-Phase: 23
-Plan: 23-01 + 23-02 complete (2/2 plans)
-Status: Phase 23 complete — all 5 module adapters shipped
-Last activity: 
+Phase: 24
+Plan: 24-01 + 24-02 + 24-03 planned (3 plans, ready to execute)
+Status: Ready to execute — 3 plans across 3 waves
+Last activity: Phase 24 planned (Research + Plan + Verify passed)
 
 Progress: [████████░░] 80%
 
@@ -46,8 +46,8 @@ Progress: [████████░░] 80%
 - v0.0.3: 9 plans (3 phases, 3 days)
 - v0.0.4: 9 plans (3 phases, 1 day)
 - v0.0.5: 14 plans (5 phases, 1 day)
-- v0.0.6: 6 plans (4 phases, 1 day so far)
-- Total: 59 plans across 23 phases
+- v0.0.6: 9 plans planned (5 phases, 1 day so far)
+- Total: 62 plans across 24 phases
 
 ## Accumulated Context
 
@@ -84,5 +84,5 @@ None.
 ## Session Continuity
 
 Last session: 
-2026-06-12T02:18:27.165Z
-Resume file: .planning/phases/24-backend-integration-e2e-wiring-path-scoped-rules/24-CONTEXT.md
+2026-06-12T10:55:00.000Z
+Resume file: .planning/phases/24-backend-integration-e2e-wiring-path-scoped-rules/24-01-PLAN.md

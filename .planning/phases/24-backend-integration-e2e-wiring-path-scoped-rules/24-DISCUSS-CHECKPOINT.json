@@ -1,0 +1,56 @@
+{
+  "phase": 24,
+  "started_at": "2026-06-12",
+  "areas_total": ["Backend Config 统一", "Rules 匹配语法", "PromptAssembler 集成", "AgentFactory 重构深度"],
+  "areas_completed": ["Backend Config 统一", "Rules 匹配语法", "PromptAssembler 集成"],
+  "decisions": {
+    "Backend Config 统一": {
+      "D-01": "ConfigLoader 作为 fallback — backend Settings (BaseSettings) 保留 pydantic-settings + APP_ env vars，ConfigLoader 提供默认值，env var 仍为最高优先级",
+      "D-02": "并行初始化 — main.py lifespan 中 ConfigLoader 和 backend Settings 独立创建，AgentFactory 同时持有两者",
+      "D-03": "redis_url 留 backend Settings 独有，不提升到 framework Settings",
+      "D-04": "叶依赖通过测试验证 — 写测试确保 config/ 不导入框架其他模块"
+    },
+    "Rules 匹配语法": {
+      "D-05": "Glob 模式（fnmatch）— paths 使用 Python fnmatch 库，支持 * 和 ** 通配符",
+      "D-06": "paths 相对于项目根目录解析 — 与 ConfigLoader.project_dir 一致",
+      "D-07": "无 paths 字段的 rules 始终加载 — 用于全局规则（编码风格、安全规范等）",
+      "D-08": "新建 framework/agent_framework/rules/ 模块 — 与 skills/, hooks/ 等平级"
+    },
+    "PromptAssembler 集成": {
+      "D-09": "直接修改 assemble(profile) → assemble(loader, profile, context_path=None)，不需要 API 向后兼容",
+      "D-10": "严格按设计文档顺序：<user-provided> → <rules> → <soul> → <instructions> → <identity> → <skills> → <tool-guidance>",
+      "D-11": "assemble() 内部调用 loader.load_agents_md() 获取指令链，调用 RuleLoader 加载 rules",
+      "D-12": "context_path 参数过滤 rules — 传当前文件路径给 RuleLoader，只加载匹配的 rules"
+    }
+  },
+  "deferred_ideas": [],
+  "discussion_log": [
+    {
+      "area": "Backend Config 统一",
+      "questions": [
+        {"q": "Backend Settings 和 Framework ConfigLoader 如何共存？", "selected": "A: ConfigLoader 作为 fallback"},
+        {"q": "启动时 ConfigLoader 和 backend Settings 如何协同？", "selected": "A: 并行初始化"},
+        {"q": "backend 独有的 redis_url 字段怎么处理？", "selected": "A: redis_url 留 backend"},
+        {"q": "如何确保 config/ 模块保持叶依赖？", "selected": "A: 测试验证"}
+      ]
+    },
+    {
+      "area": "Rules 匹配语法",
+      "questions": [
+        {"q": "rules/*.md frontmatter 的 paths 字段用什么匹配语法？", "selected": "A: Glob 模式"},
+        {"q": "paths 模式相对于什么解析？", "selected": "A: 相对于项目根目录"},
+        {"q": "没有 paths frontmatter 的 rules/*.md 怎么处理？", "selected": "A: 始终加载"},
+        {"q": "rules 加载逻辑放在哪里？", "selected": "A: 新 rules/ 模块"}
+      ]
+    },
+    {
+      "area": "PromptAssembler 集成",
+      "questions": [
+        {"q": "PromptAssembler 如何获取指令链和 rules 数据？", "selected": "A: assemble(loader, profile)"},
+        {"q": "system prompt 块的最终顺序？", "selected": "A: 设计文档顺序"},
+        {"q": "如何保持向后兼容？", "selected": "不需要考虑向后兼容"},
+        {"q": "PromptAssembler 如何知道当前上下文路径来过滤 rules？", "selected": "A: context_path 参数过滤"}
+      ]
+    }
+  ]
+}
