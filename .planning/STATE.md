@@ -3,9 +3,7 @@ gsd_state_version: 1.0
 milestone: v0.0.6
 milestone_name: 路径文件的统一
 status: completed
-stopped_at: Phase 23 complete
-last_updated: ""
-last_activity: 
+last_updated: "2026-06-12T02:18:27.172Z"
 progress:
   total_phases: 5
   completed_phases: 4
@@ -86,5 +84,5 @@ None.
 ## Session Continuity
 
 Last session: 
-Stopped at: Phase 23 complete
-Resume file: .planning/phases/24-backend-integration-e2e-wiring-path-scoped-rules/
+2026-06-12T02:18:27.165Z
+Resume file: .planning/phases/24-backend-integration-e2e-wiring-path-scoped-rules/24-CONTEXT.md
