@@ -106,3 +106,7 @@ None.
 ## Threat Flags
 
 None — no new security-relevant surface beyond what the threat model covers. RuleLoader reads files from ConfigLoader.discover() paths only (T-24-01 accept), parses as text only (T-24-02 accept), zero new packages (T-24-SC mitigate).
+
+## Self-Check: PASSED
+
+All 5 created files found. All 4 commit hashes verified.
