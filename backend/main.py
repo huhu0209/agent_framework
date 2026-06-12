@@ -9,8 +9,10 @@ import redis as redis_lib
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from agent_framework.config.loader import ConfigLoader
+
 from app.api.v1.chat import router as chat_router
-from app.config import Settings
+from app.config import Settings, create_settings
 from app.services.agent_factory import AgentFactory
 from app.services.session import SessionManager
 
@@ -22,11 +24,15 @@ ALLOWED_ORIGINS = os.getenv("APP_CORS_ORIGINS", "http://localhost:30001").split(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # --- 读取配置 ---
-    settings = Settings()
+    # --- ConfigLoader first per D-01（提供回退默认值）---
+    config_loader = ConfigLoader()
+    fw_settings = config_loader.load_settings()
+
+    # --- Backend Settings with ConfigLoader fallback, env vars still highest priority per D-01 ---
+    settings = create_settings(framework_settings=fw_settings)
 
     # --- 初始化 Agent 工厂 ---
-    factory = AgentFactory.from_settings(settings)
+    factory = AgentFactory.from_configloader(config_loader, settings)
 
     # --- 连接 Redis（可选，失败时降级为本地文件存储）---
     rdb = None

@@ -1,7 +1,14 @@
-"""应用配置 — 从环境变量 / .env 读取。"""
+"""应用配置 — 从环境变量 / .env 读取，支持 ConfigLoader 回退。"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings
+
+if TYPE_CHECKING:
+    from agent_framework.config.settings import Settings as FrameworkSettings
 
 
 class Settings(BaseSettings):
@@ -19,3 +26,34 @@ class Settings(BaseSettings):
         if not v.get_secret_value().strip():
             raise ValueError("APP_LLM_API_KEY is required")
         return v
+
+
+def create_settings(framework_settings: FrameworkSettings | None = None) -> Settings:
+    """创建 backend Settings，可选使用 framework Settings 作为回退默认值。
+
+    per D-01: ConfigLoader.load_settings() 提供默认值，env var 仍为最高优先级。
+    pydantic-settings v2 解析顺序: init kwargs > env vars > env_file > defaults。
+    因此只在 framework Settings 提供非默认值时才传 kwargs，让 env vars 优先。
+    """
+    if framework_settings is None:
+        return Settings()
+
+    # 只传递与默认值不同的 framework 值作为 kwargs。
+    # 不传 kwargs 时 pydantic-settings 从 env vars / env_file / defaults 解析，
+    # 确保 APP_LLM_API_KEY env var 优先于 framework 的空值。
+    kwargs: dict = {}
+
+    if framework_settings.model != "claude-sonnet-4-20250514":
+        kwargs["llm_model"] = framework_settings.model
+
+    if framework_settings.llm.provider != "anthropic":
+        kwargs["llm_provider"] = framework_settings.llm.provider
+
+    fw_api_key = framework_settings.llm.api_key
+    if fw_api_key.get_secret_value():
+        kwargs["llm_api_key"] = fw_api_key
+
+    if framework_settings.llm.base_url is not None:
+        kwargs["llm_base_url"] = framework_settings.llm.base_url
+
+    return Settings(**kwargs)
