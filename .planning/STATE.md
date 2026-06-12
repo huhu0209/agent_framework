@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v0.0.6
 milestone_name: 路径文件的统一
 status: executing
-last_updated: "2026-06-12T05:57:13.924Z"
-last_activity: 2026-06-12 -- Phase 24 execution started
+last_updated: "2026-06-12T06:24:44.575Z"
+last_activity: 2026-06-12 -- Phase 25 execution started
 progress:
   total_phases: 6
   completed_phases: 5
-  total_plans: 9
+  total_plans: 13
   completed_plans: 9
-  percent: 83
+  percent: 69
 ---
 
 # STATE.md
@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md (updated 2026-06-11)
 
 **Core value:** 可靠的 Agent 编排框架，提供安全、可测试、可扩展的基础设施
-**Current focus:** Phase 24 — backend-integration-e2e-wiring-path-scoped-rules
+**Current focus:** Phase 25 — tech-debt-integration-warnings-stale-docs
 
 ## Milestone History
 
@@ -33,12 +33,12 @@ See: .planning/PROJECT.md (updated 2026-06-11)
 
 ## Current Position
 
-Phase: 24 (backend-integration-e2e-wiring-path-scoped-rules) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 24
-Last activity: 2026-06-12 -- Phase 24 execution started
+Phase: 25 (tech-debt-integration-warnings-stale-docs) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 25
+Last activity: 2026-06-12 -- Phase 25 execution started
 
-Progress: [████████░░] 80%
+Progress: [████████░░] 83%
 
 ## Velocity
 
@@ -83,7 +83,6 @@ None.
 | feature | 多动物形象选择 | deferred | v0.0.3 |
 | feature | 消息气泡飞行动画 | deferred | v0.0.3 |
 | feature | 拖拽编排 Agent 工作流 | deferred | v0.0.3 |
-| test_warning | WR-01/02/03 asyncio timing/cleanup | pre-existing | v0.0.1 |
 | code_fragility | CR-01 shared mutable singleton | design note | v0.0.1 |
 
 ## Session Continuity
