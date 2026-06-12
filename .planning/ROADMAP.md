@@ -153,7 +153,7 @@ Plans:
 
 Plans:
 - [x] 24-01-PLAN.md — RuleLoader module + config leaf dependency test *(Wave 1)*
-- [ ] 24-02-PLAN.md — PromptAssembler integration + test signature updates *(Wave 2)*
+- [x] 24-02-PLAN.md — PromptAssembler integration + test signature updates *(Wave 2)*
 - [ ] 24-03-PLAN.md — Backend wiring + AgentFactory.from_configloader + E2E test *(Wave 3)*
 
 ## Progress
@@ -186,4 +186,4 @@ Phases execute in numeric order: 20 → 21 → 22 → 23 → 24
 | 21. Discovery + Loader | v0.0.6 | 2/2 | Complete    | 2026-06-11 |
 | 22. Simple Adapters | v0.0.6 | 1/1 | Complete | 2026-06-11 |
 | 23. Complex Adapters | v0.0.6 | 2/2 | Complete | 2026-06-12 |
-| 24. Integration + E2E | v0.0.6 | 1/3 | In Progress|  |
+| 24. Integration + E2E | v0.0.6 | 2/3 | In Progress|  |
