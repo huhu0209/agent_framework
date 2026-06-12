@@ -25,7 +25,9 @@ ALLOWED_ORIGINS = os.getenv("APP_CORS_ORIGINS", "http://localhost:30001").split(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- ConfigLoader first per D-01（提供回退默认值）---
-    config_loader = ConfigLoader()
+    # project_dir 指向项目根目录（backend/ 的父目录），而非 CWD
+    project_root = Path(__file__).resolve().parent.parent
+    config_loader = ConfigLoader(project_dir=project_root)
     fw_settings = config_loader.load_settings()
 
     # --- Backend Settings with ConfigLoader fallback, env vars still highest priority per D-01 ---
