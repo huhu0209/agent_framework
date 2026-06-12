@@ -36,6 +36,7 @@ from agent_framework.orchestrator.planner import (
 from agent_framework.orchestrator.planning_session import PlanningSession
 from agent_framework.memory.flush import FlushExtractor
 from agent_framework.memory.semantic_extractor import SemanticExtractor
+from agent_framework.config.loader import ConfigLoader
 from agent_framework.prompts.assembler import PromptAssembler
 from agent_framework.prompts.profiles import AgentProfile
 from agent_framework.tools.context.compactor import CompactConfig, compact, should_compact
@@ -134,7 +135,9 @@ class AgentLoop(Agent):
             self.router.registry.register(spec)
 
         if self.profile is not None:
-            self._system_prompt_text = self._assembler.render(self.profile)
+            self._system_prompt_text = self._assembler.render(
+                ConfigLoader(), self.profile
+            )
         elif self._skill_registry is not None:
             catalog = self._skill_registry.describe_available()
             self._system_prompt_text = (
