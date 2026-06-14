@@ -32,6 +32,7 @@ async def lifespan(app: FastAPI):
 
     # --- Backend Settings with ConfigLoader fallback, env vars still highest priority per D-01 ---
     settings = create_settings(framework_settings=fw_settings)
+    app.state.settings = settings  # 供 verify_api_key 依赖读取
 
     # --- 初始化 Agent 工厂 ---
     factory = AgentFactory.from_configloader(config_loader, settings)
