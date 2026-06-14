@@ -42,7 +42,7 @@ from ..types import (
 
 logger = logging.getLogger(__name__)
 
-OPENAI_BASE_URL = "https://api.openseek.com/v1"
+OPENAI_BASE_URL = "https://api.openai.com/v1"
 OPENAI_DEFAULT_MODEL = "gpt-5"
 
 
