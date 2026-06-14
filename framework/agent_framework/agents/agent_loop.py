@@ -298,7 +298,7 @@ class AgentLoop(Agent):
                         drafts = await self._semantic_extractor.extract_from_messages(_conv_text)
                         if drafts:
                             from agent_framework.memory.semantic_writer import SemanticWriter
-                            SemanticWriter(Path(memory_dir)).write_batch(drafts)
+                            await SemanticWriter(Path(memory_dir)).write_batch(drafts)
                     except Exception:
                         logger.debug("语义记忆提取失败（best-effort）", exc_info=True)
 
