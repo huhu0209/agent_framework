@@ -23,6 +23,9 @@ if TYPE_CHECKING:
 # PostToolUse hooks 只能看到截断后的结果，防止 stdin 数据过大
 _POST_HOOK_RESULT_LIMIT = 5000
 
+# C2: HITL ASK 等待用户确认的超时（秒）。UI 未连接/用户不响应时避免永久挂起 agent 主循环。
+_HITL_ASK_TIMEOUT = 300
+
 
 class ToolRouter:
     """按工具来源路由：builtin / mcp。"""
@@ -120,7 +123,15 @@ class ToolRouter:
                 ],
             )
             future = self._hitl_manager.create_pending(request)
-            response = await future
+            try:
+                response = await asyncio.wait_for(future, timeout=_HITL_ASK_TIMEOUT)
+            except asyncio.TimeoutError:
+                # C2: 超时清理 pending（防内存泄漏），返回错误而非永久挂起
+                self._hitl_manager._pending.pop(request.request_id, None)
+                return ToolResult(
+                    content=f"工具 '{name}' 等待确认超时",
+                    is_error=True,
+                )
             if response.action == "deny":
                 return ToolResult(
                     content=f"工具 '{name}' 被用户拒绝",

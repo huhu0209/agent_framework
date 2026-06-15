@@ -47,13 +47,16 @@ class StdioTransport(McpTransport):
         command: str,
         args: list[str] | None = None,
         env: dict[str, str] | None = None,
+        timeout_ms: int = 30_000,
     ) -> None:
         self._command = command
         self._args = args or []
         self._env = env
+        self._timeout_ms = timeout_ms  # C3: 单请求超时，防 server 不响应永久挂起
         self._process: asyncio.subprocess.Process | None = None
         self._lock = asyncio.Lock()
         self._pending_future: asyncio.Future | None = None
+        self._pending_id = None  # C3 加固: 当前请求 id，供 _read_loop 匹配防响应错配
         self._notification_queue: asyncio.Queue[dict] = asyncio.Queue()
         self._reader_task: asyncio.Task | None = None
 
@@ -75,8 +78,14 @@ class StdioTransport(McpTransport):
             loop = asyncio.get_running_loop()
             future = loop.create_future()
             self._pending_future = future
+            self._pending_id = payload.get("id")  # C3 加固: 记录请求 id 供 _read_loop 匹配
             await self._write(payload)
-            return await future
+            try:
+                # C3: 超时防 server 不响应永久挂起（McpManager.start 的 try/except 跳过失败 server）
+                return await asyncio.wait_for(future, timeout=self._timeout_ms / 1000)
+            except asyncio.TimeoutError:
+                self._pending_future = None  # 清理，防 _read_loop 迟到响应误用
+                raise
 
     async def send_notification(self, payload: dict) -> None:
         await self._write(payload)
@@ -114,7 +123,9 @@ class StdioTransport(McpTransport):
                 body = await self._read_exact(length)
                 msg = json.loads(body)
                 if "id" in msg:
-                    if self._pending_future and not self._pending_future.done():
+                    # C3 加固: 只 set 匹配 _pending_id 的响应，防超时后迟到响应错配下一个请求
+                    if (self._pending_future and not self._pending_future.done()
+                            and msg.get("id") == self._pending_id):
                         self._pending_future.set_result(msg)
                 else:
                     self._notification_queue.put_nowait(msg)

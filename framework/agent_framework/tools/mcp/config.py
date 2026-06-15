@@ -150,7 +150,7 @@ class McpManager:
 
     def _create_transport(self, cfg: McpServerConfig) -> McpTransport:
         if cfg.transport == "stdio":
-            return StdioTransport(cfg.command, cfg.args, cfg.env or None)
+            return StdioTransport(cfg.command, cfg.args, cfg.env or None, cfg.timeout_ms)
         raise ValueError(f"不支持的传输类型: {cfg.transport}")
 
     def _register_tools(
