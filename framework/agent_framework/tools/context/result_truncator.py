@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import re
+import uuid
 
 import aiofiles
 
@@ -28,7 +30,12 @@ async def truncate_if_needed(
     preview = f"{head}...[省略{skipped}字符]...{tail}"
 
     dump_dir = os.path.join(workdir, RESULT_DUMP_DIR)
-    dump_filename = f"{tool_call_id}.txt"
+    # C1: tool_call_id 来自 LLM（不可信），白名单消毒防路径遍历。
+    # 消毒后仅含 [A-Za-z0-9_.-]，无路径分隔符，os.path.join 不可能逃逸 dump_dir。
+    safe_id = re.sub(r"[^A-Za-z0-9_.-]", "_", tool_call_id)
+    if safe_id in ("", ".", ".."):
+        safe_id = uuid.uuid4().hex
+    dump_filename = f"{safe_id}.txt"
     dump_path = os.path.join(dump_dir, dump_filename)
     relative_path = f"{RESULT_DUMP_DIR}/{dump_filename}"
 
