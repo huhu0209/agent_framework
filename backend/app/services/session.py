@@ -57,6 +57,7 @@ class SessionManager:
         self._redis = redis_client
         self._cleanup_task: asyncio.Task | None = None  # type: ignore[type-arg]
         self._session_list_cache: list[dict] | None = None
+        self._history_lock = asyncio.Lock()  # H-A6: 保护 history.jsonl 并发 append
 
     @staticmethod
     def _validate_session_id(session_id: str) -> None:
@@ -207,14 +208,15 @@ class SessionManager:
         if not self._storage_dir:
             return
         history_path = self._storage_dir / "history.jsonl"
-        history_path.parent.mkdir(parents=True, exist_ok=True)
         entry = json.dumps({
             "session_id": session_id,
             "title": title,
             "created_at": time.time(),
         }, ensure_ascii=False)
-        async with aiofiles.open(history_path, "a", encoding="utf-8") as f:
-            await f.write(entry + "\n")
+        async with self._history_lock:  # H-A6: 防并发 append 交错
+            history_path.parent.mkdir(parents=True, exist_ok=True)
+            async with aiofiles.open(history_path, "a", encoding="utf-8") as f:
+                await f.write(entry + "\n")
 
     async def update_title(self, session_id: str, title: str) -> bool:
         """更新 history.jsonl 中的标题，返回是否实际更新。"""
