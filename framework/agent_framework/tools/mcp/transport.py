@@ -56,6 +56,7 @@ class StdioTransport(McpTransport):
         self._process: asyncio.subprocess.Process | None = None
         self._lock = asyncio.Lock()
         self._pending_future: asyncio.Future | None = None
+        self._pending_id = None  # C3 加固: 当前请求 id，供 _read_loop 匹配防响应错配
         self._notification_queue: asyncio.Queue[dict] = asyncio.Queue()
         self._reader_task: asyncio.Task | None = None
 
@@ -77,6 +78,7 @@ class StdioTransport(McpTransport):
             loop = asyncio.get_running_loop()
             future = loop.create_future()
             self._pending_future = future
+            self._pending_id = payload.get("id")  # C3 加固: 记录请求 id 供 _read_loop 匹配
             await self._write(payload)
             try:
                 # C3: 超时防 server 不响应永久挂起（McpManager.start 的 try/except 跳过失败 server）
@@ -121,7 +123,9 @@ class StdioTransport(McpTransport):
                 body = await self._read_exact(length)
                 msg = json.loads(body)
                 if "id" in msg:
-                    if self._pending_future and not self._pending_future.done():
+                    # C3 加固: 只 set 匹配 _pending_id 的响应，防超时后迟到响应错配下一个请求
+                    if (self._pending_future and not self._pending_future.done()
+                            and msg.get("id") == self._pending_id):
                         self._pending_future.set_result(msg)
                 else:
                     self._notification_queue.put_nowait(msg)
