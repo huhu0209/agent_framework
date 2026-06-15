@@ -55,6 +55,7 @@
 - Files: `framework/agent_framework/agents/base.py`
 - Impact: All agent implementations are concrete classes with no shared interface beyond what `AgentLoop` provides.
 - Fix approach: Either remove the empty file or define a base agent protocol.
+- **✅ RESOLVED (v0.0.2~v0.0.5):** File now contains `AgentEvent` dataclass and `Agent` ABC with abstract `async def run()` (24 lines).
 
 ## Known Bugs
 
@@ -63,30 +64,35 @@
 - Files: `framework/agent_framework/agents/agent_loop.py:87`
 - Trigger: Instantiating `AgentLoop` with a non-None `skill_dirs` argument.
 - Workaround: Import `Path` from `pathlib` at the top of the file.
+- **✅ RESOLVED (v0.0.5):** `from pathlib import Path` added at line 12.
 
 **Type annotation bug in `TaskManager._apply_changes`:**
 - Symptoms: `pending_writes: list[tuple[Task]] = []` on line 199 is an invalid type annotation. `tuple[Task]` is a single-element tuple, but the code only appends `Task` objects directly (not tuples). The variable is used as `for dep_task in pending_writes` expecting `Task` items.
 - Files: `framework/agent_framework/tasks/manager.py:199`
 - Trigger: Code runs at runtime (Python ignores the annotation mismatch), but type checkers will flag this and it signals confused intent.
 - Workaround: Change type to `list[Task]` or adjust usage to match `list[tuple[Task]]`.
+- **✅ RESOLVED (v0.0.5):** Refactored to use `field_updates: dict` with `TaskChanges` TypedDict and `_VALID_CHANGE_KEYS` validation. No annotation bug remains.
 
 **`HITLManager.create_pending` uses deprecated `get_event_loop`:**
 - Symptoms: `asyncio.get_event_loop()` on line 47 is deprecated in Python 3.10+. In contexts without a running loop, this can return the wrong loop or raise.
 - Files: `framework/agent_framework/safety/hitl.py:47`
 - Trigger: Calling `create_pending` outside of an async context or in a nested event loop scenario.
 - Workaround: Use `asyncio.get_running_loop()` instead, which is the recommended replacement.
+- **✅ RESOLVED (v0.0.5):** Now uses `asyncio.get_running_loop()`.
 
 **`normalize_messages` mutates `last.content` in-place:**
 - Symptoms: Line 45 in `_normalize.py` does `last.content = [*last.content, *msg.content]`, mutating a Pydantic model field in-place. This violates immutability principles and can cause subtle bugs if the same message object is shared.
 - Files: `framework/agent_framework/llm/transform/_normalize.py:45`
 - Trigger: When consecutive `UserMessage` or `AssistantMessage` objects are normalized (merged).
 - Workaround: Replace the merged message with a new object instead of mutating `last.content`.
+- **✅ RESOLVED (v0.0.5):** Now creates a new `result` list with `model_copy()` / `model_copy(update={...})`. Original messages list never mutated.
 
 **`_apply_changes` mutates dataclass in-place via `_clear_dependency`:**
 - Symptoms: `_clear_dependency` on line 228 is called inside `_apply_changes` and writes dependent tasks to disk, but the write happens inside the `_lock` context. If `_clear_dependency` fails partway through, some dependency cleanups are written while others are lost, leaving inconsistent state.
 - Files: `framework/agent_framework/tasks/manager.py:228-236`
 - Trigger: Completing a task that is a blocker for many other tasks, with a file I/O error midway.
 - Workaround: Batch all dependency clears and write atomically, or implement a rollback mechanism.
+- **✅ RESOLVED (v0.0.5):** Refactored to use `field_updates: dict` with `_VALID_CHANGE_KEYS` validation and `dataclasses.replace()` for immutable updates.
 
 ## Security Considerations
 
@@ -95,18 +101,21 @@
 - Files: `framework/agent_framework/tools/builtin/file_tools.py:11-12,25-26`
 - Current mitigation: None. The `safe_path` function exists in `framework/agent_framework/safety/boundary.py` but is not used.
 - Recommendations: Call `safe_path(path, ctx.working_dir)` before any file I/O in both tools.
+- **✅ RESOLVED (v0.0.5):** Both `read_file` and `write_file` now call `safe_path(path, Path(ctx.working_dir))` and return `_PATH_REJECTED` on escape.
 
 **MCP server env injection:**
 - Risk: `StdioTransport` merges user-supplied `env` dict with `os.environ` (`{**os.environ, **(self._env or {})}`). Malicious MCP config could inject sensitive env vars or override existing ones.
 - Files: `framework/agent_framework/tools/mcp/transport.py:57`, `framework/agent_framework/tools/mcp/config.py:27`
 - Current mitigation: None. The `env` dict from config is trusted without validation.
 - Recommendations: Validate `McpServerConfig.env` keys against an allowlist or block sensitive keys (e.g., `API_KEY`, `TOKEN`, `PASSWORD`).
+- **✅ RESOLVED (v0.0.5):** Two mitigations: (1) `StdioTransport.connect()` filters inherited env to `_ALLOWED_ENV_KEYS` allowlist; (2) `McpServerConfig` has `@field_validator("env")` blocking sensitive key patterns (api_key, token, secret, password).
 
 **API keys stored in provider instances:**
 - Risk: `_api_key` is stored as a plain string on provider instances. If an object is serialized or logged, the key could leak.
 - Files: `framework/agent_framework/llm/providers/openai_provider.py:111`, `framework/agent_framework/llm/providers/anthropic_provider.py:259`, `framework/agent_framework/llm/providers/deepseek_provider.py:149`
 - Current mitigation: None. The key is stored in `self._api_key` and set in httpx headers at construction time.
 - Recommendations: Clear `_api_key` after client construction or use a secret reference pattern.
+- **✅ RESOLVED (v0.0.5):** All three providers now store `_api_key` as `SecretStr`. Only `get_secret_value()` is used when constructing HTTP headers.
 
 **Hook commands execute arbitrary shell:**
 - Risk: `_execute_command` in `HookManager` runs `bash -c <user-configured-command>`. If hook config is loaded from an untrusted source, this is arbitrary code execution.
@@ -133,6 +142,7 @@
 - Files: `framework/agent_framework/memory/log_manager.py:44-45`, `framework/agent_framework/teams/bus.py:26-30`, `framework/agent_framework/tools/context/result_truncator.py:34`
 - Cause: All I/O is synchronous despite the framework being fully async.
 - Improvement path: Wrap in `asyncio.to_thread()` or use `aiofiles`. The code already documents this in `log_manager.py` line 3-4.
+- **✅ PARTIALLY RESOLVED (v0.0.5~v0.0.6):** `log_manager.py` now uses `aiofiles.open()` for all reads/writes. `teams/bus.py` (`send()` and `read_inbox()`) still uses synchronous I/O.
 
 **MessageBus inbox read clears file:**
 - Problem: `read_inbox` reads the entire JSONL file and immediately writes empty string back (`path.write_text("")`). This is non-atomic: if the process crashes between read and write, messages are lost.
@@ -242,6 +252,7 @@
 - Files: `backend/tests/__init__.py` (empty)
 - Risk: Cannot verify any application-layer behavior.
 - Priority: Low (no code to test yet)
+- **✅ RESOLVED (v0.0.3~v0.0.6):** Backend progressively implemented — EventBus, WebSocket, ConfigLoader integration. Backend has tests for implemented features.
 
 **TeamManager loop behavior is undertested:**
 - What's not tested: The actual async loop in `TeamManager._loop` (idle timeout, shutdown request handling, inbox reading with real `AgentLoop`).
@@ -260,7 +271,9 @@
 - Files: `framework/tests/test_boundary.py`, `framework/tests/test_builtin_tools.py`
 - Risk: Path sandboxing is tested but not enforced -- the gap documented in Security Considerations.
 - Priority: High
+- **✅ RESOLVED (v0.0.5):** `file_tools.py` now calls `safe_path()` directly. Path sandboxing is enforced at the tool level, not just in isolation tests.
 
 ---
 
 *Concerns audit: 2026-05-28*
+*Last verified: 2026-06-12 — 10 items resolved, 17 remain open*
