@@ -47,10 +47,12 @@ class StdioTransport(McpTransport):
         command: str,
         args: list[str] | None = None,
         env: dict[str, str] | None = None,
+        timeout_ms: int = 30_000,
     ) -> None:
         self._command = command
         self._args = args or []
         self._env = env
+        self._timeout_ms = timeout_ms  # C3: 单请求超时，防 server 不响应永久挂起
         self._process: asyncio.subprocess.Process | None = None
         self._lock = asyncio.Lock()
         self._pending_future: asyncio.Future | None = None
@@ -76,7 +78,12 @@ class StdioTransport(McpTransport):
             future = loop.create_future()
             self._pending_future = future
             await self._write(payload)
-            return await future
+            try:
+                # C3: 超时防 server 不响应永久挂起（McpManager.start 的 try/except 跳过失败 server）
+                return await asyncio.wait_for(future, timeout=self._timeout_ms / 1000)
+            except asyncio.TimeoutError:
+                self._pending_future = None  # 清理，防 _read_loop 迟到响应误用
+                raise
 
     async def send_notification(self, payload: dict) -> None:
         await self._write(payload)
