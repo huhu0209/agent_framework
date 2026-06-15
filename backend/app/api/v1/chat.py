@@ -215,11 +215,16 @@ async def create_chat(req: ChatRequest, request: Request):
 async def get_history(
     request: Request,
     session_id: str = Path(pattern=SESSION_ID_RE.pattern),
-    limit: int | None = None,
-    before: str | None = None,
+    limit: int | None = Query(None, ge=1, le=500),  # H-A4: 上限防滥用
+    before: str | None = Query(None),  # H-A4
 ) -> HistoryResponse:
     sm = request.app.state.session_manager
-    before_ts = float(before) if before else None
+    before_ts: float | None = None
+    if before is not None:
+        try:
+            before_ts = float(before)
+        except (TypeError, ValueError):
+            raise HTTPException(422, "before must be a numeric timestamp")  # H-A4
     result = await sm.get_messages(session_id, limit=limit, before=before_ts)
     if result is None:
         raise HTTPException(404, "session not found")
