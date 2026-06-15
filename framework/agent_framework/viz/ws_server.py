@@ -132,7 +132,11 @@ async def _handle_stop_team(cmd: dict[str, Any], websocket: ServerConnection) ->
     task = _active_runners.pop(name, None)
     if task is not None:
         task.cancel()
-    await _send_response(websocket, True)
+        await _send_response(websocket, True)
+    else:
+        # H-S2: 无对应 runner 时诚实告知失败（_active_runners 当前恒空，
+        # start_team 尚为 MVP 不填充，故 stop 永远走此分支——不再撒谎 success）
+        await _send_response(websocket, False, "no active runner")
 
 
 async def _send_response(
