@@ -1,4 +1,8 @@
-"""Hook 管理器 — 注册、匹配、执行。"""
+"""Hook 管理器 — 注册、匹配、执行。
+
+安全模型（H-S1）：Hook command 经 ``bash -c`` 执行，仅在 ``trusted=True`` 时生效。
+用户须确保 hooks.json 可信（等同 git/Claude Code hooks）。详见 ``_execute_command``。
+"""
 
 from __future__ import annotations
 
@@ -131,7 +135,18 @@ class HookManager:
     async def _execute_command(
         self, config: HookConfig, context: HookContext,
     ) -> HookResult:
-        """执行 shell Hook，stdin 注入 JSON context。"""
+        """执行 shell Hook，stdin 注入 JSON context。
+
+        H-S1 安全说明（重要）：
+        ``command`` 来自用户静态配置的 ``hooks.json``（``load_from_json`` 直接读取字符串，
+        无 ``{tool_name}`` 等模板插值），经 ``bash -c`` 执行，故 command **可含任意 shell 语法**
+        （管道 ``|``、重定向 ``>``、命令替换 ``$()``）。这等同 git hooks / Claude Code hooks
+        的用户自配命令模型——仅在 ``trusted=True`` 时执行，**用户须自行确保 hooks.json 内容可信**。
+
+        stdin 注入的 ``tool_input``/``tool_result`` 是 JSON 数据写入子进程标准输入，
+        不参与命令拼接，故无 shell 注入风险。若未来引入 command 模板插值（拼接 LLM 输出），
+        必须改用 ``shlex.split`` + ``create_subprocess_exec`` 禁用 shell。
+        """
         try:
             proc = await asyncio.create_subprocess_exec(
                 "bash", "-c", config.command,
