@@ -147,7 +147,17 @@ class SkillRegistry:
     def _scan_dir(self, root: Path) -> None:
         if not root.exists():
             return
+        root_resolved = root.resolve()
         for path in sorted(root.rglob("SKILL.md")):
+            # G3: 剔除 symlink + 校验仍在 root 内，防路径遍历/递归炸弹
+            if path.is_symlink():
+                continue
+            try:
+                if not path.resolve().is_relative_to(root_resolved):
+                    logger.warning("Skill 路径 %s 逃逸根目录，跳过", path)
+                    continue
+            except OSError:
+                continue
             try:
                 raw = path.read_text(encoding="utf-8")
             except Exception:
@@ -219,11 +229,19 @@ class SkillRegistry:
         ref_dir = skill_dir / "references"
         if not ref_dir.is_dir():
             return [], 0
-        files = sorted(
-            str(f.relative_to(ref_dir))
-            for f in ref_dir.rglob("*")
-            if f.is_file()
-        )
+        ref_resolved = ref_dir.resolve()
+        files: list[str] = []
+        for f in ref_dir.rglob("*"):
+            # G3: 剔除 symlink + 校验仍在 ref_dir 内，防路径遍历/递归炸弹
+            if f.is_symlink() or not f.is_file():
+                continue
+            try:
+                if not f.resolve().is_relative_to(ref_resolved):
+                    continue
+            except OSError:
+                continue
+            files.append(str(f.relative_to(ref_dir)))
+        files.sort()
         return files[:10], len(files)
 
     @staticmethod
