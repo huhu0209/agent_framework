@@ -27,6 +27,15 @@ SESSION_TTL = 3600  # 1 hour
 _SESSION_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
 
+def _safe_json_loads(line: str, *, source: str) -> dict | None:
+    """A4: 容错 JSON 解析。坏行返回 None 并告警，不抛 JSONDecodeError。"""
+    try:
+        return json.loads(line)
+    except json.JSONDecodeError:
+        logger.warning("Skipping malformed JSON line in %s: %r", source, line[:80])
+        return None
+
+
 @dataclass
 class ChatSession:
     session_id: str
@@ -221,7 +230,9 @@ class SessionManager:
         for line in content.strip().split("\n"):
             if not line.strip():
                 continue
-            entry = json.loads(line)
+            entry = _safe_json_loads(line, source=str(history_path))
+            if entry is None:
+                continue
             if entry["session_id"] == session_id:
                 entry["title"] = title
                 updated = True
@@ -247,7 +258,9 @@ class SessionManager:
         for line in content.strip().split("\n"):
             if not line.strip():
                 continue
-            entry = json.loads(line)
+            entry = _safe_json_loads(line, source=str(history_path))
+            if entry is None:
+                continue
             sid = entry.get("session_id", "")
             try:
                 self._validate_session_id(sid)  # A2
@@ -322,7 +335,9 @@ class SessionManager:
             for line in content.strip().split("\n"):
                 if not line.strip():
                     continue
-                entry = json.loads(line)
+                entry = _safe_json_loads(line, source=str(history_path))
+                if entry is None:
+                    continue
                 if entry["session_id"] != session_id:
                     lines.append(json.dumps(entry, ensure_ascii=False))
             output = "\n".join(lines)
