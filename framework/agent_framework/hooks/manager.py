@@ -117,7 +117,7 @@ class HookManager:
 
         results: list[HookResult] = []
         to_remove: list[HookConfig] = []
-        for config in self._hooks[event]:
+        for config in list(self._hooks[event]):  # H-S4: 快照，防 await 期间并发 register 改列表
             if not self._match(config.matcher, context.tool_name):
                 continue
             result = await self._execute_command(config, context)
