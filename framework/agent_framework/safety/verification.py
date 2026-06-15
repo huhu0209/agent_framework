@@ -13,7 +13,10 @@ class VerificationRule(BaseModel):
 
     name: str
     description: str
-    check: Literal["code_compiles", "tests_pass", "schema_valid", "llm_judge", "regex_match"]
+    # B1: 仅 regex_match 已实现。未实现类型（code_compiles/tests_pass/schema_valid/llm_judge）
+    # 之前在 _run_single 中 return None 被静默跳过（安全幻觉），现收紧到 schema 层拒绝。
+    # 扩展点：实现新 check 类型时在此 Literal 添加该值，并在 _run_single 加对应分支。
+    check: Literal["regex_match"]
     config: dict[str, Any] = {}
     tool_names: list[str] | None = None  # None = 所有工具
 
@@ -58,7 +61,25 @@ class VerificationRunner:
         pattern = rule.config.get("pattern", "")
         value = str(tool_input.get(field, ""))
 
-        if re.search(pattern, value):
+        # B2: 空 pattern 会导致 re.search("", any) 恒匹配（永远 passed=True），验证形同虚设
+        if not pattern:
+            return VerificationResult(
+                rule=rule.name,
+                passed=False,
+                detail="规则缺少 pattern 配置",
+            )
+
+        # B2: 非法 pattern 抛 re.error 会中断工具执行，降级为失败结果
+        try:
+            matched = bool(re.search(pattern, value))
+        except re.error as exc:
+            return VerificationResult(
+                rule=rule.name,
+                passed=False,
+                detail=f"非法正则模式 '{pattern}': {exc}",
+            )
+
+        if matched:
             return VerificationResult(rule=rule.name, passed=True, detail="匹配成功")
 
         return VerificationResult(

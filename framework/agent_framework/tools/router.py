@@ -44,8 +44,16 @@ class ToolRouter:
         self._permission_pipeline: PermissionPipeline | None = None
 
     def set_permission_pipeline(self, pipeline: PermissionPipeline) -> None:
-        """设置权限管道。"""
+        """设置权限管道，并把内置工具的 annotations 注册进去。
+
+        B3: ToolSpec.annotations 由开发者在工具定义时声明（可信源），
+        在此注册到 pipeline，接通原本零调用方的 register_annotations。
+        """
         self._permission_pipeline = pipeline
+        for name in self.registry.list_tools():
+            spec = self.registry.get(name)
+            if spec is not None and spec.annotations:
+                pipeline.register_annotations(name, spec.annotations)
 
     def derive(self, registry: ToolRegistry) -> ToolRouter:
         """创建子路由 — 新 registry，继承所有内部基础设施。"""
