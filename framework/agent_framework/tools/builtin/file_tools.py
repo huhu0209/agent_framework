@@ -12,6 +12,9 @@ _PATH_REJECTED = ToolResult(
     is_error=True,
 )
 
+# C4: read_file 大小上限，防被诱导读超大文件 OOM
+_MAX_READ_BYTES = 5 * 1024 * 1024  # 5MB
+
 
 async def read_file(args: dict, ctx: ToolUseContext) -> ToolResult:
     path = args["path"]
@@ -23,6 +26,14 @@ async def read_file(args: dict, ctx: ToolUseContext) -> ToolResult:
 
     if not full_path.exists():
         return ToolResult(content=f"文件不存在: {path}", is_error=True)
+
+    # C4: 读前检查大小，防一次性整读超大文件 OOM
+    size = full_path.stat().st_size
+    if size > _MAX_READ_BYTES:
+        return ToolResult(
+            content=f"文件过大({size} 字节)，超过 {_MAX_READ_BYTES} 字节读取上限",
+            is_error=True,
+        )
 
     try:
         content = full_path.read_text(encoding="utf-8")
