@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from collections import OrderedDict
 from typing import TYPE_CHECKING
 
 from agent_framework.orchestrator.models import WorkerHandle
@@ -22,10 +23,22 @@ def _new_worker_id() -> str:
     return f"w_{uuid.uuid4().hex[:8]}"
 
 
-async def _collect_output(agent: Agent, prompt: str) -> str:
-    """从 agent.run() 收集文本输出。"""
+# E2: 同时存活的 worker agent 上限（LRU 淘汰最旧，防内存泄漏）
+_MAX_LIVE_AGENTS = 8
+
+
+async def _collect_output(agent: Agent, prompt: str, *, resume: bool = False) -> str:
+    """从 agent.run() 收集文本输出。
+
+    E2: resume=True 时调 agent.run(prompt, resume=True)（AgentLoop 继承 _messages 历史）。
+    Agent ABC 的 run 签名不含 resume kwarg，运行时 AgentLoop.run 支持。
+    """
     text = ""
-    async for event in agent.run(prompt):
+    if resume:
+        events = agent.run(prompt, resume=True)  # type: ignore[call-arg]
+    else:
+        events = agent.run(prompt)
+    async for event in events:
         if event.type == "done":
             content = (event.data or {}).get("content", [])
             if not isinstance(content, list):
@@ -60,6 +73,8 @@ class WorkerManager:
         self._router = router
         self._ctx = ctx
         self._workers: dict[str, WorkerHandle] = {}
+        # E2: 保留 agent 实例供 send_message resume，LRU 上限 _MAX_LIVE_AGENTS
+        self._agents: OrderedDict[str, Agent] = OrderedDict()
 
     async def spawn(self, worker_name: str, prompt: str) -> WorkerHandle:
         """创建并执行一个 Worker，返回执行结果。"""
@@ -67,13 +82,16 @@ class WorkerManager:
         worker_id = _new_worker_id()
         self._workers[worker_id] = WorkerHandle(id=worker_id, worker_name=worker_name, status="running")
         try:
+            # E2: 隔离 ctx，防多存活 worker agent 共享 ctx 互相覆盖 planning_session
+            isolated_ctx = self._ctx.model_copy(update={"extra": dict(self._ctx.extra)})
             agent = spec.factory(
                 adapter=self._adapter,
                 model=self._model,
                 router=self._router,
-                ctx=self._ctx,
+                ctx=isolated_ctx,
             )
             output = await _collect_output(agent, prompt)
+            self._retain_agent(worker_id, agent)  # E2: 保留供 send_message resume
             completed = WorkerHandle(
                 id=worker_id, worker_name=worker_name, status="completed", output=output,
             )
@@ -87,6 +105,14 @@ class WorkerManager:
             self._workers[worker_id] = failed
             return failed
 
+    def _retain_agent(self, worker_id: str, agent: Agent) -> None:
+        """E2: 保留 agent 供 resume，LRU 淘汰最旧。"""
+        self._agents[worker_id] = agent
+        self._agents.move_to_end(worker_id)
+        while len(self._agents) > _MAX_LIVE_AGENTS:
+            evicted_id, _ = self._agents.popitem(last=False)
+            logger.warning("Worker agent %s 被 LRU 淘汰，后续 send_message 将报错", evicted_id)
+
     def list_workers(self, *, status: str = "all") -> list[WorkerHandle]:
         """查询 Worker 列表，可按状态过滤。"""
         workers = list(self._workers.values())
@@ -95,13 +121,27 @@ class WorkerManager:
         return [w for w in workers if w.status == status]
 
     async def send_message(self, worker_id: str, message: str) -> WorkerHandle:
-        """向已完成的 Worker 发送追加消息（继续执行）。"""
+        """向已完成的 Worker 发送追加消息，在原 agent 上 resume（继承历史）。"""
         original = self._workers.get(worker_id)
         if original is None:
             raise KeyError(f"Worker not found: {worker_id}")
 
-        followup_prompt = (
-            f"[前一轮输出]\n{original.output}\n\n"
-            f"[追加指令]\n{message}"
-        )
-        return await self.spawn(original.worker_name, followup_prompt)
+        agent = self._agents.get(worker_id)
+        if agent is None:
+            raise RuntimeError(f"Worker {worker_id} 已被回收，需重新 spawn")
+        self._agents.move_to_end(worker_id)  # LRU: 标记最近使用
+
+        try:
+            output = await _collect_output(agent, message, resume=True)
+            completed = WorkerHandle(
+                id=worker_id, worker_name=original.worker_name, status="completed", output=output,
+            )
+            self._workers[worker_id] = completed
+            return completed
+        except Exception as e:
+            logger.error("Worker '%s' resume failed: %s", worker_id, e)
+            failed = WorkerHandle(
+                id=worker_id, worker_name=original.worker_name, status="failed", error=str(e),
+            )
+            self._workers[worker_id] = failed
+            return failed
