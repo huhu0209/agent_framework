@@ -43,6 +43,7 @@ class ChatSession:
     agent_loop: AgentLoop | None = None
     task: asyncio.Task | None = None  # type: ignore[type-arg]
     created_at: float = field(default_factory=time.time)
+    last_accessed: float = field(default_factory=time.time)  # H-A2: 活跃判定，get() 更新
     transcript_writer: TranscriptWriter | None = None
 
 
@@ -102,7 +103,7 @@ class SessionManager:
     def get(self, session_id: str) -> ChatSession | None:
         session = self._sessions.get(session_id)
         if session is not None:
-            session.created_at = time.time()
+            session.last_accessed = time.time()  # H-A2: 更新 last_accessed，不刷新 created_at
         return session
 
     async def get_messages(
@@ -383,7 +384,7 @@ class SessionManager:
         now = time.time()
         expired = [
             sid for sid, s in self._sessions.items()
-            if now - s.created_at > self._ttl
+            if now - s.last_accessed > self._ttl  # H-A2: 用 last_accessed 判定空闲
             and (s.task is None or s.task.done())
         ]
         for sid in expired:
