@@ -90,9 +90,14 @@ async def _handler(
 
 async def _push_events(websocket: ServerConnection, queue: asyncio.Queue[dict[str, Any]]) -> None:
     """从 EventBus Queue 推送事件到 WebSocket 客户端。"""
-    while True:
-        event = await queue.get()
-        await websocket.send(json.dumps(event))
+    from websockets.exceptions import ConnectionClosed
+
+    try:
+        while True:
+            event = await queue.get()
+            await websocket.send(json.dumps(event))
+    except ConnectionClosed:
+        return  # H-S3: 连接已关闭，优雅退出推送循环（不冒泡到 _handler）
 
 
 async def _handle_commands(websocket: ServerConnection, bus: EventBus) -> None:
