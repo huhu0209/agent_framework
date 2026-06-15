@@ -194,7 +194,7 @@ async def create_chat(req: ChatRequest, request: Request):
             })
             session.messages.append({
                 "role": "error",
-                "content": str(exc),
+                "content": _ERROR_MESSAGES[_classify_error(exc)],  # H-A3: 脱敏，与 SSE 一致
                 "timestamp": time.time(),
             })
         finally:
