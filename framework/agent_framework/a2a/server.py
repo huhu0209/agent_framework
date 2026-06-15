@@ -25,6 +25,13 @@ Scope = dict[str, Any]
 Receive = Callable[[], Awaitable[dict[str, Any]]]
 Send = Callable[[dict[str, Any]], Awaitable[None]]
 
+# G2: 请求 body 大小上限，防恶意大请求耗尽内存
+_MAX_BODY = 1024 * 1024  # 1MB
+
+
+class _BodyTooLargeError(Exception):
+    """G2: 请求 body 超过 _MAX_BODY 上限。"""
+
 
 class A2AServer:
     """Pure ASGI application that exposes an Agent via A2A protocol routes."""
@@ -106,7 +113,11 @@ class A2AServer:
     async def _handle_create_task(
         self, scope: Scope, receive: Receive, send: Send,
     ) -> None:
-        body = await self._read_body(receive)
+        try:
+            body = await self._read_body(receive)
+        except _BodyTooLargeError:
+            await self._send_json(send, 413, {"error": "请求体过大"})
+            return
         try:
             data = json.loads(body)
         except (json.JSONDecodeError, UnicodeDecodeError):
@@ -211,6 +222,9 @@ class A2AServer:
         while True:
             message = await receive()
             body += message.get("body", b"")
+            # G2: 超上限立即终止，防无限累积耗尽内存
+            if len(body) > _MAX_BODY:
+                raise _BodyTooLargeError()
             if not message.get("more_body", False):
                 break
         return body
