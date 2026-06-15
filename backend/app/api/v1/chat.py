@@ -194,7 +194,7 @@ async def create_chat(req: ChatRequest, request: Request):
             })
             session.messages.append({
                 "role": "error",
-                "content": str(exc),
+                "content": _ERROR_MESSAGES[_classify_error(exc)],  # H-A3: 脱敏，与 SSE 一致
                 "timestamp": time.time(),
             })
         finally:
@@ -215,11 +215,16 @@ async def create_chat(req: ChatRequest, request: Request):
 async def get_history(
     request: Request,
     session_id: str = Path(pattern=SESSION_ID_RE.pattern),
-    limit: int | None = None,
-    before: str | None = None,
+    limit: int | None = Query(None, ge=1, le=500),  # H-A4: 上限防滥用
+    before: str | None = Query(None),  # H-A4
 ) -> HistoryResponse:
     sm = request.app.state.session_manager
-    before_ts = float(before) if before else None
+    before_ts: float | None = None
+    if before is not None:
+        try:
+            before_ts = float(before)
+        except (TypeError, ValueError):
+            raise HTTPException(422, "before must be a numeric timestamp")  # H-A4
     result = await sm.get_messages(session_id, limit=limit, before=before_ts)
     if result is None:
         raise HTTPException(404, "session not found")
@@ -240,32 +245,38 @@ PREVIEW_SESSION_LIMIT = 10  # Only enrich the N most recent sessions to limit I/
 
 
 @router.get("/sessions")
-async def list_sessions(request: Request, preview: int = Query(0, ge=0, le=50)) -> list[dict]:
+async def list_sessions(
+    request: Request,
+    preview: int = Query(0, ge=0, le=50),
+    limit: int = Query(50, ge=1, le=200),  # H-A5: 分页
+    offset: int = Query(0, ge=0),  # H-A5: 分页
+) -> list[dict]:
     sm = request.app.state.session_manager
     sessions = await sm.list_sessions()
-    if preview > 0:
-        result = []
-        for i, session in enumerate(sessions):
-            new_session = {**session}
-            if i < PREVIEW_SESSION_LIMIT:
-                # Fetch limited messages for preview
-                msgs = await sm.get_messages(session["session_id"], limit=preview)
-                if msgs is not None:
-                    messages, has_more, _ = msgs
-                    new_session["preview"] = messages
-                    if has_more:
-                        # Need full count — use public method
-                        count = await sm.count_messages(session["session_id"])
-                        new_session["message_count"] = count if count is not None else len(messages)
-                    else:
-                        new_session["message_count"] = len(messages)
-                else:
-                    new_session["preview"] = None
+    paged = sessions[offset:offset + limit]  # H-A5: 分页切片
+    if preview <= 0:
+        return paged
+    # H-A5: 并发 enrichment 前 PREVIEW_SESSION_LIMIT 个（替代串行 N+1）
+    enrich_count = min(PREVIEW_SESSION_LIMIT, len(paged))
+
+    async def enrich(session: dict) -> dict:
+        new_session = {**session}
+        msgs = await sm.get_messages(session["session_id"], limit=preview)
+        if msgs is not None:
+            messages, has_more, _ = msgs
+            new_session["preview"] = messages
+            if has_more:
+                count = await sm.count_messages(session["session_id"])
+                new_session["message_count"] = count if count is not None else len(messages)
             else:
-                new_session["preview"] = None
-            result.append(new_session)
-        return result
-    return sessions
+                new_session["message_count"] = len(messages)
+        else:
+            new_session["preview"] = None
+        return new_session
+
+    enriched = await asyncio.gather(*[enrich(s) for s in paged[:enrich_count]])
+    rest = [{**s, "preview": None} for s in paged[enrich_count:]]
+    return list(enriched) + rest
 
 
 # ---------------------------------------------------------------------------
