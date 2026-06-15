@@ -19,7 +19,17 @@ from app.services.session import SessionManager
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
+def validate_cors_origins(origins: list[str]) -> None:
+    """A3: allow_credentials=True 时禁止 '*'，否则任意源可携凭据访问。"""
+    if "*" in origins:
+        raise ValueError(
+            "ALLOWED_ORIGINS must not contain '*' when allow_credentials=True"
+        )
+
+
 ALLOWED_ORIGINS = [o.strip() for o in os.getenv("APP_CORS_ORIGINS", "http://localhost:30001").split(",") if o.strip()]
+validate_cors_origins(ALLOWED_ORIGINS)  # A3: 启动时校验
 
 
 @asynccontextmanager
@@ -70,6 +80,6 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE", "PATCH"],
-    allow_headers=["Content-Type", "X-Session-Id"],
+    allow_headers=["Content-Type", "X-Session-Id", "X-API-Key"],  # A1/A3: 加 X-API-Key
 )
 app.include_router(chat_router, prefix="/api/v1")
