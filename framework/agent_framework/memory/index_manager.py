@@ -16,6 +16,27 @@ _MAX_LINES = 200
 _MAX_LINE_LENGTH = 150
 
 
+async def atomic_write(path: Path, content: str) -> None:
+    """原子写入：write-to-temp + os.replace，防崩溃截断/并发交错损坏。
+
+    F2: 从 MemoryIndexManager._atomic_write 提取为模块级共享函数，
+    供 index_manager 与 semantic_writer._create 复用（消除"只有索引用原子写"的不一致）。
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(dir=path.parent, suffix=".tmp", prefix=".memory_")
+    try:
+        os.close(fd)
+        async with aiofiles.open(tmp_path, "w", encoding="utf-8") as f:
+            await f.write(content)
+        os.replace(tmp_path, path)
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
 class MemoryIndexManager:
     """维护 MEMORY.md 索引文件。"""
 
@@ -23,22 +44,8 @@ class MemoryIndexManager:
         self._path = index_path
 
     async def _atomic_write(self, text: str) -> None:
-        """原子写入：write-to-temp + os.replace，防止崩溃时丢失。"""
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp_path = tempfile.mkstemp(
-            dir=self._path.parent, suffix=".tmp", prefix=".memory_idx_"
-        )
-        try:
-            os.close(fd)
-            async with aiofiles.open(tmp_path, "w", encoding="utf-8") as f:
-                await f.write(text)
-            os.replace(tmp_path, self._path)
-        except BaseException:
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-            raise
+        """原子写入（委托模块级 atomic_write）。"""
+        await atomic_write(self._path, text)
 
     @staticmethod
     def _make_pattern(file_name: str) -> re.Pattern:

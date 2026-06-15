@@ -13,7 +13,7 @@ import aiofiles
 from pydantic import BaseModel
 
 from agent_framework.memory.frontmatter import format_frontmatter
-from agent_framework.memory.index_manager import MemoryIndexManager
+from agent_framework.memory.index_manager import MemoryIndexManager, atomic_write
 from agent_framework.memory.types import MemoryType, SemanticMemoryDraft
 
 logger = logging.getLogger(__name__)
@@ -100,9 +100,8 @@ class SemanticWriter:
     async def _create(self, path: Path, draft: SemanticMemoryDraft) -> None:
         meta = {"name": draft.name, "description": draft.description, "type": draft.type.value}
         content = f"{format_frontmatter(meta)}\n\n{draft.body}\n"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        async with aiofiles.open(path, "w", encoding="utf-8") as f:
-            await f.write(content)
+        # F2: 原子写（tmp+replace），防 w 模式崩溃截断/并发交错（与 index_manager 一致）
+        await atomic_write(path, content)
 
     @staticmethod
     def _detect_overlap(existing: str, new_body: str) -> str | None:
