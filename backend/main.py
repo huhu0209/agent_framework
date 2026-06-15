@@ -50,8 +50,8 @@ async def lifespan(app: FastAPI):
     # --- 连接 Redis（可选，失败时降级为本地文件存储）---
     rdb = None
     try:
-        rdb = redis_lib.Redis.from_url(settings.redis_url, decode_responses=True)
-        rdb.ping()
+        rdb = redis_lib.asyncio.Redis.from_url(settings.redis_url, decode_responses=True)  # H-A1: async
+        await rdb.ping()
     except (redis_lib.ConnectionError, redis_lib.TimeoutError) as exc:
         logger.error("Redis connection failed: %s. Caching disabled.", exc)
         rdb = None
@@ -71,7 +71,7 @@ async def lifespan(app: FastAPI):
     sm.cancel_all()
     sm.stop_cleanup()
     if rdb:
-        rdb.close()
+        await rdb.aclose()  # H-A1: async
 
 
 app = FastAPI(title="Agent Chat", lifespan=lifespan)

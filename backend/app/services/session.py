@@ -153,20 +153,19 @@ class SessionManager:
         if session is not None:
             return session.messages
         # 2. Redis
-        cached = self._redis_get_messages(session_id)
+        cached = await self._redis_get_messages(session_id)  # H-A1: async
         if cached is not None:
             return cached
-        # 3. JSONL 冷读 → 回填 Redis (TranscriptReader is sync, wrap in to_thread)
+        # 3. JSONL 冷读 → 回填 Redis
         if not self._storage_dir:
             return None
         transcript_path = self._storage_dir / f"{session_id}.jsonl"
         if not transcript_path.exists():
             return None
-        result = await asyncio.to_thread(self._cold_read_jsonl, transcript_path, session_id)
-        return result
+        return await self._cold_read_jsonl(transcript_path, session_id)  # H-A1: _cold_read 已 async
 
-    def _cold_read_jsonl(self, transcript_path: Path, session_id: str) -> list[dict]:
-        """Sync JSONL cold read — called via asyncio.to_thread."""
+    async def _cold_read_jsonl(self, transcript_path: Path, session_id: str) -> list[dict]:
+        """JSONL 冷读 → 回填 Redis。H-A1: 改 async（_redis_set_messages 已 async）。"""
         from agent_framework.transcript import TranscriptReader
         reader = TranscriptReader(transcript_path)
         result: list[dict] = []
@@ -179,7 +178,7 @@ class SessionManager:
                 result.append({"role": "agent", "blocks": blocks, "timestamp": ev.timestamp})
             elif ev.type.value == "tool_result":
                 continue  # tool_result 不展示在历史中
-        self._redis_set_messages(session_id, result)
+        await self._redis_set_messages(session_id, result)  # H-A1
         return result
 
     def remove(self, session_id: str) -> None:
@@ -240,7 +239,7 @@ class SessionManager:
         await self._atomic_write(history_path, "\n".join(lines) + "\n")
         self._invalidate_list_cache()
         if self._redis:
-            self._redis.delete(f"session:{session_id}:meta")
+            await self._redis.delete(f"session:{session_id}:meta")  # H-A1: async
         return updated
 
     async def list_sessions(self) -> list[dict]:
@@ -278,7 +277,7 @@ class SessionManager:
         """使 session 列表缓存失效。"""
         self._session_list_cache = None
 
-    def _redis_set_messages(self, session_id: str, messages: list[dict]) -> None:
+    async def _redis_set_messages(self, session_id: str, messages: list[dict]) -> None:
         """将消息列表写入 Redis Sorted Set。"""
         if not self._redis:
             return
@@ -289,23 +288,23 @@ class SessionManager:
             score = msg.get("timestamp", 0)
             pipe.zadd(key, {json.dumps(msg, ensure_ascii=False): score})
         pipe.expire(key, 86400)  # 24h TTL
-        pipe.execute()
+        await pipe.execute()  # H-A1: async redis
 
-    def _redis_get_messages(self, session_id: str) -> list[dict] | None:
+    async def _redis_get_messages(self, session_id: str) -> list[dict] | None:
         """从 Redis Sorted Set 读取消息。"""
         if not self._redis:
             return None
         key = f"session:{session_id}:messages"
-        if not self._redis.exists(key):
+        if not await self._redis.exists(key):  # H-A1: async redis
             return None
-        raw = self._redis.zrange(key, 0, -1)
+        raw = await self._redis.zrange(key, 0, -1)  # H-A1
         if not raw:
             return None
         return [json.loads(item) for item in raw]
 
     async def persist_messages(self, session_id: str, messages: list[dict]) -> None:
         """Public method: persist messages to Redis cache."""
-        self._redis_set_messages(session_id, messages)
+        await self._redis_set_messages(session_id, messages)  # H-A1: async
 
     async def restore_messages(self, session_id: str) -> list[dict] | None:
         """Public method: restore messages from cache/storage."""
@@ -316,7 +315,7 @@ class SessionManager:
         self._validate_session_id(session_id)  # A2
         self._invalidate_list_cache()
         if self._redis:
-            self._redis.delete(f"session:{session_id}:messages", f"session:{session_id}:meta")
+            await self._redis.delete(f"session:{session_id}:messages", f"session:{session_id}:meta")  # H-A1: async
         self.remove(session_id)
         if not self._storage_dir:
             return False
