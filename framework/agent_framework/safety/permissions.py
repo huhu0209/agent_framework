@@ -106,6 +106,11 @@ class PermissionPipeline:
         if mode == "deny":
             return PermissionResult(PermissionDecision.DENY, "mode_deny", RiskLevel.HIGH)
         if mode == "accept":
+            # B3: accept 模式不一键放行——destructive/openWorld 工具仍需询问，
+            # 其余工具放行。避免 accept 模式下 write_file 等危险操作绕过 HITL。
+            annotations = self._annotations.get(tool_name, {})
+            if annotations.get("destructive") or annotations.get("openWorld"):
+                return self._annotate_decision(tool_name)
             return PermissionResult(PermissionDecision.ALLOW, "mode_accept", RiskLevel.SAFE)
 
         # ③ ALLOW — 白名单

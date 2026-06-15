@@ -32,6 +32,7 @@ def create_builtin_registry() -> ToolRegistry:
         ),
         handler=read_file,
         timeout_ms=10_000,
+        annotations={"readOnly": True},  # B3
     ))
 
     registry.register(ToolSpec(
@@ -51,6 +52,7 @@ def create_builtin_registry() -> ToolRegistry:
         ),
         handler=write_file,
         timeout_ms=10_000,
+        annotations={"destructive": True},  # B3
     ))
 
     registry.register(ToolSpec(
@@ -68,6 +70,7 @@ def create_builtin_registry() -> ToolRegistry:
         ),
         handler=search_client.search,
         timeout_ms=15_000,
+        annotations={"openWorld": True},  # B3
     ))
 
     registry.register(ToolSpec(
@@ -92,6 +95,7 @@ def create_builtin_registry() -> ToolRegistry:
         ),
         handler=handle_memory_write,
         timeout_ms=5_000,
+        annotations={"destructive": True},  # B3
     ))
 
     registry.register(ToolSpec(
@@ -110,6 +114,7 @@ def create_builtin_registry() -> ToolRegistry:
         ),
         handler=handle_memory_search,
         timeout_ms=10_000,
+        annotations={"readOnly": True},  # B3
     ))
 
     registry.register(ToolSpec(
@@ -131,6 +136,7 @@ def create_builtin_registry() -> ToolRegistry:
         ),
         handler=handle_update_plan_status,
         timeout_ms=5_000,
+        annotations={"destructive": True},  # B3
     ))
 
     return registry
