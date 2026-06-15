@@ -35,11 +35,14 @@ async def run_subagent(
     max_steps: int = 30,
 ) -> str:
     filtered = create_filtered_router(parent_router, allowed_tools)
+    # E1: 为子 loop 构造隔离 ctx（浅拷贝 extra），防子 loop 写 ctx.extra["planning_session"] 覆盖父级。
+    # 参照 orchestrator/engine.py:84-90 coord_ctx 模式。
+    isolated_ctx = ctx.model_copy(update={"extra": dict(ctx.extra)})
     loop = AgentLoop(
         adapter=adapter,
         model=model,
         router=filtered,
-        ctx=ctx,
+        ctx=isolated_ctx,
         max_steps=max_steps,
         system_prompt=system_prompt,
     )
