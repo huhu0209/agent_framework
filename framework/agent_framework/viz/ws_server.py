@@ -17,21 +17,48 @@ _active_runners: dict[str, asyncio.Task[None]] = {}
 
 
 async def serve_ws(
-    bus: EventBus, host: str = "localhost", port: int = 8765, *, token: str | None = None,
+    bus: EventBus,
+    host: str = "localhost",
+    port: int = 8765,
+    *,
+    token: str | None = None,
+    allowed_origins: list[str] | None = None,
+    production: bool = False,
 ) -> None:
-    """启动 WebSocket 服务端。"""
+    """启动 WebSocket 服务端。
+
+    B4: production=True 时 token 必须提供（fail-safe，防无认证裸奔）。
+    allowed_origins 非 None 时启用 Origin 白名单校验（CSWSH 防护）。
+    """
+    if production and token is None:
+        raise ValueError("production mode requires a token")
 
     if token is not None:
         logger.info("WebSocket server listening on ws://%s:%d (auth enabled)", host, port)
     else:
         logger.info("WebSocket server listening on ws://%s:%d (no auth, development mode)", host, port)
 
-    async with serve(lambda ws: _handler(ws, bus, token), host, port) as server:
+    async with serve(
+        lambda ws: _handler(ws, bus, token, allowed_origins), host, port
+    ) as server:
         await server.wait_closed()
 
 
-async def _handler(websocket: ServerConnection, bus: EventBus, token: str | None = None) -> None:
+async def _handler(
+    websocket: ServerConnection,
+    bus: EventBus,
+    token: str | None = None,
+    allowed_origins: list[str] | None = None,
+) -> None:
     """处理单个 WebSocket 连接：推送事件 + 接收命令。"""
+
+    # B4: Origin 白名单校验（CSWSH 防护）——浏览器任意网页可发起 WS 连接，
+    # 无 Origin 校验时恶意页面可借用户会话发 start_team/stop_team。
+    if allowed_origins is not None:
+        origin = websocket.request.headers.get("Origin")
+        if origin not in allowed_origins:
+            await websocket.close(code=4003, reason="Origin not allowed")
+            return
 
     # Token authentication check
     if token is not None:
