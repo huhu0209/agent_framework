@@ -103,13 +103,24 @@ class LLMScoringRetriever:
         for fname in selected_files:
             fpath = (memory_dir / fname).resolve()
             if not fpath.is_relative_to(memory_dir.resolve()):
+                # F1: 越界文件名记录告警，不再静默跳过
+                logger.warning("retriever 拒绝越界文件名: %r", fname)
                 continue
-            if fpath.exists():
+            if fpath.is_file():  # F1: is_file 替代 exists，防 symlink 命中
                 async with aiofiles.open(fpath, "r", encoding="utf-8") as af:
                     file_content = await af.read()
                 selected.append({
                     "file": fpath.name,
                     "content": file_content,
                 })
+            else:
+                # F1: 不存在/非文件记录告警
+                logger.warning("retriever 跳过不存在/非文件: %r", fname)
+
+        # F1: LLM 选了文件但全部无效，汇总告警（召回归零有迹可查）
+        if selected_files and not selected:
+            logger.warning(
+                "retriever: LLM 选择了 %d 个文件但全部无效，召回为空", len(selected_files)
+            )
 
         return selected
