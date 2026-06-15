@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import enum
+import hmac
 import json
 import logging
 import time
 from typing import Any, AsyncGenerator
 
-from fastapi import APIRouter, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Request
 from starlette.responses import StreamingResponse
 
 from agent_framework.agents.agent_loop import LoopEvent
@@ -24,7 +25,19 @@ from app.models import SESSION_ID_RE, ChatRequest, HistoryResponse, RenameReques
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+
+async def verify_api_key(
+    request: Request,
+    x_api_key: str | None = Header(None, alias="X-API-Key"),
+) -> None:
+    """A1: 校验 X-API-Key 头，恒定时间比较防时序攻击。"""
+    settings = request.app.state.settings
+    expected = settings.api_key.get_secret_value()
+    if not x_api_key or not hmac.compare_digest(x_api_key, expected):
+        raise HTTPException(status_code=401, detail="unauthorized")
+
+
+router = APIRouter(dependencies=[Depends(verify_api_key)])
 
 
 # ---------------------------------------------------------------------------

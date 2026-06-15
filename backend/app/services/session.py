@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import tempfile
 import time
 import uuid
@@ -21,6 +22,18 @@ from agent_framework.transcript import TranscriptWriter
 logger = logging.getLogger(__name__)
 
 SESSION_TTL = 3600  # 1 hour
+
+# A2: 与 app.models.SESSION_ID_RE 一致；本地定义避免 services → models 循环依赖
+_SESSION_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+
+
+def _safe_json_loads(line: str, *, source: str) -> dict | None:
+    """A4: 容错 JSON 解析。坏行返回 None 并告警，不抛 JSONDecodeError。"""
+    try:
+        return json.loads(line)
+    except json.JSONDecodeError:
+        logger.warning("Skipping malformed JSON line in %s: %r", source, line[:80])
+        return None
 
 
 @dataclass
@@ -43,6 +56,12 @@ class SessionManager:
         self._redis = redis_client
         self._cleanup_task: asyncio.Task | None = None  # type: ignore[type-arg]
         self._session_list_cache: list[dict] | None = None
+
+    @staticmethod
+    def _validate_session_id(session_id: str) -> None:
+        """A2: 校验 session_id 为 32 位 hex，防路径遍历。非法则 raise ValueError。"""
+        if not isinstance(session_id, str) or not _SESSION_ID_RE.match(session_id):
+            raise ValueError(f"invalid session_id: {session_id!r}")
 
     async def _atomic_write(self, path: Path, content: str) -> None:
         """原子写入：write-to-temp + os.replace，防止崩溃时丢失。"""
@@ -128,6 +147,7 @@ class SessionManager:
 
     async def _get_all_messages(self, session_id: str) -> list[dict] | None:
         """三层查找：内存 → Redis → JSONL。"""
+        self._validate_session_id(session_id)  # A2
         # 1. 内存
         session = self._sessions.get(session_id)
         if session is not None:
@@ -210,7 +230,9 @@ class SessionManager:
         for line in content.strip().split("\n"):
             if not line.strip():
                 continue
-            entry = json.loads(line)
+            entry = _safe_json_loads(line, source=str(history_path))
+            if entry is None:
+                continue
             if entry["session_id"] == session_id:
                 entry["title"] = title
                 updated = True
@@ -236,8 +258,16 @@ class SessionManager:
         for line in content.strip().split("\n"):
             if not line.strip():
                 continue
-            entry = json.loads(line)
-            transcript_path = self._storage_dir / f"{entry['session_id']}.jsonl"
+            entry = _safe_json_loads(line, source=str(history_path))
+            if entry is None:
+                continue
+            sid = entry.get("session_id", "")
+            try:
+                self._validate_session_id(sid)  # A2
+            except ValueError:
+                logger.warning("Skipping history entry with invalid session_id: %r", sid)
+                continue
+            transcript_path = self._storage_dir / f"{sid}.jsonl"
             if transcript_path.exists():
                 sessions.append(entry)
         sessions.reverse()  # 最新的在前
@@ -283,6 +313,7 @@ class SessionManager:
 
     async def delete_session(self, session_id: str) -> bool:
         """删除会话及其 transcript。"""
+        self._validate_session_id(session_id)  # A2
         self._invalidate_list_cache()
         if self._redis:
             self._redis.delete(f"session:{session_id}:messages", f"session:{session_id}:meta")
@@ -304,7 +335,9 @@ class SessionManager:
             for line in content.strip().split("\n"):
                 if not line.strip():
                     continue
-                entry = json.loads(line)
+                entry = _safe_json_loads(line, source=str(history_path))
+                if entry is None:
+                    continue
                 if entry["session_id"] != session_id:
                     lines.append(json.dumps(entry, ensure_ascii=False))
             output = "\n".join(lines)
@@ -315,6 +348,7 @@ class SessionManager:
 
     async def get_or_restore(self, session_id: str, agent_loop: AgentLoop | None = None) -> ChatSession | None:
         """获取 session，如果不在内存中则从 transcript 恢复。"""
+        self._validate_session_id(session_id)  # A2
         session = self.get(session_id)
         if session is not None:
             return session

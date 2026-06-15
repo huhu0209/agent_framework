@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     llm_model: str = "claude-sonnet-4-20250514"
     llm_base_url: str | None = None
     redis_url: str = "redis://localhost:6379/0"
+    api_key: SecretStr = SecretStr("")  # 后端 API 鉴权 key（env APP_API_KEY）
 
     model_config = {"env_prefix": "APP_", "env_file": ".env"}
 
@@ -25,6 +26,13 @@ class Settings(BaseSettings):
     def api_key_must_not_be_empty(cls, v: SecretStr) -> SecretStr:
         if not v.get_secret_value().strip():
             raise ValueError("APP_LLM_API_KEY is required")
+        return v
+
+    @field_validator("api_key")
+    @classmethod
+    def backend_api_key_must_not_be_empty(cls, v: SecretStr) -> SecretStr:
+        if not v.get_secret_value().strip():
+            raise ValueError("APP_API_KEY is required")
         return v
 
 
