@@ -10,6 +10,7 @@ Routes:
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import uuid
 from datetime import datetime, timezone
@@ -88,7 +89,8 @@ class A2AServer:
         headers = scope.get("headers", [])
         for key, value in headers:
             if key == b"x-api-key":
-                if value.decode() == expected:
+                # G1: 恒定时间比较防时序攻击（逐字节爆破）
+                if hmac.compare_digest(value, expected.encode()):
                     return True, 200
                 return False, 403
 
