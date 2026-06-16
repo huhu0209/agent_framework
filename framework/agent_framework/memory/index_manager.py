@@ -132,6 +132,8 @@ class MemoryIndexManager:
                 async with aiofiles.open(f, "r", encoding="utf-8") as af:
                     content = await af.read()
                 meta = parse_frontmatter(content)
+                if not meta:  # 无 frontmatter → 跳过非记忆文件（README/notes 等）
+                    continue
                 disk_files[f.name] = (meta.get("name") or f.stem, meta.get("description", ""))
             except Exception:
                 logger.warning("reconcile 跳过无法解析的文件: %s", f.name)
