@@ -412,7 +412,7 @@ class AgentLoop(Agent):
             plan_checked = True
 
         if self._planning.has_plan:
-            drift = self._planning.increment_drift()
+            drift = self._planning.advance()  # H-E2: 有推进则归零，全 pending 不推进则累加
             if drift == DriftLevel.ABORT:
                 return (
                     [LoopEvent(
