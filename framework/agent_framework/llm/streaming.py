@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import AsyncIterator
 
 from .types import (
@@ -27,6 +28,8 @@ from .types import (
     ToolUseBlock,
     UsageStats,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -62,6 +65,7 @@ async def parse_sse_lines(
         try:
             yield json.loads(payload)
         except json.JSONDecodeError:
+            logger.warning("SSE data 行 JSON 解析失败已跳过: %s", payload[:120])
             continue
 
 
