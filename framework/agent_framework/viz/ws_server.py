@@ -8,6 +8,7 @@ import logging
 from typing import Any
 
 from websockets.asyncio.server import ServerConnection, serve
+from websockets.exceptions import ConnectionClosed
 
 from agent_framework.viz.event_bus import EventBus
 
@@ -90,8 +91,6 @@ async def _handler(
 
 async def _push_events(websocket: ServerConnection, queue: asyncio.Queue[dict[str, Any]]) -> None:
     """从 EventBus Queue 推送事件到 WebSocket 客户端。"""
-    from websockets.exceptions import ConnectionClosed
-
     try:
         while True:
             event = await queue.get()
