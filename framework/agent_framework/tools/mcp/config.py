@@ -173,6 +173,7 @@ class McpManager:
                 ),
                 timeout_ms=cfg.timeout_ms,
                 annotations=tool_def.get("annotations", {}),
+                strict_unknown_params=False,  # H-C2: 远程 inputSchema 可能不完整，不严格校验未知参数
             )
             registry.register(spec)
 

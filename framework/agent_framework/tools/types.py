@@ -36,6 +36,7 @@ class ToolSpec(BaseModel):
     timeout_ms: int = 30_000
     handler: Any = Field(default=None, exclude=True, repr=False)
     annotations: dict[str, Any] = {}
+    strict_unknown_params: bool = True  # H-C2: builtin 可信 schema 严格校验未知参数；MCP 远程 schema 设 False
 
     def to_tool_definition(self) -> ToolDefinition:
         return ToolDefinition(
