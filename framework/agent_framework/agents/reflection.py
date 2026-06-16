@@ -10,6 +10,7 @@ from typing import AsyncGenerator
 
 from agent_framework.agents.base import Agent, AgentEvent
 from agent_framework.agents.agent_loop import AgentLoop
+from agent_framework.agents.event_utils import extract_text_from_content
 from agent_framework.llm.base import ILLMAdapter
 from agent_framework.llm.types import (
     CompletionConfig,
@@ -187,10 +188,7 @@ class ReflectionAgent(Agent):
             step_count += 1
             if event.type == "done":
                 content = event.data.get("content", [])
-                for block in content:
-                    if block.get("type") == "text":
-                        output_text = block.get("text", "")
-                        break
+                output_text = extract_text_from_content(content, first_only=True)
                 if not output_text and content:
                     first = content[0]
                     if isinstance(first, dict):

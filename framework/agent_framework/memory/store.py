@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import logging
-import re
 from dataclasses import dataclass
 from pathlib import Path
 
 from agent_framework.llm.base import ILLMAdapter
+from agent_framework.memory._search_util import search_blocks
 from agent_framework.memory.log_manager import EpisodicLogManager
 from agent_framework.memory.retriever import LLMScoringRetriever
 from agent_framework.memory.semantic_writer import SemanticWriter
@@ -74,24 +74,19 @@ class MemoryStore:
         """情景记忆关键词搜索。"""
         dates = self._log_manager.list_dates()
         results: list[MemorySearchResult] = []
-        query_lower = query.lower()
 
         for date in reversed(dates):
             content = await self._log_manager.read_log(date)
             if content is None:
                 continue
-            blocks = re.split(r"(?=^## )", content, flags=re.MULTILINE)
-            for block in blocks:
-                if not block.strip():
-                    continue
-                if query_lower in block.lower():
-                    results.append(MemorySearchResult(
-                        source="episodic",
-                        file=f"{date}.md",
-                        content=block.strip(),
-                    ))
-                    if len(results) >= top_k:
-                        return results
+            for block in search_blocks(content, query):
+                results.append(MemorySearchResult(
+                    source="episodic",
+                    file=f"{date}.md",
+                    content=block,
+                ))
+                if len(results) >= top_k:
+                    return results
 
         return results
 

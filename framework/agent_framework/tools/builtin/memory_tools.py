@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import logging
-import re
 from datetime import datetime
 from pathlib import Path
 
+from agent_framework.memory._search_util import search_blocks
 from agent_framework.memory.log_manager import EpisodicLogManager
 from agent_framework.memory.types import EventType
 from agent_framework.tools.types import ToolResult, ToolUseContext
@@ -70,15 +70,10 @@ async def handle_memory_search(args: dict, ctx: ToolUseContext) -> ToolResult:
         if content is None:
             continue
 
-        blocks = re.split(r"(?=^## )", content, flags=re.MULTILINE)
-
-        for block in blocks:
-            if not block.strip():
-                continue
-            if query.lower() in block.lower():
-                results.append(f"[{date}]\n{block.strip()}")
-                if len(results) >= top_k:
-                    break
+        for block in search_blocks(content, query):
+            results.append(f"[{date}]\n{block}")
+            if len(results) >= top_k:
+                break
         if len(results) >= top_k:
             break
 

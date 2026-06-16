@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from agent_framework.agents.agent_loop import AgentLoop
+from agent_framework.agents.event_utils import extract_text_from_content
 from agent_framework.llm.base import ILLMAdapter
 from agent_framework.llm.types import ToolParameterSchema
 from agent_framework.tools.router import ToolRouter
@@ -49,9 +50,7 @@ async def run_subagent(
     final_text = ""
     async for event in loop.run(prompt):
         if event.type == "done":
-            for block in event.data.get("content", []):
-                if isinstance(block, dict) and block.get("type") == "text":
-                    final_text += block.get("text", "")
+            final_text += extract_text_from_content(event.data.get("content", []))
         elif event.type == "error":
             return f"[子代理错误] {event.data.get('error', '')}"
         elif event.type == "max_steps":
