@@ -46,9 +46,6 @@ class McpServerConfig(BaseModel):
     env: dict[str, str] = {}
     timeout_ms: int = 30_000
 
-    url: str = ""
-    headers: dict[str, str] = {}
-
     @field_validator("env")
     @classmethod
     def _reject_sensitive_env_keys(cls, v: dict[str, str]) -> dict[str, str]:
