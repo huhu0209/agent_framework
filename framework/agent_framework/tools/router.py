@@ -7,7 +7,7 @@ import logging
 import uuid
 from typing import TYPE_CHECKING
 
-from agent_framework.safety.permissions import PermissionDecision, PermissionPipeline
+from agent_framework.safety.permissions import PermissionDecision, PermissionPipeline, PermissionResult
 from agent_framework.tools.degrader import ToolDegrader
 from agent_framework.tools.executor import ToolExecutor
 from agent_framework.tools.validator import ToolValidator
@@ -106,7 +106,7 @@ class ToolRouter:
             return await self._handle_ask(name, args, decision)
         return None
 
-    async def _handle_ask(self, name: str, args: dict, decision: "PermissionResult") -> ToolResult | None:
+    async def _handle_ask(self, name: str, args: dict, decision: PermissionResult) -> ToolResult | None:
         """处理 ASK 决定：通过 HITLManager 等待用户确认，或返回错误。"""
         from agent_framework.safety.hitl import PermissionOption, PermissionRequest
 

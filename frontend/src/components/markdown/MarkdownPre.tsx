@@ -1,4 +1,4 @@
-import { useState, type ComponentPropsWithoutRef, type ReactNode } from 'react'
+import { useState, isValidElement, type ComponentPropsWithoutRef, type ReactElement, type ReactNode } from 'react'
 
 export function MarkdownPre({ children, ...rest }: ComponentPropsWithoutRef<'pre'>) {
   const [copied, setCopied] = useState(false)
@@ -65,10 +65,16 @@ export function MarkdownPre({ children, ...rest }: ComponentPropsWithoutRef<'pre
   )
 }
 
+type PreChild = { className?: string; children?: ReactNode }
+
+/** 类型守卫：收窄 ReactNode 为带 className/children 的 ReactElement，替代裸 as 断言 */
+function isPreChild(node: ReactNode): node is ReactElement<PreChild> {
+  return isValidElement(node)
+}
+
 function extractLanguage(children: ReactNode): string | null {
-  if (children && typeof children === 'object' && 'props' in children) {
-    const className = (children as { props?: { className?: string } }).props?.className ?? ''
-    const match = className.match(/language-(\w+)/)
+  if (isPreChild(children)) {
+    const match = (children.props.className ?? '').match(/language-(\w+)/)
     return match ? match[1] : null
   }
   return null
@@ -77,8 +83,8 @@ function extractLanguage(children: ReactNode): string | null {
 function extractText(children: ReactNode): string {
   if (typeof children === 'string') return children
   if (Array.isArray(children)) return children.map(extractText).join('')
-  if (children && typeof children === 'object' && 'props' in children) {
-    return extractText((children as { props?: { children?: ReactNode } }).props?.children)
+  if (isPreChild(children)) {
+    return extractText(children.props.children)
   }
   return ''
 }
