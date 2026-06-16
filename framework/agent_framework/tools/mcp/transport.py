@@ -134,6 +134,11 @@ class StdioTransport(McpTransport):
                 self._pending_future.set_exception(
                     ConnectionError("MCP server 已退出")
                 )
+        except Exception as exc:
+            # H-C1: 坏 JSON / 缺 Content-Length 等异常兜底，set 到 pending future 防永挂
+            if self._pending_future and not self._pending_future.done():
+                self._pending_future.set_exception(exc)
+            logger.warning("MCP _read_loop 因异常退出: %s", exc)
 
     async def _read_until_header_end(self) -> bytes:
         buf = b""
