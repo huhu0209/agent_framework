@@ -24,7 +24,7 @@ def _get_manager(ctx: ToolUseContext) -> WorkerManager | None:
     return manager
 
 
-async def _handle_spawn_worker(args: dict, ctx) -> ToolResult:
+async def _handle_spawn_worker(args: dict, ctx: ToolUseContext) -> ToolResult:
     manager = _get_manager(ctx)
     if manager is None:
         return ToolResult(content="WorkerManager not available", is_error=True)
@@ -46,7 +46,7 @@ async def _handle_spawn_worker(args: dict, ctx) -> ToolResult:
         )
 
 
-async def _handle_send_message(args: dict, ctx) -> ToolResult:
+async def _handle_send_message(args: dict, ctx: ToolUseContext) -> ToolResult:
     manager = _get_manager(ctx)
     if manager is None:
         return ToolResult(content="WorkerManager not available", is_error=True)
@@ -68,7 +68,7 @@ async def _handle_send_message(args: dict, ctx) -> ToolResult:
         )
 
 
-async def _handle_list_workers(args: dict, ctx) -> ToolResult:
+async def _handle_list_workers(args: dict, ctx: ToolUseContext) -> ToolResult:
     manager = _get_manager(ctx)
     if manager is None:
         return ToolResult(content="WorkerManager not available", is_error=True)
