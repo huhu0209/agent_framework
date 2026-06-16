@@ -23,6 +23,7 @@ class EventBus:
         self._maxsize = maxsize
         self._replay_size = replay_size
         self._replay: list[dict[str, Any]] = []
+        self._dropped: int = 0  # 满队列丢弃计数（可观测）
 
     async def subscribe(self) -> asyncio.Queue[dict[str, Any]]:
         """订阅事件，返回一个有界 Queue，自动回放缓冲事件。"""
@@ -54,8 +55,15 @@ class EventBus:
                     q.get_nowait()
                 except asyncio.QueueEmpty:
                     pass
+                self._dropped += 1
+                logger.warning("EventBus 订阅者队列满，丢弃最旧事件（累计 %d）", self._dropped)
             q.put_nowait(event)
 
     @property
     def subscriber_count(self) -> int:
         return len(self._subscribers)
+
+    @property
+    def dropped_count(self) -> int:
+        """满队列累计丢弃事件数（可观测）。"""
+        return self._dropped

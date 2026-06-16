@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     llm_base_url: str | None = None
     redis_url: str = "redis://localhost:6379/0"
     api_key: SecretStr = SecretStr("")  # 后端 API 鉴权 key（env APP_API_KEY）
+    max_message_length: int = 8000  # ChatRequest.message 长度上限（与 models.MAX_MESSAGE_LENGTH 对齐）
 
     model_config = {"env_prefix": "APP_", "env_file": ".env"}
 

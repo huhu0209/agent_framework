@@ -58,9 +58,14 @@ class ConfigLoader:
 
     def __init__(
         self,
-        global_dir: Path = Path.home(),
-        project_dir: Path = Path.cwd(),
+        global_dir: Path | None = None,
+        project_dir: Path | None = None,
     ) -> None:
+        # 运行时解析默认值（避免 Path.cwd() 作为默认参数在模块导入时冻结）
+        if global_dir is None:
+            global_dir = Path.home()
+        if project_dir is None:
+            project_dir = Path.cwd()
         self._global_dir = global_dir / ".agent-framework"
         self._project_dir = project_dir / ".agent-framework"
 
