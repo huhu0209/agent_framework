@@ -46,4 +46,21 @@ describe('MarkdownPre', () => {
     await fireEvent.click(button)
     expect(writeText).toHaveBeenCalledWith('copy me')
   })
+
+  it('handles clipboard failure gracefully', async () => {
+    const writeText = vi.fn().mockRejectedValue(new Error('not allowed'))
+    Object.assign(navigator, { clipboard: { writeText } })
+
+    render(
+      <MarkdownPre>
+        <code>copy me</code>
+      </MarkdownPre>
+    )
+
+    // H-FE1: 失败时 writeText 仍被调用，不抛中断；copied 保持 false（未成功）
+    await fireEvent.click(screen.getByTitle('Copy code'))
+    await new Promise((r) => setTimeout(r, 10))
+    expect(writeText).toHaveBeenCalledWith('copy me')
+    expect(screen.getByTitle('Copy code').textContent).toBe('Copy')
+  })
 })

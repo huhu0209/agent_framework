@@ -6,9 +6,14 @@ export function MarkdownPre({ children, ...rest }: ComponentPropsWithoutRef<'pre
 
   async function handleCopy() {
     const code = extractText(children)
-    await navigator.clipboard.writeText(code)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
+    try {
+      await navigator.clipboard.writeText(code)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // H-FE1: 非 HTTPS/权限拒绝时 writeText reject，降级提示而非 unhandled rejection
+      setCopied(false)
+    }
   }
 
   return (

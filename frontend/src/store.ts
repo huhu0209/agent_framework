@@ -189,8 +189,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     try {
       await sendViaSse(text, get, set)
-    } catch {
-      // Error handled: streamingMessage finalized in finally
+    } catch (e) {
+      // H-FE2: 失败复用 setError toast 通道 + 注入 error block 替代空气泡
+      const errMsg = e instanceof Error ? e.message : '未知错误'
+      get().setError(`消息发送失败: ${errMsg}`)
+      const current = get().streamingMessage
+      if (current && (!current.blocks || current.blocks.length === 0)) {
+        set({ streamingMessage: { ...current, blocks: [{ id: `blk-err-${Date.now()}`, kind: 'error', text: errMsg }] } })
+      }
     } finally {
       const final = get().streamingMessage
       set((s) => {
@@ -261,7 +267,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // If preview data, fetch full history in background
       if (cached.hasMore) {
         set({ loadingFullHistory: true })
+        const fetchStartedAt = Date.now()
         fetchMessages(id).then(({ messages, hasMore }) => {
+          // H-FE3: fetch 期间若有 sendMessage 更新缓存（cachedAt > fetchStartedAt），跳过覆盖
+          const current = get().messageCache.get(id)
+          if (current && current.cachedAt > fetchStartedAt) {
+            set({ loadingFullHistory: false })
+            return
+          }
           const entry: CacheEntry = { messages, hasMore, cachedAt: Date.now() }
           const cache = new Map(get().messageCache)
           cache.set(id, entry)
