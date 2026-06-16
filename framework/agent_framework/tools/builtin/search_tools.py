@@ -56,9 +56,3 @@ class SearchClient:
     def reset(self) -> None:
         """重置客户端实例（供测试使用）。"""
         self._client = None
-
-
-# 模块级默认实例 — 向后兼容
-_default_client = SearchClient()
-web_search = _default_client.search
-reset_client = _default_client.reset
