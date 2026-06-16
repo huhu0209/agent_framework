@@ -8,6 +8,7 @@ import uuid
 from collections import OrderedDict
 from typing import TYPE_CHECKING
 
+from agent_framework.agents.event_utils import extract_text_from_content
 from agent_framework.orchestrator.models import WorkerHandle
 
 if TYPE_CHECKING:
@@ -45,15 +46,8 @@ async def _collect_output(agent: Agent, prompt: str, *, resume: bool = False) ->
     async for event in events:
         if event.type == "done":
             content = (event.data or {}).get("content", [])
-            if not isinstance(content, list):
-                continue
-            for block in content:
-                if not isinstance(block, dict):
-                    continue
-                if block.get("type") == "text":
-                    text_value = block.get("text", "")
-                    if isinstance(text_value, str):
-                        text += text_value
+            if isinstance(content, list):
+                text += extract_text_from_content(content)
         elif event.type == "error":
             raise RuntimeError((event.data or {}).get("error", "Worker error"))
     return text or ""

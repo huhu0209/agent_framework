@@ -7,6 +7,7 @@ from typing import AsyncGenerator
 
 from agent_framework.agents.agent_loop import AgentLoop
 from agent_framework.agents.base import Agent, AgentEvent
+from agent_framework.agents.event_utils import extract_text_from_content
 from agent_framework.agents.sub_agent import create_filtered_router
 from agent_framework.llm.base import ILLMAdapter
 from agent_framework.llm.types import CompletionConfig, SystemMessage, TextBlock, UserMessage
@@ -165,10 +166,7 @@ class PlanAndSolveAgent(Agent):
         final_text = ""
         async for event in loop.run(prompt):
             if event.type == "done":
-                content = event.data.get("content", [])
-                for block in content:
-                    if isinstance(block, dict) and block.get("type") == "text":
-                        final_text += block.get("text", "")
+                final_text += extract_text_from_content(event.data.get("content", []))
             elif event.type == "error":
                 return f"[子代理错误] {event.data.get('error', '')}"
             elif event.type == "max_steps":
