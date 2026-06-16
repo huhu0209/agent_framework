@@ -9,9 +9,12 @@ from pydantic import BaseModel, Field, field_validator
 
 SESSION_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
+# ChatRequest.message 长度上限（与 Settings.max_message_length 对齐，防超长消息 DoS）
+MAX_MESSAGE_LENGTH = 8000
+
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = Field(..., max_length=MAX_MESSAGE_LENGTH)
     session_id: str | None = None
 
     @field_validator("session_id")
