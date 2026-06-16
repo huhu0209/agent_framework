@@ -189,8 +189,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     try {
       await sendViaSse(text, get, set)
-    } catch {
-      // Error handled: streamingMessage finalized in finally
+    } catch (e) {
+      // H-FE2: 失败复用 setError toast 通道 + 注入 error block 替代空气泡
+      const errMsg = e instanceof Error ? e.message : '未知错误'
+      get().setError(`消息发送失败: ${errMsg}`)
+      const current = get().streamingMessage
+      if (current && (!current.blocks || current.blocks.length === 0)) {
+        set({ streamingMessage: { ...current, blocks: [{ id: `blk-err-${Date.now()}`, kind: 'error', text: errMsg }] } })
+      }
     } finally {
       const final = get().streamingMessage
       set((s) => {

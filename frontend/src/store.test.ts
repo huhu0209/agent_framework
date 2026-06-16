@@ -177,7 +177,7 @@ describe('useChatStore', () => {
     expect(useChatStore.getState().messages).toHaveLength(0)
   })
 
-  it('handles fetch failure gracefully', async () => {
+  it('handles fetch failure with error feedback', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 500,
@@ -188,12 +188,14 @@ describe('useChatStore', () => {
     await useChatStore.getState().sendMessage('hello')
 
     const { messages } = useChatStore.getState()
-    // User message + empty agent message both present
     expect(messages).toHaveLength(2)
     expect(messages[0].role).toBe('user')
     expect(messages[1].role).toBe('agent')
-    expect(messages[1].blocks).toEqual([])
+    // H-FE2: 失败注入 error block（替代空气泡）
+    expect(messages[1].blocks?.[0]?.kind).toBe('error')
     expect(useChatStore.getState().isStreaming).toBe(false)
+    // H-FE2: setError 触发 toast
+    expect(useChatStore.getState().errorToast).not.toBeNull()
   })
 
   it('handles thinking and tool_call events', async () => {
