@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import AsyncIterator
 
 from .types import (
@@ -27,6 +28,8 @@ from .types import (
     ToolUseBlock,
     UsageStats,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -62,6 +65,9 @@ async def parse_sse_lines(
         try:
             yield json.loads(payload)
         except json.JSONDecodeError:
+            # debug 而非 warning：parse_sse_lines 是热路径（每 data: 行过此），坏 chunk 已跳过恢复，
+            # 级别低于 retry.py 的 warning（真正失败重试）；开 debug 日志可观测
+            logger.debug("SSE data 行 JSON 解析失败已跳过 (总长 %d): %s", len(payload), payload[:120])
             continue
 
 
