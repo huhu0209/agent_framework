@@ -43,7 +43,12 @@ class HITLManager:
         self._pending: dict[str, asyncio.Future[PermissionResponse]] = {}
 
     def create_pending(self, request: PermissionRequest) -> asyncio.Future[PermissionResponse]:
-        """创建一个待处理的权限请求，返回 Future。"""
+        """创建一个待处理的权限请求，返回 Future。
+
+        契约：返回的 Future 自身无超时，调用方必须自施 asyncio.wait_for
+        （参照 router._handle_ask 的 _HITL_ASK_TIMEOUT=300）。直接 await 在
+        UI 未连接/用户不响应时会永久挂起。详见 docs/CONCERNS.md。
+        """
         loop = asyncio.get_running_loop()
         future: asyncio.Future[PermissionResponse] = loop.create_future()
         self._pending[request.request_id] = future
