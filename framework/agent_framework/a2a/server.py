@@ -32,6 +32,10 @@ _MAX_BODY = 1024 * 1024  # 1MB
 _MAX_CONCURRENT_TASKS = 8
 _TASK_TIMEOUT = 300  # 秒
 
+# H-G1: 终态 task 保留窗口（供 client 轮询取结果）与 _tasks 兜底上限
+_TASK_RETENTION_SECONDS = 300
+_MAX_TASKS = 1000
+
 
 class _BodyTooLargeError(Exception):
     """G2: 请求 body 超过 _MAX_BODY 上限。"""
@@ -52,6 +56,7 @@ class A2AServer:
         self._tasks: dict[str, A2ATask] = {}
         self._lock = asyncio.Lock()
         self._concurrency = asyncio.Semaphore(_MAX_CONCURRENT_TASKS)  # H-G2
+        self._cleanup_tasks: set[asyncio.Task[None]] = set()  # H-G1: 追踪延迟清理 task 防 GC
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -141,6 +146,9 @@ class A2AServer:
         )
 
         async with self._lock:
+            if len(self._tasks) >= _MAX_TASKS:  # H-G1: 兜底上限，fail-fast
+                await self._send_json(send, 503, {"error": "任务数已达上限，请稍后重试"})
+                return
             self._tasks[task_id] = task
 
         asyncio.create_task(self._execute_task(task_id, message))
@@ -179,6 +187,7 @@ class A2AServer:
             )
             self._tasks[task_id] = updated
 
+        self._schedule_cleanup(task_id)  # H-G1: CANCELED 也是终态，延迟清理
         await self._send_json(send, 200, updated.model_dump())
 
     # ── Background Execution ─────────────────────────────────────────────
@@ -233,6 +242,8 @@ class A2AServer:
                                 "updated_at": datetime.now(timezone.utc).isoformat(),
                             },
                         )
+            finally:
+                self._schedule_cleanup(task_id)  # H-G1: 无论成败/超时，终态后延迟删除
 
     async def _collect_agent_result(self, message: str) -> list[str]:
         """H-G2: 收集 agent.run 的 done text，便于 wait_for 包装超时。"""
@@ -241,6 +252,17 @@ class A2AServer:
             if event.type == "done" and "text" in event.data:
                 result_parts.append(event.data["text"])
         return result_parts
+
+    def _schedule_cleanup(self, task_id: str) -> None:
+        """H-G1: 终态后延迟 _TASK_RETENTION_SECONDS 删除 task 条目，防 _tasks 无限增长。"""
+        cleanup = asyncio.create_task(self._cleanup_task(task_id))
+        self._cleanup_tasks.add(cleanup)
+        cleanup.add_done_callback(self._cleanup_tasks.discard)
+
+    async def _cleanup_task(self, task_id: str) -> None:
+        await asyncio.sleep(_TASK_RETENTION_SECONDS)
+        async with self._lock:
+            self._tasks.pop(task_id, None)
 
     # ── ASGI Helpers ─────────────────────────────────────────────────────
 
