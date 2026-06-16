@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import aiofiles
@@ -54,7 +54,7 @@ class EpisodicLogManager:
         """直接写入内容到指定日期的日志（供 flush 使用），添加 flush 标记头。"""
         log_path = self._log_path(date_str)
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        now = datetime.now()
+        now = datetime.now(tz=timezone.utc)  # H-F2: aware UTC，与 append 传入的 timestamp 时区一致
         header = f"\n## [{now.strftime('%H:%M')}] flush\n"
         async with aiofiles.open(log_path, "a", encoding="utf-8") as f:
             await f.write(header + content)
