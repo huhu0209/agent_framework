@@ -48,6 +48,10 @@ logger = logging.getLogger(__name__)
 
 ANTHROPIC_BASE_URL = "https://api.anthropic.com"
 ANTHROPIC_DEFAULT_MODEL = "claude-sonnet-4-6-20250514"
+# Extended thinking 默认 budget（config.thinking.budget_tokens 未配置时）
+DEFAULT_THINKING_BUDGET = 16000
+# thinking 开启时的 max_tokens 额外预留（输出配额，须 >= budget）
+DEFAULT_MAX_TOKENS_RESERVE = 8192
 
 
 def _build_request_body(config: CompletionConfig) -> dict:
@@ -76,14 +80,14 @@ def _build_request_body(config: CompletionConfig) -> dict:
 
     # Extended thinking
     if config.thinking and config.thinking.type == "enabled":
-        budget = config.thinking.budget_tokens or 16000
+        budget = config.thinking.budget_tokens or DEFAULT_THINKING_BUDGET
         body["thinking"] = {
             "type": "enabled",
             "budget_tokens": budget,
         }
         # max_tokens 必须 >= budget_tokens + 输出
         if config.max_tokens is None:
-            body["max_tokens"] = budget + 8192
+            body["max_tokens"] = budget + DEFAULT_MAX_TOKENS_RESERVE
 
     # Provider 扩展参数（如 cache_control、betas 等）
     if config.provider_extras:

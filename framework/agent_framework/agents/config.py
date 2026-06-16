@@ -15,6 +15,9 @@ from agent_framework.tools.types import ToolUseContext
 
 logger = logging.getLogger(__name__)
 
+# Agent 默认模型（当前与 anthropic_provider.ANTHROPIC_DEFAULT_MODEL 一致）
+_DEFAULT_MODEL = "claude-sonnet-4-6-20250514"
+
 
 @dataclass
 class AgentConfig:
@@ -23,7 +26,7 @@ class AgentConfig:
     name: str
     system_prompt: str
     description: str = ""
-    model: str = "claude-sonnet-4-6-20250514"
+    model: str = _DEFAULT_MODEL
     max_steps: int = 10
     tools: list[str] | None = None
 
@@ -66,7 +69,7 @@ def parse_agent_config(text: str, filename: str = "<unknown>") -> AgentConfig:
     if not name:
         raise ValueError(f"Agent 配置缺少 name 字段: {filename}")
 
-    model = meta.get("model", "claude-sonnet-4-6-20250514")
+    model = meta.get("model", _DEFAULT_MODEL)
     max_steps = int(meta.get("max_steps", "10"))
     description = meta.get("description", "")
 
