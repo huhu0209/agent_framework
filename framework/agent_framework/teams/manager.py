@@ -22,7 +22,16 @@ logger = logging.getLogger(__name__)
 
 
 class TeamManager:
-    """管理持久化队友进程。"""
+    """管理持久化队友进程。
+
+    H-G5 并发约束（重要）：本类设计为 **单线程 asyncio 串行使用**，不加锁：
+    - 各队友 ``_loop`` 协程只写自己的 ``_statuses[config.name]`` key，互不交叉；
+    - ``_configs``/``_tasks``/初始 ``_statuses`` 仅在 ``spawn()``（lead 单线程调用）阶段写入；
+    - ``list_all()`` 遍历的 key 集合在 spawn 阶段固定，迭代期间不增删。
+
+    Python asyncio 单线程 + dict 原子操作 + 各写各的 key → 无实际竞态。
+    若未来引入多线程或将 ``_loop`` 改为多进程，须重新评估并加锁。
+    """
 
     def __init__(
         self,
