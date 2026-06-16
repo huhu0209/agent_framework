@@ -233,6 +233,7 @@ describe('useChatStore', () => {
 
     expect(mockFetch).toHaveBeenCalledWith(
       expect.stringContaining('/api/v1/sessions?preview=5'),
+      expect.objectContaining({ headers: expect.any(Object) }),
     )
     expect(useChatStore.getState().sessions).toEqual(sessions)
   })

@@ -32,6 +32,12 @@ export function resetIdCounter() {
 }
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''
+const API_KEY = import.meta.env.VITE_APP_API_KEY ?? ''
+
+/** A1 鉴权：所有 backend 请求需带 X-API-Key 头，值取自 VITE_APP_API_KEY */
+function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  return { 'X-API-Key': API_KEY, ...extra }
+}
 
 const inflightRequests = new Map<string, Promise<{ messages: ChatMessage[], hasMore: boolean }>>()
 
@@ -40,7 +46,7 @@ async function fetchMessages(id: string): Promise<{ messages: ChatMessage[], has
   if (existing) return existing
 
   const promise = (async () => {
-    const res = await fetch(`${API_BASE}/api/v1/chat/${id}`)
+    const res = await fetch(`${API_BASE}/api/v1/chat/${id}`, { headers: authHeaders() })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
     const messages: ChatMessage[] = data.messages.map((m: Record<string, unknown>, i: number) => ({
@@ -220,7 +226,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   loadSessions: async () => {
     set({ sessionsLoading: true })
     try {
-      const res = await fetch(`${API_BASE}/api/v1/sessions?preview=5`)
+      const res = await fetch(`${API_BASE}/api/v1/sessions?preview=5`, { headers: authHeaders() })
       if (res.ok) {
         const data = await res.json()
         const sessions: SessionInfo[] = Array.isArray(data) ? data : []
@@ -311,7 +317,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   deleteSession: async (id: string) => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/sessions/${id}`, { method: 'DELETE' })
+      const res = await fetch(`${API_BASE}/api/v1/sessions/${id}`, { method: 'DELETE', headers: authHeaders() })
       if (!res.ok) return
       const { sessions, sessionId } = get()
       const next = sessions.filter((s) => s.session_id !== id)
@@ -330,7 +336,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     try {
       const res = await fetch(`${API_BASE}/api/v1/sessions/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ title }),
       })
       if (!res.ok) return
@@ -419,7 +425,7 @@ async function sendViaSse(
 
   const res = await fetch(`${API_BASE}/api/v1/chat`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({
       message: text,
       session_id: currentSessionId ?? undefined,
