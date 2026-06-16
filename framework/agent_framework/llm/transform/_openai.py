@@ -116,7 +116,7 @@ def parse_openai_response(data: dict) -> tuple[list[ContentBlock], StopReason, U
         try:
             args = json.loads(args_str)
         except json.JSONDecodeError:
-            args = {"_raw_arguments": args_str}
+            args = {"_raw": args_str}
 
         content_blocks.append(ToolUseBlock(
             id=tc.get("id", ""),

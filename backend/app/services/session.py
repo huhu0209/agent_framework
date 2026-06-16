@@ -306,11 +306,11 @@ class SessionManager:
         return [json.loads(item) for item in raw]
 
     async def persist_messages(self, session_id: str, messages: list[dict]) -> None:
-        """Public method: persist messages to Redis cache."""
+        """持久化消息到 Redis 缓存。"""
         await self._redis_set_messages(session_id, messages)  # H-A1: async
 
     async def restore_messages(self, session_id: str) -> list[dict] | None:
-        """Public method: restore messages from cache/storage."""
+        """从缓存/存储恢复消息。"""
         return await self._get_all_messages(session_id)
 
     async def delete_session(self, session_id: str) -> bool:

@@ -66,8 +66,8 @@ class MemoryIndexManager:
         # 查找已有条目
         pattern = self._make_pattern(file_name)
         replace_idx = None
-        for i, l in enumerate(lines):
-            if pattern.match(l):
+        for i, existing_line in enumerate(lines):
+            if pattern.match(existing_line):
                 replace_idx = i
                 break
 
@@ -109,7 +109,7 @@ class MemoryIndexManager:
         lines = content.split("\n")
 
         pattern = self._make_pattern(file_name)
-        lines = [l for l in lines if not pattern.match(l)]
+        lines = [line for line in lines if not pattern.match(line)]
 
         await self._atomic_write("\n".join(lines))
 
