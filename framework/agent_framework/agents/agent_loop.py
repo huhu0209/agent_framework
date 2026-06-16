@@ -173,6 +173,9 @@ class AgentLoop(Agent):
         if self.profile is None:
             self._system_prompt_text += "\n\n" + PlanningSession.plan_instruction_prompt()
 
+        # H-F1+F4: memory 索引对账标志（run() 首次触发，启动一次非每轮）
+        self._memory_reconciled = False
+
     @property
     def system_prompt_text(self) -> str:
         """The assembled system prompt text (read-only)."""
@@ -503,6 +506,17 @@ class AgentLoop(Agent):
         """核心异步生成器：执行 ReAct 循环，支持 Session Planning。"""
         # 0. 初始化消息列表
         self._messages = self._init_messages(user_message, resume)
+
+        # H-F1+F4: 首次 run 时对账 MEMORY.md 索引（自愈截断丢失/崩溃间隙，启动一次）
+        if not self._memory_reconciled:
+            self._memory_reconciled = True
+            memory_dir = self.ctx.extra.get("memory_dir")
+            if memory_dir:
+                from agent_framework.memory.index_manager import MemoryIndexManager
+                try:
+                    await MemoryIndexManager(Path(memory_dir) / "MEMORY.md").reconcile()
+                except Exception:
+                    logger.debug("MEMORY.md 对账失败（best-effort）", exc_info=True)
 
         # SessionStart hook
         await self._fire_session_start_hook()

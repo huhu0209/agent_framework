@@ -113,6 +113,59 @@ class MemoryIndexManager:
 
         await self._atomic_write("\n".join(lines))
 
+    async def reconcile(self) -> int:
+        """对账索引：补齐缺失索引行 + 清理孤儿索引（H-F1+F4）。
+
+        扫描 self._path.parent 下所有 .md 文件（排除索引自身），对账 MEMORY.md：
+        - 文件存在但索引无 → 补行（从 frontmatter 提取 name/description，无 frontmatter 用文件名兜底）
+        - 索引指向但文件不存在 → 删除孤儿行
+        幂等。返回变更行数（0 = 无需变更）。
+        """
+        from agent_framework.memory.frontmatter import parse_frontmatter
+
+        memory_dir = self._path.parent
+        disk_files: dict[str, tuple[str, str]] = {}
+        for f in sorted(memory_dir.glob("*.md")):
+            if f.name == self._path.name:
+                continue
+            try:
+                async with aiofiles.open(f, "r", encoding="utf-8") as af:
+                    content = await af.read()
+                meta = parse_frontmatter(content)
+                disk_files[f.name] = (meta.get("name") or f.stem, meta.get("description", ""))
+            except Exception:
+                logger.warning("reconcile 跳过无法解析的文件: %s", f.name)
+
+        if self._path.exists():
+            async with aiofiles.open(self._path, "r", encoding="utf-8") as af:
+                index_content = await af.read()
+        else:
+            index_content = ""
+        index_lines = index_content.split("\n") if index_content else []
+
+        line_re = re.compile(r"^\- \[.*?\]\(([^)]+)\) — ")
+        changed = 0
+        kept: list[str] = []
+        indexed_files: set[str] = set()
+        for line in index_lines:
+            m = line_re.match(line)
+            if m:
+                fname = m.group(1)
+                if fname not in disk_files:
+                    changed += 1  # 孤儿索引，删除
+                    continue
+                indexed_files.add(fname)
+            kept.append(line)
+
+        for fname, (name, desc) in disk_files.items():
+            if fname not in indexed_files:
+                kept.append(self._format_line(fname, name, desc))
+                changed += 1
+
+        if changed:
+            await self._atomic_write("\n".join(kept))
+        return changed
+
     def _format_line(self, file_name: str, name: str, description: str) -> str:
         line = f"- [{name}]({file_name}) — {description}"
         if len(line) > _MAX_LINE_LENGTH:
