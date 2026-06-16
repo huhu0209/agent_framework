@@ -6,6 +6,8 @@ import asyncio
 import dataclasses
 import json
 import logging
+import os
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TypedDict
@@ -122,7 +124,22 @@ class TaskManager:
             "created_at": task.created_at or self._now(),
             "updated_at": self._now(),
         }
-        self._path(task.id).write_text(json.dumps(data, ensure_ascii=False, indent=2))
+        content = json.dumps(data, ensure_ascii=False, indent=2)
+        # H-G6: 原子写——write-to-temp + os.replace，防崩溃留下半截 JSON
+        path = self._path(task.id)
+        fd, tmp_path = tempfile.mkstemp(
+            dir=path.parent, suffix=".tmp", prefix=".task_",
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(content)
+            os.replace(tmp_path, path)
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
     def _read(self, path: Path) -> Task:
         data = json.loads(path.read_text())

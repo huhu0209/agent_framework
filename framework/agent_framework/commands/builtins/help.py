@@ -42,8 +42,7 @@ def _handler(
         for name in skill_registry.get_names():
             manifest = skill_registry.get_manifest(name)
             if manifest and manifest.user_invocable:
-                doc = skill_registry._documents.get(name)
-                if doc and not doc.active:
+                if not skill_registry.is_active(name):  # H-G7: 公共方法替代私有 dict 直访
                     continue
                 label = f"/{name}"
                 lines.append(f"  {label:<22} {manifest.description}")

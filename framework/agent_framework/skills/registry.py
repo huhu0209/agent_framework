@@ -90,6 +90,11 @@ class SkillRegistry:
             return False
         return doc.manifest.source != SkillSource.MCP
 
+    def is_active(self, name: str) -> bool:
+        """H-G7: 返回 skill 是否处于激活态。供 help 等外部模块查询，避免访问私有 _documents。"""
+        doc = self._documents.get(name)
+        return doc.active if doc is not None else False
+
     def activate_for_paths(self, file_paths: list[str]) -> list[str]:
         """检查文件路径，激活匹配的 inactive skills。
 
