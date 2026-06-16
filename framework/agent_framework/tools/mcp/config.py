@@ -46,9 +46,6 @@ class McpServerConfig(BaseModel):
     env: dict[str, str] = {}
     timeout_ms: int = 30_000
 
-    url: str = ""
-    headers: dict[str, str] = {}
-
     @field_validator("env")
     @classmethod
     def _reject_sensitive_env_keys(cls, v: dict[str, str]) -> dict[str, str]:
@@ -176,6 +173,7 @@ class McpManager:
                 ),
                 timeout_ms=cfg.timeout_ms,
                 annotations=tool_def.get("annotations", {}),
+                strict_unknown_params=False,  # H-C2: 远程 inputSchema 可能不完整，不严格校验未知参数
             )
             registry.register(spec)
 

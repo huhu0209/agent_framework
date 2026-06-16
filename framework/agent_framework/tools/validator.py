@@ -63,15 +63,16 @@ class ToolValidator:
                     is_error=True,
                 )
 
-        # 4. 检查未知参数
-        for field_name in args:
-            if field_name not in schema.properties:
-                return ToolResult(
-                    content=(
-                        f"Parameter validation failed: unknown parameter "
-                        f"'{field_name}'"
-                    ),
-                    is_error=True,
-                )
+        # 4. 检查未知参数（仅对可信 schema；MCP 远程 schema 不可信，H-C2 设 strict_unknown_params=False 跳过）
+        if spec.strict_unknown_params:
+            for field_name in args:
+                if field_name not in schema.properties:
+                    return ToolResult(
+                        content=(
+                            f"Parameter validation failed: unknown parameter "
+                            f"'{field_name}'"
+                        ),
+                        is_error=True,
+                    )
 
         return None
