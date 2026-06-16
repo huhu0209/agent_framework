@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 from collections import OrderedDict
@@ -25,6 +26,9 @@ def _new_worker_id() -> str:
 
 # E2: 同时存活的 worker agent 上限（LRU 淘汰最旧，防内存泄漏）
 _MAX_LIVE_AGENTS = 8
+
+# H-E3: worker 整体执行超时（秒）。单工具调用仍由 ToolSpec.timeout_ms 兜底，此处兜多步循环。
+_DEFAULT_TIMEOUT = 300
 
 
 async def _collect_output(agent: Agent, prompt: str, *, resume: bool = False) -> str:
@@ -90,7 +94,12 @@ class WorkerManager:
                 router=self._router,
                 ctx=isolated_ctx,
             )
-            output = await _collect_output(agent, prompt)
+            try:
+                output = await asyncio.wait_for(
+                    _collect_output(agent, prompt), timeout=_DEFAULT_TIMEOUT
+                )
+            except asyncio.TimeoutError:
+                raise TimeoutError(f"Worker '{worker_name}' 执行超时（{_DEFAULT_TIMEOUT}s）")
             self._retain_agent(worker_id, agent)  # E2: 保留供 send_message resume
             completed = WorkerHandle(
                 id=worker_id, worker_name=worker_name, status="completed", output=output,
