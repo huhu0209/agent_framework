@@ -70,8 +70,8 @@ class ResilientLLMAdapter(ILLMAdapter):
                 stream = gen
                 break
             except StopAsyncIteration:
-                self._breaker.record_success()
-                return
+                # H-D2: 空流（首事件即停止）是异常——可能掩盖连接/认证错误，不当作成功
+                raise RuntimeError("provider 返回空流（首事件即停止），疑似连接/认证错误")
             except LLMAdapterError as e:
                 last_error = e
                 if not e.retryable or attempt >= self._retry_config.max_retries:
