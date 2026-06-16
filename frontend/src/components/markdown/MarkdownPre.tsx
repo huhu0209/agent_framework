@@ -58,7 +58,7 @@ export function MarkdownPre({ children, ...rest }: ComponentPropsWithoutRef<'pre
             borderRadius: '4px',
           }}
         >
-          {copied ? '✓' : 'Copy'}
+          {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
     </div>

@@ -1,5 +1,7 @@
 """JSONL 追加写入器。"""
 
+from __future__ import annotations
+
 import json
 from dataclasses import asdict
 from pathlib import Path
@@ -21,3 +23,9 @@ class TranscriptWriter:
 
     def close(self) -> None:
         self._file.close()
+
+    def __enter__(self) -> TranscriptWriter:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.close()

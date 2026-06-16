@@ -62,7 +62,7 @@ export function AgentResponse({ message }: { message: ChatMessage }) {
               return (
                 <div key={block.id} className="text-sm px-3 py-2 rounded-lg"
                   style={{ backgroundColor: '#fef2f2', color: '#991b1b', border: '1px solid #fecaca' }}>
-                  ⚠ {block.text}
+                  {block.text}
                 </div>
               )
           }

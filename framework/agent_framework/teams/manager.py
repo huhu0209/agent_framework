@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import TYPE_CHECKING
 
 from agent_framework.agents.agent_loop import AgentLoop
 from agent_framework.agents.sub_agent import create_filtered_router
@@ -14,9 +13,6 @@ from agent_framework.teams.bus import MessageBus
 from agent_framework.teams.types import TeamNotification, TeammateConfig, TeammateStatus
 from agent_framework.tools.router import ToolRouter
 from agent_framework.tools.types import ToolUseContext
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 

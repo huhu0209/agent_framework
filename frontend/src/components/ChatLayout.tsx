@@ -27,7 +27,7 @@ export function ChatLayout() {
           role="alert"
         >
           <div className="flex items-center justify-between gap-3">
-            <span>⚠ {errorToast}</span>
+            <span>{errorToast}</span>
             <button
               onClick={clearError}
               className="text-xs opacity-60 hover:opacity-100"
