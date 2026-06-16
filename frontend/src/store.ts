@@ -22,6 +22,17 @@ function toFrontendBlocks(rawBlocks: Record<string, unknown>[]): AgentBlock[] {
   })
 }
 
+/** 后端消息（Record）映射为前端 ChatMessage，id 由调用方提供（3 处历史拉取复用） */
+function mapApiMessage(m: Record<string, unknown>, id: string): ChatMessage {
+  return {
+    id,
+    role: m.role as MessageRole,
+    timestamp: (m.timestamp as number) ?? Date.now(),
+    ...(m.content ? { content: m.content as string } : {}),
+    ...(m.blocks ? { blocks: toFrontendBlocks(m.blocks as Record<string, unknown>[]) } : {}),
+  }
+}
+
 let _nextId = 1
 function uid(): string {
   return `msg-${_nextId++}-${Date.now()}`
@@ -49,13 +60,9 @@ async function fetchMessages(id: string): Promise<{ messages: ChatMessage[], has
     const res = await fetch(`${API_BASE}/api/v1/chat/${id}`, { headers: authHeaders() })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
-    const messages: ChatMessage[] = data.messages.map((m: Record<string, unknown>, i: number) => ({
-      id: `restored-${i}-${Date.now()}`,
-      role: m.role as MessageRole,
-      timestamp: (m.timestamp as number) ?? Date.now(),
-      ...(m.content ? { content: m.content as string } : {}),
-      ...(m.blocks ? { blocks: toFrontendBlocks(m.blocks as Record<string, unknown>[]) } : {}),
-    }))
+    const messages: ChatMessage[] = data.messages.map((m: Record<string, unknown>, i: number) =>
+      mapApiMessage(m, `restored-${i}-${Date.now()}`),
+    )
     return { messages, hasMore: data.has_more ?? false }
   })()
 
@@ -239,13 +246,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               // Already have full data from IndexedDB — keep it
               continue
             }
-            const previewMsgs = (session.preview as unknown as Record<string, unknown>[]).map((m, i) => ({
-              id: `preview-${i}-${Date.now()}`,
-              role: m.role as MessageRole,
-              timestamp: (m.timestamp as number) ?? Date.now(),
-              ...(m.content ? { content: m.content as string } : {}),
-              ...(m.blocks ? { blocks: toFrontendBlocks(m.blocks as Record<string, unknown>[]) } : {}),
-            }))
+            const previewMsgs = (session.preview as unknown as Record<string, unknown>[]).map((m, i) =>
+              mapApiMessage(m, `preview-${i}-${Date.now()}`),
+            )
             const entry: CacheEntry = {
               messages: previewMsgs,
               hasMore: (session.message_count ?? 0) > session.preview.length,
@@ -394,13 +397,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const res = await fetch(`${API_BASE}/api/v1/chat/${sessionId}?limit=50&before=${oldestTs}`)
       if (!res.ok) { set({ loadingOlder: false }); return }
       const data = await res.json()
-      const older: ChatMessage[] = data.messages.map((m: Record<string, unknown>, i: number) => ({
-        id: `old-${Date.now()}-${i}`,
-        role: m.role as MessageRole,
-        timestamp: (m.timestamp as number) ?? Date.now(),
-        ...(m.content ? { content: m.content as string } : {}),
-        ...(m.blocks ? { blocks: toFrontendBlocks(m.blocks as Record<string, unknown>[]) } : {}),
-      }))
+      const older: ChatMessage[] = data.messages.map((m: Record<string, unknown>, i: number) =>
+        mapApiMessage(m, `old-${Date.now()}-${i}`),
+      )
       if (older.length === 0) { set({ loadingOlder: false, hasMore: false }); return }
       const all = [...older, ...get().messages]
       const hasMore = data.has_more ?? false
