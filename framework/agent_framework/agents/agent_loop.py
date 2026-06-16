@@ -412,7 +412,7 @@ class AgentLoop(Agent):
             plan_checked = True
 
         if self._planning.has_plan:
-            drift = self._planning.increment_drift()
+            drift = self._planning.advance()  # H-E2: 有推进则归零，全 pending 不推进则累加
             if drift == DriftLevel.ABORT:
                 return (
                     [LoopEvent(
@@ -433,6 +433,64 @@ class AgentLoop(Agent):
                 plan=self._planning.snapshot(),
             )],
             plan_checked,
+        )
+
+    async def _dispatch_stop_reason(
+        self,
+        result: CompletionResult,
+        step: int,
+        plan_checked: bool,
+        plan_snapshot: PlanSnapshot | None,
+    ) -> tuple[list[LoopEvent], bool, bool]:
+        """根据 stop_reason 分流（H-E1 抽出）。
+
+        Returns:
+            (events_to_yield, updated_plan_checked, should_stop)
+            should_stop=True 结束 run 循环（return）；False 继续（TOOL_USE）。
+        """
+        if result.stop_reason == StopReason.END_TURN:
+            text = self._extract_text(result)
+            if text and self._planning.try_parse_from_response(text):
+                self.ctx.extra["planning_session"] = self._planning
+            plan_checked = True
+            self._messages.append(AssistantMessage(content=result.content))
+            return (
+                [LoopEvent(type="done", step=step, data={"content": _serialize_content(result)}, plan=self._planning.snapshot())],
+                plan_checked,
+                True,
+            )
+
+        if result.stop_reason == StopReason.MAX_TOKENS:
+            return (
+                [LoopEvent(type="error", step=step, data={"error": "达到 max_tokens 上限"}, plan=self._planning.snapshot())],
+                plan_checked,
+                True,
+            )
+
+        if result.stop_reason == StopReason.STOP_SEQUENCE:
+            text = self._extract_text(result)
+            if text and self._planning.try_parse_from_response(text):
+                self.ctx.extra["planning_session"] = self._planning
+            plan_checked = True
+            self._messages.append(AssistantMessage(content=result.content))
+            return (
+                [LoopEvent(type="done", step=step, data={"content": _serialize_content(result)}, plan=self._planning.snapshot())],
+                plan_checked,
+                True,
+            )
+
+        if result.stop_reason == StopReason.TOOL_USE:
+            events, plan_checked = await self._handle_tool_calls(result, step, plan_checked)
+            # drift abort 时最后一个 event 是 error，应结束循环
+            should_stop = bool(events and events[-1].type == "error")
+            return (events, plan_checked, should_stop)
+
+        # 默认（未知 stop_reason）
+        self._messages.append(AssistantMessage(content=result.content))
+        return (
+            [LoopEvent(type="done", step=step, data={"content": _serialize_content(result)}, plan=plan_snapshot)],
+            plan_checked,
+            True,
         )
 
     async def run(
@@ -477,40 +535,13 @@ class AgentLoop(Agent):
                 plan=plan_snapshot,
             )
 
-            # 根据 stop_reason 分流 — 这是核心决策
-            if result.stop_reason == StopReason.END_TURN:
-                text = self._extract_text(result)
-                if text and self._planning.try_parse_from_response(text):
-                    self.ctx.extra["planning_session"] = self._planning
-                plan_checked = True
-                self._messages.append(AssistantMessage(content=result.content))
-                yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)}, plan=self._planning.snapshot())
+            # 根据 stop_reason 分流 — 抽到 _dispatch_stop_reason（H-E1）
+            events, plan_checked, should_stop = await self._dispatch_stop_reason(
+                result, step, plan_checked, plan_snapshot,
+            )
+            for event in events:
+                yield event
+            if should_stop:
                 return
-
-            if result.stop_reason == StopReason.MAX_TOKENS:
-                yield LoopEvent(type="error", step=step, data={"error": "达到 max_tokens 上限"}, plan=self._planning.snapshot())
-                return
-
-            if result.stop_reason == StopReason.STOP_SEQUENCE:
-                text = self._extract_text(result)
-                if text and self._planning.try_parse_from_response(text):
-                    self.ctx.extra["planning_session"] = self._planning
-                plan_checked = True
-                self._messages.append(AssistantMessage(content=result.content))
-                yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)}, plan=self._planning.snapshot())
-                return
-
-            if result.stop_reason == StopReason.TOOL_USE:
-                events, plan_checked = await self._handle_tool_calls(result, step, plan_checked)
-                for event in events:
-                    yield event
-                # If drift abort occurred, the event list contains an error — stop the loop
-                if events and events[-1].type == "error":
-                    return
-                continue
-
-            self._messages.append(AssistantMessage(content=result.content))
-            yield LoopEvent(type="done", step=step, data={"content": _serialize_content(result)}, plan=plan_snapshot)
-            return
 
         yield LoopEvent(type="max_steps", step=self.max_steps, data={}, plan=self._planning.snapshot())

@@ -92,6 +92,22 @@ class PlanningSession:
         if self._state is not None:
             self._state = self._state.with_drift_reset()
 
+    def advance(self) -> DriftLevel:
+        """每步推进 drift 状态（H-E2）。
+
+        - 有活跃项（in_progress）或已完成（无 pending）→ reset_drift 归零
+          （兜底：不依赖 LLM 每步调 update_status，有进展即清零偏离计数）
+        - 全 pending 不推进 → increment_drift 累加（误中止场景仍触发 ABORT）
+        """
+        if self._state is None:
+            return DriftLevel.NONE
+        has_active = any(i.status == "in_progress" for i in self._state.items)
+        has_pending = any(i.status == "pending" for i in self._state.items)
+        if has_active or not has_pending:
+            self.reset_drift()
+            return DriftLevel.NONE
+        return self.increment_drift()
+
     def format_context_message(self) -> tuple[str, str]:
         if self._state is None:
             return ("", "")
