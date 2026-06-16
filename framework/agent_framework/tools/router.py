@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from agent_framework.safety.permissions import PermissionDecision, PermissionPipeline
 from agent_framework.tools.degrader import ToolDegrader
 from agent_framework.tools.executor import ToolExecutor
+from agent_framework.tools.validator import ToolValidator
 from agent_framework.tools.mcp.config import McpManager
 from agent_framework.tools.registry import ToolRegistry
 from agent_framework.tools.types import ToolCall, ToolResult, ToolUseContext
@@ -40,6 +41,7 @@ class ToolRouter:
     ) -> None:
         self.registry = registry
         self._executor = ToolExecutor()
+        self._validator = ToolValidator()  # H-C2: MCP 路径参数校验（复用 builtin 同款校验器）
         self._mcp_manager = mcp_manager
         self._hook_manager = hook_manager
         self._degrader = degrader or ToolDegrader()
@@ -244,4 +246,12 @@ class ToolRouter:
             return ToolResult(content=f"无效 MCP 工具名: {name}", is_error=True)
 
         server_name, tool_name = parts
+
+        # H-C2: 远程 inputSchema 不可信，调用前校验（与 builtin 路径一致的 ToolValidator）
+        spec = self.registry.get(name)
+        if spec is not None:
+            validation_error = self._validator.validate(spec, args)
+            if validation_error is not None:
+                return validation_error
+
         return await self._mcp_manager.call_tool(server_name, tool_name, args)
