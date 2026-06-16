@@ -39,25 +39,41 @@ class MessageBus:
         path = self._dir / f"{name}.jsonl"
         if not path.exists():
             return []
-        raw = path.read_text().strip()
-        if not raw:
+        raw = path.read_text()
+        if not raw.strip():
             return []
-        msgs = []
+
+        # 解析本次读到的消息 + 记录其原始行（用于精确清零）
+        msgs: list[TeamMessage] = []
+        read_lines: set[str] = set()
         for line in raw.splitlines():
+            stripped = line.strip()
+            if not stripped:
+                continue
             try:
-                data = json.loads(line)
+                data = json.loads(stripped)
                 msgs.append(TeamMessage(**data))
+                read_lines.add(stripped)
             except Exception:
-                logger.debug("跳过无法解析的消息行: %s", line[:200])
+                logger.debug("跳过无法解析的消息行: %s", stripped[:200])
                 continue
 
-        # 原子清零：write-to-temp + os.replace，防止崩溃时丢失
+        # H-G4: 精确清零——重读当前文件，只移除本次读到的消息行，
+        # 保留 read 期间新追加的消息与不可解析行（不再清空整个文件）。
+        current_raw = path.read_text()
+        remaining = [
+            line for line in current_raw.splitlines()
+            if line.strip() and line.strip() not in read_lines
+        ]
+        output = ("\n".join(remaining) + "\n") if remaining else ""
+
+        # 原子写回：write-to-temp + os.replace，防止崩溃时丢失
         fd, tmp_path = tempfile.mkstemp(
             dir=self._dir, suffix=".tmp", prefix=".inbox_",
         )
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as f:
-                f.write("")
+                f.write(output)
             os.replace(tmp_path, path)
         except BaseException:
             try:
