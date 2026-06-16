@@ -8,15 +8,18 @@ from typing import Any
 from ..types import (
     CompletionConfig,
     ContentBlock,
+    Message,
     StopReason,
+    SystemMessage,
     TextBlock,
     ToolDefinition,
+    ToolMessage,
     ToolUseBlock,
     UsageStats,
 )
 
 
-def messages_to_openai(messages: list) -> list[dict]:
+def messages_to_openai(messages: list[Message]) -> list[dict]:
     """将内部统一消息转换为 OpenAI ChatCompletions 格式。
 
     转换规则：
@@ -30,8 +33,6 @@ def messages_to_openai(messages: list) -> list[dict]:
     注意：DeepSeek 版本需要额外处理 reasoning_content，
     由 messages_to_deepseek() 函数处理。
     """
-    from ..types import SystemMessage, ToolMessage
-
     result: list[dict] = []
 
     for msg in messages:
