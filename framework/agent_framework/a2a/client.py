@@ -120,8 +120,11 @@ class A2AClient:
         self, args: dict, ctx: ToolUseContext,
     ) -> ToolResult:
         """ToolSpec handler — calls send_task_and_wait, returns ToolResult."""
+        message = args.get("message")  # H-G3: 防 KeyError
+        if not message:
+            return ToolResult(content="缺少 message 参数", is_error=True)
         try:
-            task = await self.send_task_and_wait(args["message"])
+            task = await self.send_task_and_wait(message)
             if task.status == A2ATaskStatus.COMPLETED:
                 return ToolResult(content=task.result or "")
             return ToolResult(
