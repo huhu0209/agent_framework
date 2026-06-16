@@ -17,6 +17,9 @@ from agent_framework.tools.types import ToolUseContext
 
 logger = logging.getLogger(__name__)
 
+# 输出/摘要截断阈值（字符数），防超长灌入 LLM 上下文
+MAX_SUMMARY_CHARS = 2000
+
 _PLAN_SYSTEM_PROMPT = (
     "你是一个任务规划专家。将用户任务分解为有序步骤。\n"
     "在 <plan>...</plan> 标签中输出计划，每步一行，格式：\n"
@@ -128,7 +131,7 @@ class PlanAndSolveAgent(Agent):
         final_summary = "\n".join(step_outputs)
         yield AgentEvent(
             type="done", step=global_step,
-            data={"text": final_summary[-2000:] if len(final_summary) > 2000 else final_summary},
+            data={"text": final_summary[-MAX_SUMMARY_CHARS:] if len(final_summary) > MAX_SUMMARY_CHARS else final_summary},
         )
 
     async def _generate_plan(self, user_message: str) -> list[PlanItem] | None:
@@ -143,8 +146,8 @@ class PlanAndSolveAgent(Agent):
         parts = [f"原始任务：{user_message}", "", f"当前步骤：{item.action}"]
         if step_outputs:
             summary = "\n".join(step_outputs)
-            if len(summary) > 2000:
-                summary = summary[-2000:]
+            if len(summary) > MAX_SUMMARY_CHARS:
+                summary = summary[-MAX_SUMMARY_CHARS:]
             parts.append("")
             parts.append(f"前序步骤摘要：\n{summary}")
         return "\n".join(parts)
