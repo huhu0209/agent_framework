@@ -6,7 +6,6 @@ import logging
 from pathlib import Path
 
 from agent_framework.agents.agent_loop import AgentLoop
-from agent_framework.agents.config import AgentConfig
 from agent_framework.commands.dispatcher import CommandDispatcher
 from agent_framework.config.loader import ConfigLoader
 from agent_framework.hooks.manager import HookManager
@@ -73,9 +72,6 @@ class AgentFactory:
         factory._skill_registry = SkillRegistry.from_loader(loader)
         factory._hook_manager = HookManager.from_loader(loader)
         factory._command_dispatcher = CommandDispatcher.from_loader(loader)
-
-        # 加载 Agent 配置
-        factory._agent_configs = AgentConfig.from_loader(loader)
 
         # 加载默认 profile — 不存在时为 None
         factory._default_profile = None

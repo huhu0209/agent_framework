@@ -29,27 +29,6 @@ class WorkerSpec:
 
 
 @dataclass(frozen=True)
-class SubTask:
-    """分解后的子任务，含依赖关系。"""
-
-    id: str
-    worker: str
-    prompt: str
-    depends_on: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class SubTaskResult:
-    """子任务执行结果。"""
-
-    id: str
-    worker: str
-    output: str
-    success: bool
-    error: str | None = None
-
-
-@dataclass(frozen=True)
 class WorkerHandle:
     """运行中的 Worker 实例跟踪。"""
     id: str
@@ -57,14 +36,3 @@ class WorkerHandle:
     status: Literal["running", "completed", "failed"]
     output: str = ""
     error: str | None = None
-
-
-class OrchestratorEventType:
-    """事件类型常量。"""
-    DECOMPOSE_START = "decompose_start"
-    DECOMPOSE_DONE = "decompose_done"
-    DEGRADE = "degrade"
-    WORKER_START = "worker_start"
-    WORKER_DONE = "worker_done"
-    ORCHESTRATOR_ERROR = "orchestrator_error"
-    ORCHESTRATOR_DONE = "orchestrator_done"

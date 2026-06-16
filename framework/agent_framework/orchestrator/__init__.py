@@ -3,9 +3,6 @@
 from agent_framework.orchestrator.coordinator_tools import create_coordinator_tools
 from agent_framework.orchestrator.engine import OrchestratorEngine
 from agent_framework.orchestrator.models import (
-    OrchestratorEventType,
-    SubTask,
-    SubTaskResult,
     WorkerHandle,
     WorkerSpec,
 )
@@ -20,8 +17,5 @@ __all__ = [
     "WorkerManager",
     "WorkerRegistry",
     "WorkerSpec",
-    "SubTask",
-    "SubTaskResult",
-    "OrchestratorEventType",
     "create_coordinator_tools",
 ]
