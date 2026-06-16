@@ -163,6 +163,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   setError: (msg: string) => {
     set({ errorToast: msg })
+    // 保留：错误日志供诊断（errorToast 已面向用户，此处供开发者排查）
     console.error('[ChatStore]', msg)
     setTimeout(() => set({ errorToast: null }), 5000)
   },
@@ -483,11 +484,13 @@ async function sendViaSse(
         try {
           raw = JSON.parse(eventData)
         } catch {
+          // 保留：SSE 解析失败告警供诊断
           console.warn('SSE JSON parse failed:', eventData)
           continue
         }
         const payload = ssePayloadSchema.safeParse(raw)
         if (!payload.success) {
+          // 保留：SSE 校验失败告警供诊断
           console.warn('SSE payload validation failed:', payload.error.message)
           continue
         }
@@ -507,6 +510,7 @@ function handleSseEvent(
 
   const blockInit = vizEventToBlock({ type: type as VizEvent['type'], agent: 'Agent', payload, timestamp: Date.now() })
   if (!blockInit) {
+    // 保留：未知事件告警，帮助发现未处理的事件类型
     console.warn('Unhandled SSE event type:', type)
     return
   }
