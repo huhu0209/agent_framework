@@ -267,7 +267,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // If preview data, fetch full history in background
       if (cached.hasMore) {
         set({ loadingFullHistory: true })
+        const fetchStartedAt = Date.now()
         fetchMessages(id).then(({ messages, hasMore }) => {
+          // H-FE3: fetch 期间若有 sendMessage 更新缓存（cachedAt > fetchStartedAt），跳过覆盖
+          const current = get().messageCache.get(id)
+          if (current && current.cachedAt > fetchStartedAt) {
+            set({ loadingFullHistory: false })
+            return
+          }
           const entry: CacheEntry = { messages, hasMore, cachedAt: Date.now() }
           const cache = new Map(get().messageCache)
           cache.set(id, entry)

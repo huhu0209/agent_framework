@@ -342,6 +342,50 @@ describe('useChatStore', () => {
     expect(useChatStore.getState().sessionId).toBe('abc')
   })
 
+  it('switchSession background fetch does not overwrite newer cache', async () => {
+    // 预置 preview 缓存（hasMore=true，触发后台 full fetch）
+    useChatStore.setState({
+      messageCache: new Map([['s1', {
+        messages: [{ id: 'p1', role: 'user' as const, timestamp: 1, content: 'preview' }],
+        hasMore: true,
+        cachedAt: 100,
+      }]]),
+    })
+
+    // 后台 full fetch 返回旧历史，延迟 resolve（让测试在 resolve 前更新 cache）
+    let resolveFetch!: () => void
+    const pending = new Promise<void>((r) => { resolveFetch = r })
+    mockFetch.mockReturnValueOnce(pending.then(() => ({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({
+        session_id: 's1',
+        messages: [{ role: 'user', content: 'old full', timestamp: 1 }],
+        has_more: false,
+      }),
+    })))
+
+    await useChatStore.getState().switchSession('s1')
+    // 命中缓存立即返回；后台 fetch pending（fetchStartedAt = T1）
+
+    // 模拟：fetch resolve 前，用户发了新消息（sendMessage finally 更新 cache cachedAt = T2 > T1）
+    useChatStore.setState({
+      messageCache: new Map([['s1', {
+        messages: [{ id: 'new', role: 'user' as const, timestamp: 999, content: 'new msg' }],
+        hasMore: false,
+        cachedAt: Date.now() + 10000, // 确保大于 fetchStartedAt
+      }]]),
+      messages: [{ id: 'new', role: 'user' as const, timestamp: 999, content: 'new msg' }],
+      sessionId: 's1',
+    })
+
+    resolveFetch()
+    await new Promise((r) => setTimeout(r, 30)) // 等 .then 写回执行
+
+    // H-FE3: 新消息不被过期 full 覆盖
+    expect(useChatStore.getState().messages[0]?.content).toBe('new msg')
+  })
+
   it('switchSession sets switchingSession during fetch', async () => {
     let switchingDuringFetch = false
     mockFetch.mockImplementationOnce(() => {
