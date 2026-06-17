@@ -14,7 +14,6 @@ function readInitialTheme(): 'light' | 'dark' {
 }
 
 export default function App() {
-  const addSystemMessage = useChatStore((s) => s.addSystemMessage)
   const loadSessions = useChatStore((s) => s.loadSessions)
   const setTheme = useChatStore((s) => s.setTheme)
   const mounted = useRef(false)
@@ -23,7 +22,6 @@ export default function App() {
     if (mounted.current) return
     mounted.current = true
     setTheme(readInitialTheme())
-    addSystemMessage('Session started. 输入消息开始对话。')
 
     // Restore persistent cache, then load sessions with preview
     restoreCache().then((cache) => {
@@ -31,7 +29,7 @@ export default function App() {
       loadSessions()
     })
     clearStaleEntries(SEVEN_DAYS_MS)
-  }, [addSystemMessage, loadSessions, setTheme])
+  }, [loadSessions, setTheme])
 
   return <ChatLayout />
 }

@@ -4,6 +4,7 @@ import { useChatStore } from '../../store'
 import { UserBubble } from './UserBubble'
 import { AgentResponse } from './AgentResponse'
 import { SystemNotification } from './SystemNotification'
+import { EmptyState } from './EmptyState'
 
 function MessageSkeleton() {
   return (
@@ -70,6 +71,10 @@ export function MessageList() {
         </div>
       </div>
     )
+  }
+
+  if (allItems.length === 0) {
+    return <EmptyState />
   }
 
   return (
