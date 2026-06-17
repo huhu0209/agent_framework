@@ -6,7 +6,7 @@ export function MarkdownAnchor({ children, href, ...rest }: ComponentPropsWithou
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      style={{ color: 'var(--accent-coral)', textDecoration: 'none' }}
+      style={{ color: 'var(--coral)', textDecoration: 'none' }}
       className="hover:underline inline-flex items-center gap-0.5"
       {...rest}
     >

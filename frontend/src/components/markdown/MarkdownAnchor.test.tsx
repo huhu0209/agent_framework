@@ -20,6 +20,6 @@ describe('MarkdownAnchor', () => {
   it('applies coral accent color style', () => {
     render(<MarkdownAnchor href="https://example.com">link</MarkdownAnchor>)
     const link = screen.getByRole('link')
-    expect(link.style.color).toBe('var(--accent-coral)')
+    expect(link.style.color).toBe('var(--coral)')
   })
 })
