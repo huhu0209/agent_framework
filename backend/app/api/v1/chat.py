@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Requ
 from starlette.responses import StreamingResponse
 
 from agent_framework.agents.agent_loop import LoopEvent
+from agent_framework.viz.agent_runner import AgentRunner
 from agent_framework.llm.base import (
     CircuitOpenError,
     LLMAdapterError,
@@ -151,6 +152,13 @@ async def create_chat(req: ChatRequest, request: Request):
         agent_loop = factory.create_loop()
         session = await sm.create(agent_loop)
 
+    # viz 事件层：构造 runner（bus 不可用时跳过，退回纯 SSE）
+    bus = getattr(request.app.state, "bus", None)
+    runner: AgentRunner | None = None
+    if bus is not None:
+        runner = AgentRunner(agent_loop, bus, session.session_id)
+        session.agent_runner = runner
+
     session.messages.append({
         "role": "user",
         "content": req.message,
@@ -172,6 +180,8 @@ async def create_chat(req: ChatRequest, request: Request):
                     system_prompt=loop.system_prompt_text,
                 )
                 gen = consumer.wrap(gen, req.message)
+            if runner is not None:
+                gen = runner.wrap(gen)
             async for loop_event in gen:
                 for sse_line in _map_to_sse(loop_event):
                     yield sse_line
