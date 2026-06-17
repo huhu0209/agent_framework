@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     api_key: SecretStr = SecretStr("")  # 后端 API 鉴权 key（env APP_API_KEY）
     max_message_length: int = 8000  # ChatRequest.message 长度上限（与 models.MAX_MESSAGE_LENGTH 对齐）
 
+    # viz WebSocket 观测面板配置（env 前缀 APP_，如 APP_WS_TOKEN）
+    ws_enabled: bool = True
+    ws_host: str = "localhost"
+    ws_port: int = 8765
+    ws_token: SecretStr = SecretStr("")  # 空 → 无 auth（仅开发态）；生产必须设置
+    ws_cors_origins: list[str] = ["http://localhost:5173"]  # 前端 dev server Origin 白名单
+
     model_config = {"env_prefix": "APP_", "env_file": ".env"}
 
     @field_validator("llm_api_key")
