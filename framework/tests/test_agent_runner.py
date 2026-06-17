@@ -9,6 +9,7 @@ import pytest
 from agent_framework.agents.agent_loop import AgentLoop, LoopEvent
 from agent_framework.llm.base import ILLMAdapter
 from agent_framework.llm.types import ProviderInfo
+from agent_framework.prompts.profiles import AgentProfile
 from agent_framework.tools.builtin import create_builtin_registry
 from agent_framework.tools.router import ToolRouter
 from agent_framework.tools.types import ToolUseContext
@@ -16,8 +17,8 @@ from agent_framework.viz.agent_runner import AgentRunner
 from agent_framework.viz.event_bus import EventBus
 
 
-def _make_loop() -> AgentLoop:
-    """构造最小 AgentLoop（profile=None，system_prompt_blocks 为空）。"""
+def _make_loop(profile: "AgentProfile | None" = None) -> AgentLoop:
+    """构造最小 AgentLoop；传入 profile 时启用 profile 模式。"""
     adapter = AsyncMock(spec=ILLMAdapter)
     adapter.get_provider_info.return_value = ProviderInfo(
         name="mock", base_url="https://mock", default_model="mock-model",
@@ -27,6 +28,7 @@ def _make_loop() -> AgentLoop:
         model="mock-model",
         router=ToolRouter(create_builtin_registry()),
         ctx=ToolUseContext(),
+        profile=profile,
     )
 
 
@@ -122,6 +124,17 @@ async def test_maps_tool_result_with_mcp_source() -> None:
     results = _find_by_type(viz_events, "tool_result")
     assert calls[0]["payload"]["source"] == "mcp"
     assert results[0]["payload"]["source"] == "mcp"
+
+
+async def test_maps_tool_result_with_agent_source() -> None:
+    runner = _make_runner()
+    event = LoopEvent(type="tool_result", step=1, data={
+        "tool_calls": [{"id": "tc_1", "name": "run_subagent", "input": {}}],
+        "tool_results": ["ok"],
+    })
+    _, viz_events = await _collect_events(runner, event)
+    calls = _find_by_type(viz_events, "tool_call")
+    assert calls[0]["payload"]["source"] == "agent"
 
 
 async def test_maps_multiple_tools_with_mixed_sources() -> None:
@@ -220,3 +233,20 @@ async def test_unknown_event_type_yields_without_extra_viz() -> None:
     assert "shutdown" in types
     assert "thinking" not in types
     assert "tool_call" not in types
+
+
+def test_build_system_prompt_payload_maps_blocks() -> None:
+    """profile 模式下 blocks 非空且字段正确映射（覆盖 _build_system_prompt_payload 的非空分支）。"""
+    from agent_framework.viz.agent_runner import _build_system_prompt_payload
+
+    profile = AgentProfile(name="p", description="d", soul="my soul", identity="my id")
+    loop = _make_loop(profile=profile)
+    payload = _build_system_prompt_payload(loop)
+    assert payload["text"]  # 非空（含 soul/identity 渲染）
+    names = [b["name"] for b in payload["blocks"]]
+    assert "SOUL" in names
+    assert "IDENTITY" in names
+    soul_block = next(b for b in payload["blocks"] if b["name"] == "SOUL")
+    assert soul_block["content"] == "my soul"
+    assert soul_block["source"] == "injected"
+    assert soul_block["stability"] == "static"

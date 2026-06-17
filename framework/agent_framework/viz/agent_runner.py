@@ -15,10 +15,20 @@ from agent_framework.viz.viz_event import (
 )
 
 
+_AGENT_TOOL_NAMES = frozenset({"run_subagent", "load_skill"})
+
+
 def _infer_tool_source(name: str) -> str:
-    """从工具名推断来源：mcp__ 前缀 → mcp；否则 builtin。"""
+    """从工具名推断来源。
+
+    - mcp__ 前缀 → mcp
+    - 已知 agent 类工具（run_subagent/load_skill，无统一前缀）→ agent
+    - 其余 → builtin
+    """
     if name.startswith("mcp__"):
         return "mcp"
+    if name in _AGENT_TOOL_NAMES:
+        return "agent"
     return "builtin"
 
 
