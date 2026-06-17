@@ -46,10 +46,8 @@ notes/
 
 # backend 内部不追踪
 backend/data/
-backend/tests/
 
 # framework 内部不追踪
-framework/tests/
 framework/.ruff_cache/
 
 
