@@ -23,7 +23,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "agent-framework-core", directory = "../framework" },
+    { name = "agent-framework-core", editable = "../framework" },
     { name = "aiofiles", specifier = ">=24.1.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
@@ -37,7 +37,7 @@ provides-extras = ["test"]
 [[package]]
 name = "agent-framework-core"
 version = "0.1.0"
-source = { directory = "../framework" }
+source = { editable = "../framework" }
 dependencies = [
     { name = "aiofiles" },
     { name = "httpx" },
