@@ -1,4 +1,4 @@
-import { ChatHeader } from './ChatHeader'
+import { ChatHeader } from './header/ChatHeader'
 import { MessageList } from './MessageList'
 import { ChatInput } from './ChatInput'
 import { SessionSidebar } from './SessionSidebar'
