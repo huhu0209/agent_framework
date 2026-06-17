@@ -12,12 +12,19 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import aiofiles
+from redis.exceptions import (
+    ConnectionError as RedisConnectionError,
+    TimeoutError as RedisTimeoutError,
+)
 
 from agent_framework.agents.agent_loop import AgentLoop
 from agent_framework.transcript import TranscriptWriter
+
+if TYPE_CHECKING:
+    from agent_framework.viz.agent_runner import AgentRunner
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +52,7 @@ class ChatSession:
     created_at: float = field(default_factory=time.time)
     last_accessed: float = field(default_factory=time.time)  # H-A2: 活跃判定，get() 更新
     transcript_writer: TranscriptWriter | None = None
+    agent_runner: "AgentRunner | None" = None  # viz 事件层 runner（M1）
 
 
 class SessionManager:
@@ -242,7 +250,10 @@ class SessionManager:
         await self._atomic_write(history_path, "\n".join(lines) + "\n")
         self._invalidate_list_cache()
         if self._redis:
-            await self._redis.delete(f"session:{session_id}:meta")  # H-A1: async
+            try:
+                await self._redis.delete(f"session:{session_id}:meta")  # H-A1: async
+            except (RedisConnectionError, RedisTimeoutError) as exc:
+                logger.warning("Redis meta delete failed for %s: %s", session_id, exc)
         return updated
 
     async def list_sessions(self) -> list[dict]:
@@ -281,26 +292,33 @@ class SessionManager:
         self._session_list_cache = None
 
     async def _redis_set_messages(self, session_id: str, messages: list[dict]) -> None:
-        """将消息列表写入 Redis Sorted Set。"""
+        """将消息列表写入 Redis Sorted Set。运行时失败静默（消息已落 JSONL）。"""
         if not self._redis:
             return
         key = f"session:{session_id}:messages"
-        pipe = self._redis.pipeline()
-        pipe.delete(key)
-        for msg in messages:
-            score = msg.get("timestamp", 0)
-            pipe.zadd(key, {json.dumps(msg, ensure_ascii=False): score})
-        pipe.expire(key, 86400)  # 24h TTL
-        await pipe.execute()  # H-A1: async redis
+        try:
+            pipe = self._redis.pipeline()
+            pipe.delete(key)
+            for msg in messages:
+                score = msg.get("timestamp", 0)
+                pipe.zadd(key, {json.dumps(msg, ensure_ascii=False): score})
+            pipe.expire(key, 86400)  # 24h TTL
+            await pipe.execute()  # H-A1: async redis
+        except (RedisConnectionError, RedisTimeoutError) as exc:
+            logger.warning("Redis write failed for %s, cache skipped: %s", session_id, exc)
 
     async def _redis_get_messages(self, session_id: str) -> list[dict] | None:
-        """从 Redis Sorted Set 读取消息。"""
+        """从 Redis Sorted Set 读取消息。运行时失败返回 None，降级走 JSONL。"""
         if not self._redis:
             return None
         key = f"session:{session_id}:messages"
-        if not await self._redis.exists(key):  # H-A1: async redis
+        try:
+            if not await self._redis.exists(key):  # H-A1: async redis
+                return None
+            raw = await self._redis.zrange(key, 0, -1)  # H-A1
+        except (RedisConnectionError, RedisTimeoutError) as exc:
+            logger.warning("Redis read failed for %s, falling back to JSONL: %s", session_id, exc)
             return None
-        raw = await self._redis.zrange(key, 0, -1)  # H-A1
         if not raw:
             return None
         return [json.loads(item) for item in raw]
@@ -318,7 +336,10 @@ class SessionManager:
         self._validate_session_id(session_id)  # A2
         self._invalidate_list_cache()
         if self._redis:
-            await self._redis.delete(f"session:{session_id}:messages", f"session:{session_id}:meta")  # H-A1: async
+            try:
+                await self._redis.delete(f"session:{session_id}:messages", f"session:{session_id}:meta")  # H-A1: async
+            except (RedisConnectionError, RedisTimeoutError) as exc:
+                logger.warning("Redis delete failed for %s: %s", session_id, exc)
         self.remove(session_id)
         if not self._storage_dir:
             return False
