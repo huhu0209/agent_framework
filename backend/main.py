@@ -1,5 +1,6 @@
 """Agent Chat 后端 — FastAPI 入口。"""
 
+import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -10,6 +11,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from agent_framework.config.loader import ConfigLoader
+from agent_framework.viz.event_bus import EventBus
+from agent_framework.viz.ws_server import serve_ws
 
 from app.api.v1.chat import router as chat_router
 from app.config import Settings, create_settings
@@ -50,7 +53,13 @@ async def lifespan(app: FastAPI):
     # --- 连接 Redis（可选，失败时降级为本地文件存储）---
     rdb = None
     try:
-        rdb = redis_lib.asyncio.Redis.from_url(settings.redis_url, decode_responses=True)  # H-A1: async
+        rdb = redis_lib.asyncio.Redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_connect_timeout=2,
+            socket_timeout=2,
+            health_check_interval=30,  # 主动探测 stale 连接，提前换掉坏连接（和 try/except 降级互补）
+        )  # H-A1: async
         await rdb.ping()
     except (redis_lib.ConnectionError, redis_lib.TimeoutError) as exc:
         logger.error("Redis connection failed: %s. Caching disabled.", exc)
@@ -65,6 +74,35 @@ async def lifespan(app: FastAPI):
     app.state.session_manager = sm
     app.state.agent_factory = factory
 
+    # --- viz 事件总线 + WebSocket 服务（失败降级，不影响 SSE 聊天）---
+    app.state.bus = EventBus()
+
+    def _on_ws_done(task: asyncio.Task[None]) -> None:
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            logger.warning(
+                "viz WebSocket server stopped: %s. Inspector offline, chat unaffected.", exc,
+            )
+
+    app.state.ws_task = None
+    if settings.ws_enabled:
+        ws_token = settings.ws_token.get_secret_value() or None
+        app.state.ws_task = asyncio.create_task(
+            serve_ws(
+                app.state.bus,
+                host=settings.ws_host,
+                port=settings.ws_port,
+                token=ws_token,
+                allowed_origins=settings.ws_cors_origins,
+            )
+        )
+        app.state.ws_task.add_done_callback(_on_ws_done)
+        logger.info(
+            "viz WebSocket server starting on ws://%s:%d", settings.ws_host, settings.ws_port,
+        )
+
     yield  # 应用运行中
 
     # --- 应用关闭时清理资源 ---
@@ -72,6 +110,14 @@ async def lifespan(app: FastAPI):
     sm.stop_cleanup()
     if rdb:
         await rdb.aclose()  # H-A1: async
+
+    ws_task = getattr(app.state, "ws_task", None)
+    if ws_task is not None and not ws_task.done():
+        ws_task.cancel()
+        try:
+            await ws_task
+        except (asyncio.CancelledError, Exception):
+            pass
 
 
 app = FastAPI(title="Agent Chat", lifespan=lifespan)
