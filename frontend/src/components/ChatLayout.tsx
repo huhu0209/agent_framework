@@ -1,5 +1,5 @@
 import { ChatHeader } from './header/ChatHeader'
-import { MessageList } from './MessageList'
+import { MessageList } from './message/MessageList'
 import { ChatInput } from './ChatInput'
 import { SessionSidebar } from './sidebar/SessionSidebar'
 import { useChatStore } from '../store'
