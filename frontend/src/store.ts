@@ -45,6 +45,11 @@ export function resetIdCounter() {
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''
 const API_KEY = import.meta.env.VITE_APP_API_KEY ?? ''
 
+function applyTheme(t: 'light' | 'dark') {
+  try { localStorage.setItem('chat-theme', t) } catch { /* ignore quota */ }
+  document.documentElement.dataset.theme = t
+}
+
 /** A1 鉴权：所有 backend 请求需带 X-API-Key 头，值取自 VITE_APP_API_KEY */
 function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
   return { 'X-API-Key': API_KEY, ...extra }
@@ -143,6 +148,13 @@ interface ChatStore {
   newSession: () => void
   toggleSidebar: () => void
   prefetchSession: (id: string) => Promise<void>
+  theme: 'light' | 'dark'
+  searchQuery: string
+  composerDraft: string
+  setTheme: (t: 'light' | 'dark') => void
+  toggleTheme: () => void
+  setSearchQuery: (q: string) => void
+  setComposerDraft: (text: string) => void
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -160,6 +172,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   loadingOlder: false,
   loadingFullHistory: false,
   errorToast: null,
+  theme: 'light',
+  searchQuery: '',
+  composerDraft: '',
 
   setError: (msg: string) => {
     set({ errorToast: msg })
@@ -168,6 +183,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     setTimeout(() => set({ errorToast: null }), 5000)
   },
   clearError: () => set({ errorToast: null }),
+
+  setTheme: (t) => { applyTheme(t); set({ theme: t }) },
+  toggleTheme: () => {
+    const next = get().theme === 'light' ? 'dark' : 'light'
+    applyTheme(next)
+    set({ theme: next })
+  },
+  setSearchQuery: (q: string) => set({ searchQuery: q }),
+  setComposerDraft: (text: string) => set({ composerDraft: text }),
 
   addSystemMessage: (text: string) => {
     const msg: ChatMessage = {

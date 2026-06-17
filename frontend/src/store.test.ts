@@ -505,3 +505,28 @@ describe('useChatStore', () => {
     expect(useChatStore.getState().messageCache.has(sid)).toBe(true)
   })
 })
+
+describe('theme / searchQuery / composerDraft', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    useChatStore.setState({ theme: 'light', searchQuery: '', composerDraft: '' })
+  })
+
+  it('toggleTheme 翻转 light↔dark 并持久化 + 同步 document', () => {
+    useChatStore.setState({ theme: 'light' })
+    useChatStore.getState().toggleTheme()
+    expect(useChatStore.getState().theme).toBe('dark')
+    expect(localStorage.getItem('chat-theme')).toBe('dark')
+    expect(document.documentElement.dataset.theme).toBe('dark')
+  })
+
+  it('setSearchQuery 更新搜索词', () => {
+    useChatStore.getState().setSearchQuery('adapter')
+    expect(useChatStore.getState().searchQuery).toBe('adapter')
+  })
+
+  it('setComposerDraft 更新草稿', () => {
+    useChatStore.getState().setComposerDraft('你好')
+    expect(useChatStore.getState().composerDraft).toBe('你好')
+  })
+})
