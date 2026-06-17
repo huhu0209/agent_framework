@@ -20,9 +20,9 @@ export function ChatLayout() {
         <div
           className="fixed top-4 right-4 z-50 max-w-sm px-4 py-3 rounded-lg shadow-lg text-sm"
           style={{
-            backgroundColor: '#fef2f2',
-            color: '#991b1b',
-            border: '1px solid #fecaca',
+            backgroundColor: 'var(--danger-bg)',
+            color: 'var(--danger-text)',
+            border: '1px solid var(--danger-border)',
           }}
           role="alert"
         >
