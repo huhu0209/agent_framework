@@ -38,7 +38,7 @@ from agent_framework.memory.flush import FlushExtractor
 from agent_framework.memory.semantic_extractor import SemanticExtractor
 from agent_framework.config.loader import ConfigLoader
 from agent_framework.prompts.assembler import PromptAssembler
-from agent_framework.prompts.profiles import AgentProfile
+from agent_framework.prompts.profiles import AgentProfile, PromptBlock
 from agent_framework.tools.context.compactor import CompactConfig, compact, should_compact
 from agent_framework.tools.context.token_counter import (
     estimate_tokens,
@@ -180,6 +180,19 @@ class AgentLoop(Agent):
     def system_prompt_text(self) -> str:
         """The assembled system prompt text (read-only)."""
         return self._system_prompt_text
+
+    @property
+    def system_prompt_blocks(self) -> list[PromptBlock]:
+        """组装后的 system prompt 块列表（结构化，供可视化）。
+
+        仅 profile 模式下返回非空（调用 PromptAssembler.assemble）；
+        无 profile 时返回空列表，避免外部访问 _assembler/_config_loader 私有属性。
+        """
+        if self.profile is None:
+            return []
+        return self._assembler.assemble(
+            self._config_loader or ConfigLoader(), self.profile,
+        )
 
     def load_messages(self, messages: list[Message]) -> None:
         """注入历史消息（用于 resume）。前插 SystemMessage 以确保 system prompt 存在。"""
