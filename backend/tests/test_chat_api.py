@@ -12,12 +12,33 @@ from starlette.testclient import TestClient
 from agent_framework.agents.agent_loop import LoopEvent
 
 
+class _FakeRegistry:
+    """假工具注册表 — AgentRunner 读取工具定义列表。"""
+
+    def get_definitions(self) -> list[Any]:
+        return []
+
+
+class _FakeRouter:
+    """假 router — 仅暴露 .registry.get_definitions() 供 runner 构造 config。"""
+
+    def __init__(self) -> None:
+        self.registry = _FakeRegistry()
+
+
 class _FakeAgentLoop:
     """产生固定 LoopEvent 序列的假 AgentLoop。"""
 
     def __init__(self, events: list[LoopEvent]) -> None:
         self._events = events
         self.system_prompt_text = ""  # 匹配 AgentLoop 接口（chat.py TranscriptConsumer 引用）
+        # viz AgentRunner.wrap 启动时读取以下元数据（仅在 bus 非 None 时触发）。
+        # profile=None → runner 发布 profile/permission_mode=None；其余给最小可用值。
+        self.model = "fake-model"
+        self.max_steps = 0
+        self.profile = None
+        self.system_prompt_blocks = []
+        self.router = _FakeRouter()
 
     def load_messages(self, messages: list[Any]) -> None:
         """noop — 支持 transcript 恢复路径。"""
@@ -587,3 +608,57 @@ def test_list_sessions_pagination_offset_beyond(client_with_storage: TestClient)
     res = client_with_storage.get("/api/v1/sessions?limit=10&offset=100")
     assert res.status_code == 200
     assert res.json() == []  # offset 超出，空
+
+
+# --- viz 事件层集成（lifespan + bus + SSE）---
+#
+# 现有 client fixture 返回 TestClient(app) 但未进 with 上下文，lifespan 从不运行，
+# app.state.bus 永不创建，chat 走的是 bus=None 降级路径。这里通过 with 上下文真正
+# 跑 lifespan（T5：创建 bus / ws_task），再让 chat 走 runner 装配路径（T7）。
+
+
+def test_viz_lifespan_creates_bus_and_chat_runs_through_runner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """T5+T7：lifespan 运行 → app.state.bus 创建 → chat 经 runner.wrap 仍返回正常 SSE。
+
+    关键点：
+    - 进 with TestClient(app) 上下文（lifespan 才会跑）
+    - APP_WS_ENABLED=false 避免真启 serve_ws 占端口（bus 仍创建，能测 T7 装配）
+    - lifespan 会用真实 AgentFactory 覆盖 app.state.agent_factory；进入 with 后
+      重新注入 _FakeFactory，使 chat 不调真实 LLM
+    - 断言 app.state.bus 非 None（T5）+ SSE 含 done/shutdown（T7 不破坏流）
+    """
+    monkeypatch.setenv("APP_LLM_API_KEY", "test-key")
+    monkeypatch.setenv("APP_API_KEY", "test-key")
+    monkeypatch.setenv("APP_CORS_ORIGINS", "http://localhost:5173")
+    monkeypatch.setenv("APP_WS_ENABLED", "false")  # 避免 serve_ws 占用 8765 端口
+
+    from main import app
+
+    # 进 with 上下文 → lifespan 运行 → app.state.bus / session_manager / settings 就绪
+    with TestClient(app, headers={"X-API-Key": "test-key"}) as client:
+        # T5: lifespan 已创建 EventBus
+        assert client.app.state.bus is not None
+
+        # lifespan 用真实 AgentFactory 覆盖了 factory；重新注入 fake，避免调真实 LLM。
+        # session_manager 保留 lifespan 创建的实例（含 cleanup task）。
+        client.app.state.agent_factory = _FakeFactory()
+
+        # T7: chat 请求走 runner.wrap（bus 非 None）后 SSE 仍正常
+        res = client.post("/api/v1/chat", json={"message": "hello"})
+        assert res.status_code == 200
+        assert "text/event-stream" in res.headers["content-type"]
+        assert "X-Session-Id" in res.headers
+
+        events = _parse_sse(res.text)
+        event_types = [t for t, _ in events]
+        assert "done" in event_types
+        assert "shutdown" in event_types
+
+        # T7 装配：bus 非 None 时 chat.py 会构造 runner 挂到 session.agent_runner。
+        # 从 session_manager 取回该 session 验证 runner 已装配（非降级路径）。
+        sid = res.headers["X-Session-Id"]
+        session = client.app.state.session_manager.get(sid)
+        assert session is not None
+        assert session.agent_runner is not None  # T7: runner 装配生效
