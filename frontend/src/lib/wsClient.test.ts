@@ -95,4 +95,32 @@ describe('VizWsClient', () => {
     await vi.advanceTimersByTimeAsync(60000)
     expect(MockWebSocket.instances).toHaveLength(1)
   })
+
+  it('onopen 置 connected，非主动 onclose 置 connecting', async () => {
+    const statuses: string[] = []
+    vizWs.setOnStatus((s) => statuses.push(s))
+    vizWs.connect('sid-1')
+    await vi.runAllTimersAsync() // 触发 onopen
+    expect(statuses).toContain('connecting')
+    expect(statuses).toContain('connected')
+    // 模拟非主动关闭（如服务端断开）→ 进入重连
+    MockWebSocket.instances[0]!.onclose?.()
+    expect(statuses[statuses.length - 1]).toBe('connecting')
+  })
+
+  it('disconnect 主动断开置 disconnected', async () => {
+    const statuses: string[] = []
+    vizWs.setOnStatus((s) => statuses.push(s))
+    vizWs.connect('sid-1')
+    await vi.runAllTimersAsync()
+    vizWs.disconnect()
+    expect(statuses[statuses.length - 1]).toBe('disconnected')
+  })
+
+  it('重复 connect 同 session 且 OPEN 幂等', async () => {
+    vizWs.connect('sid-1')
+    await vi.runAllTimersAsync()
+    vizWs.connect('sid-1') // 已 OPEN，跳过
+    expect(MockWebSocket.instances).toHaveLength(1)
+  })
 })

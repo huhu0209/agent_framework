@@ -11,7 +11,10 @@ export type VizEvent = {
   timestamp: number
 }
 
+export type WsStatus = 'disconnected' | 'connecting' | 'connected'
+
 export type VizEventHandler = (event: VizEvent) => void
+export type WsStatusHandler = (status: WsStatus) => void
 
 const WS_URL = import.meta.env.VITE_WS_URL ?? 'ws://localhost:8765'
 const WS_TOKEN = import.meta.env.VITE_WS_TOKEN ?? ''
@@ -22,14 +25,32 @@ export class VizWsClient {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private currentSessionId: string | null = null
   private onEvent: VizEventHandler | null = null
+  private onStatus: WsStatusHandler | null = null
+  private intentionalClose = false
 
   setHandler(handler: VizEventHandler) {
     this.onEvent = handler
   }
 
-  /** 连接并绑定到指定 session（用于 session_id 过滤）。 */
+  setOnStatus(handler: WsStatusHandler) {
+    this.onStatus = handler
+  }
+
+  private setStatus(s: WsStatus) {
+    this.onStatus?.(s)
+  }
+
+  /** 连接并绑定到指定 session。幂等：已连到同 session 且 OPEN 则跳过。 */
   connect(sessionId: string) {
+    if (
+      this.currentSessionId === sessionId &&
+      this.ws &&
+      this.ws.readyState === WebSocket.OPEN
+    ) {
+      return // 已连到同 session，跳过
+    }
     this.currentSessionId = sessionId
+    this.intentionalClose = false
     this.reconnectAttempt = 0
     this.doConnect()
   }
@@ -37,6 +58,7 @@ export class VizWsClient {
   private doConnect() {
     if (!this.currentSessionId) return
     const url = WS_TOKEN ? `${WS_URL}?token=${WS_TOKEN}` : WS_URL
+    this.setStatus('connecting')
     try {
       this.ws = new WebSocket(url)
     } catch {
@@ -45,15 +67,15 @@ export class VizWsClient {
     }
     this.ws.onopen = () => {
       this.reconnectAttempt = 0
-      // 晚连接：拉快照（config/system_prompt 是启动时发的，可能错过）
+      this.setStatus('connected')
+      // 晚连接：拉快照（config/system_prompt/工具链 可能错过）
       this.send({ type: 'get_snapshot', session_id: this.currentSessionId })
     }
     this.ws.onmessage = (e) => {
       try {
         const ev = JSON.parse(e.data) as VizEvent
-        // session_id 过滤：只处理当前会话事件
         if (this.currentSessionId && ev.session_id && ev.session_id !== this.currentSessionId) return
-        if (ev.type === 'command_response') return // get_snapshot 的响应，不进面板
+        if (ev.type === 'command_response') return
         this.onEvent?.(ev)
       } catch {
         // 坏 JSON 忽略
@@ -61,6 +83,11 @@ export class VizWsClient {
     }
     this.ws.onclose = () => {
       this.ws = null
+      if (this.intentionalClose) {
+        this.setStatus('disconnected')
+        return
+      }
+      this.setStatus('connecting') // 重连中（对 UI 表现为"连接中"）
       this.scheduleReconnect()
     }
     this.ws.onerror = () => {
@@ -70,7 +97,7 @@ export class VizWsClient {
 
   private scheduleReconnect() {
     if (this.reconnectTimer) return
-    if (!this.currentSessionId) return // 已 disconnect，不再重连
+    if (!this.currentSessionId || this.intentionalClose) return
     const delay = Math.min(1000 * 2 ** this.reconnectAttempt, 30000)
     this.reconnectAttempt++
     this.reconnectTimer = setTimeout(() => {
@@ -86,16 +113,18 @@ export class VizWsClient {
   }
 
   disconnect() {
+    this.intentionalClose = true
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
     }
     this.currentSessionId = null
     if (this.ws) {
-      this.ws.onclose = null // 避免触发重连
+      this.ws.onclose = null
       this.ws.close()
       this.ws = null
     }
+    this.setStatus('disconnected')
   }
 }
 
