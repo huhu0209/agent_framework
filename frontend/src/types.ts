@@ -27,8 +27,9 @@ export type AgentBlockInit =
   | Omit<Extract<AgentBlock, { kind: 'error' }>, 'id'>
 
 export interface VizEvent {
-  type: 'idle' | 'thinking' | 'tool_call' | 'tool_result' | 'done' | 'error' | 'shutdown'
+  type: 'idle' | 'thinking' | 'tool_call' | 'tool_result' | 'done' | 'error' | 'shutdown' | 'config' | 'system_prompt' | 'memory'
   agent: string
+  session_id?: string
   payload: Record<string, unknown>
   timestamp: number
 }
@@ -45,4 +46,40 @@ export interface CacheEntry {
   messages: ChatMessage[]
   hasMore: boolean
   cachedAt: number
+}
+
+// Inspector 面板状态
+export interface ConfigPayload {
+  model: string
+  max_steps: number
+  profile: string | null
+  permission_mode: string | null
+  tools: string[]
+}
+
+export interface PromptBlockPayload {
+  name: string
+  content: string
+  source: string
+  stability: string
+}
+
+export interface SystemPromptPayload {
+  text: string
+  blocks: PromptBlockPayload[]
+}
+
+export interface ToolCallEntry {
+  tool_call_id: string
+  tool_name: string
+  params: Record<string, unknown>
+  content?: string
+  source?: string
+  step?: number
+}
+
+export interface InspectorState {
+  config: ConfigPayload | null
+  systemPrompt: SystemPromptPayload | null
+  toolCalls: ToolCallEntry[]
 }
