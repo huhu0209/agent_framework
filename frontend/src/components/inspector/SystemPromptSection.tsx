@@ -1,8 +1,11 @@
 import { useState } from 'react'
 import type { PromptBlockPayload, SystemPromptPayload } from '../../types'
 
-export function SystemPromptSection({ sp }: { sp: SystemPromptPayload | null }) {
+export function SystemPromptSection({ sp, offline }: { sp: SystemPromptPayload | null; offline?: boolean }) {
   const [showText, setShowText] = useState(false)
+  if (offline && !sp) {
+    return <div className="text-sm" style={{ color: 'var(--text-3)' }}>观测面板离线，实时数据暂停。</div>
+  }
   if (!sp) return <div className="text-sm" style={{ color: 'var(--text-3)' }}>等待 system_prompt…</div>
   return (
     <div className="space-y-2 text-sm">

@@ -1,6 +1,9 @@
 import type { ConfigPayload } from '../../types'
 
-export function ConfigSection({ config }: { config: ConfigPayload | null }) {
+export function ConfigSection({ config, offline }: { config: ConfigPayload | null; offline?: boolean }) {
+  if (offline && !config) {
+    return <div className="text-sm" style={{ color: 'var(--text-3)' }}>观测面板离线，实时数据暂停。</div>
+  }
   if (!config) return <div className="text-sm" style={{ color: 'var(--text-3)' }}>等待 config…</div>
   return (
     <div className="space-y-2 text-sm">
