@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { z } from 'zod'
 import type { AgentBlock, AgentBlockInit, CacheEntry, ChatMessage, ConfigPayload, InspectorState, MessageRole, SessionInfo, SystemPromptPayload, ToolCallEntry, VizEvent } from './types'
 import { persistCacheEntry } from './lib/cache'
-import { vizWs } from './lib/wsClient'
+import { vizWs, type WsStatus } from './lib/wsClient'
 
 const ssePayloadSchema = z.object({
   text: z.string().optional(),
@@ -157,11 +157,13 @@ interface ChatStore {
   setSearchQuery: (q: string) => void
   setComposerDraft: (text: string) => void
   inspectorOpen: boolean
-  wsConnected: boolean
+  wsStatus: WsStatus
   inspector: InspectorState
   toggleInspector: () => void
   openInspector: () => void
   closeInspector: () => void
+  connectInspector: (sid: string) => void
+  disconnectInspector: () => void
   applyVizEvent: (ev: { type: string; payload: Record<string, unknown>; session_id?: string }) => void
 }
 
@@ -184,7 +186,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   searchQuery: '',
   composerDraft: '',
   inspectorOpen: false,
-  wsConnected: false,
+  wsStatus: 'disconnected' as WsStatus,
   inspector: { config: null, systemPrompt: null, toolCalls: [] },
 
   setError: (msg: string) => {
@@ -204,20 +206,24 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   setSearchQuery: (q: string) => set({ searchQuery: q }),
   setComposerDraft: (text: string) => set({ composerDraft: text }),
 
-  toggleInspector: () => {
-    const open = !get().inspectorOpen
-    set({ inspectorOpen: open })
-    const sid = get().sessionId
-    if (open && sid && !sid.startsWith('temp-')) {
-      vizWs.setHandler((ev) => get().applyVizEvent(ev))
-      vizWs.connect(sid)
-    } else if (!open) {
-      vizWs.disconnect()
-      set({ inspector: { config: null, systemPrompt: null, toolCalls: [] } })
-    }
+  toggleInspector: () => set((s) => ({ inspectorOpen: !s.inspectorOpen })),
+  openInspector: () => set({ inspectorOpen: true }),
+  closeInspector: () => set({ inspectorOpen: false }),
+
+  // WS 连接生命周期跟随 sessionId（有真实 session 即连，启动即拉 config）
+  connectInspector: (sid: string) => {
+    if (!sid || sid.startsWith('temp-')) return
+    vizWs.setHandler((ev) => get().applyVizEvent(ev))
+    vizWs.setOnStatus((status) => set({ wsStatus: status }))
+    vizWs.connect(sid)
   },
-  openInspector: () => { if (!get().inspectorOpen) get().toggleInspector() },
-  closeInspector: () => { if (get().inspectorOpen) get().toggleInspector() },
+  disconnectInspector: () => {
+    vizWs.disconnect()
+    set({
+      wsStatus: 'disconnected',
+      inspector: { config: null, systemPrompt: null, toolCalls: [] },
+    })
+  },
 
   applyVizEvent: (ev) => {
     const p = ev.payload
@@ -228,8 +234,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         case 'system_prompt':
           return { inspector: { ...s.inspector, systemPrompt: p as unknown as SystemPromptPayload } }
         case 'tool_call': {
+          const tcId = String(p.tool_call_id ?? '')
+          // 去重：历史回放与实时增量并发时，同 tool_call_id 不重复追加
+          if (tcId && s.inspector.toolCalls.some((t) => t.tool_call_id === tcId)) {
+            return s
+          }
           const tc: ToolCallEntry = {
-            tool_call_id: String(p.tool_call_id ?? ''),
+            tool_call_id: tcId,
             tool_name: String(p.tool_name ?? ''),
             params: (p.params as Record<string, unknown>) ?? {},
             source: typeof p.source === 'string' ? p.source : undefined,
@@ -246,9 +257,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           )
           return { inspector: { ...s.inspector, toolCalls } }
         }
-        case 'idle':
-          // 新会话/新一轮：清空工具链重新累积
-          return { inspector: { ...s.inspector, toolCalls: [] } }
+        // 决策 1：工具链会话全量累积，不再因 idle 清空
         default:
           return s
       }
@@ -362,6 +371,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const cached = get().messageCache.get(id)
     if (cached) {
       set({ messages: cached.messages, sessionId: id, streamingMessage: null, hasMore: cached.hasMore })
+      get().connectInspector(id)
       // If preview data, fetch full history in background
       if (cached.hasMore) {
         set({ loadingFullHistory: true })
@@ -401,6 +411,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       cache.set(id, entry)
       persistCacheEntry(id, entry)
       set({ messages, sessionId: id, streamingMessage: null, switchingSession: false, messageCache: cache, hasMore })
+      get().connectInspector(id)
     } catch {
       get().setError('切换会话失败')
       set({ switchingSession: false })
@@ -454,6 +465,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       sessionId: null,
       streamingMessage: null,
     }))
+    get().disconnectInspector()
     get().addSystemMessage('新会话已开始。输入消息开始对话。')
   },
 
@@ -539,6 +551,7 @@ async function sendViaSse(
     if (get().sessions.some(s => s.session_id === sessionId && s.title === '新对话')) {
       get().loadSessions()
     }
+    get().connectInspector(sessionId)
   }
 
   const body = res.body
