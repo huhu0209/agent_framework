@@ -90,6 +90,14 @@ async def lifespan(app: FastAPI):
     app.state.ws_task = None
     if settings.ws_enabled:
         ws_token = settings.ws_token.get_secret_value() or None
+
+        def _snapshot_provider(session_id: str) -> list[dict] | None:
+            """从 SessionManager 取 session.agent_runner，重推 config/system_prompt 快照。"""
+            session = sm.get(session_id)
+            if session is None or session.agent_runner is None:
+                return None
+            return session.agent_runner.emit_snapshot()
+
         app.state.ws_task = asyncio.create_task(
             serve_ws(
                 app.state.bus,
@@ -97,6 +105,7 @@ async def lifespan(app: FastAPI):
                 port=settings.ws_port,
                 token=ws_token,
                 allowed_origins=settings.ws_cors_origins,
+                snapshot_provider=_snapshot_provider,
             )
         )
         app.state.ws_task.add_done_callback(_on_ws_done)
