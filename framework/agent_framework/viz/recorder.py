@@ -88,3 +88,26 @@ class RecordingSubscriber:
         if config_ev is None or sp_ev is None:
             return None
         return [config_ev, sp_ev]
+
+    def read_replay(self, session_id: str) -> list[dict[str, Any]] | None:
+        """读全量 viz 事件（按落盘顺序），用于历史回放（含工具链）。
+
+        与 read_snapshot（只取最后 config/system_prompt）不同，本方法返回
+        文件内全部事件，供 get_snapshot 把早期被挤出 EventBus 200 条 replay
+        窗口的工具链一并重推给前端。文件不存在或为空返回 None。
+        """
+        safe_sid = "".join(c for c in str(session_id) if c.isalnum()) or "unknown"
+        path = self._storage_dir / f"{safe_sid}.jsonl"
+        if not path.exists():
+            return None
+        events: list[dict[str, Any]] = []
+        try:
+            with path.open(encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        events.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+        except OSError:
+            return None
+        return events or None

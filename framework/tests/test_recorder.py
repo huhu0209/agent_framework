@@ -65,3 +65,24 @@ async def test_recorder_read_snapshot_returns_last_config_and_prompt(tmp_path: P
 def test_recorder_read_snapshot_returns_none_for_unknown(tmp_path: Path) -> None:
     rec = RecordingSubscriber(EventBus(), tmp_path)
     assert rec.read_snapshot("nonexistent") is None
+
+
+async def test_read_replay_returns_all_events_in_order(tmp_path: Path) -> None:
+    """read_replay 返回全量事件（含工具链），按落盘顺序。"""
+    bus = EventBus()
+    rec = RecordingSubscriber(bus, tmp_path)
+    await rec.start()
+    await bus.publish({"type": "config", "session_id": "abc", "payload": {"model": "m"}, "timestamp": 1.0})
+    await bus.publish({"type": "tool_call", "session_id": "abc", "payload": {"tool_call_id": "tc1"}, "timestamp": 2.0})
+    await bus.publish({"type": "tool_result", "session_id": "abc", "payload": {"tool_call_id": "tc1"}, "timestamp": 3.0})
+    await asyncio.sleep(0.1)
+    await rec.stop()
+
+    events = rec.read_replay("abc")
+    assert events is not None
+    assert [e["type"] for e in events] == ["config", "tool_call", "tool_result"]
+
+
+def test_read_replay_returns_none_when_file_missing(tmp_path: Path) -> None:
+    rec = RecordingSubscriber(EventBus(), tmp_path)
+    assert rec.read_replay("nonexistent") is None
