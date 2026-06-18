@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     ws_host: str = "localhost"
     ws_port: int = 8765
     ws_token: SecretStr = SecretStr("")  # 空 → 无 auth（仅开发态）；生产必须设置
-    ws_cors_origins: list[str] = ["http://localhost:5173"]  # 前端 dev server Origin 白名单
+    ws_cors_origins: list[str] = ["http://localhost:30001", "http://localhost:5173"]  # 前端 dev server Origin 白名单（vite 实际 30001 + 默认 5173）
 
     model_config = {"env_prefix": "APP_", "env_file": ".env"}
 
