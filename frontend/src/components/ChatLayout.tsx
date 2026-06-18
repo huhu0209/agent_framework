@@ -2,6 +2,7 @@ import { ChatHeader } from './header/ChatHeader'
 import { MessageList } from './message/MessageList'
 import { ChatInput } from './composer/ChatInput'
 import { SessionSidebar } from './sidebar/SessionSidebar'
+import { InspectorPanel } from './inspector/InspectorPanel'
 import { useChatStore } from '../store'
 
 export function ChatLayout() {
@@ -16,6 +17,7 @@ export function ChatLayout() {
         <MessageList />
         <ChatInput />
       </div>
+      <InspectorPanel />
       {errorToast && (
         <div
           className="fixed top-4 right-4 z-50 max-w-sm px-4 py-3 rounded-lg shadow-lg text-sm"

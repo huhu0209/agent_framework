@@ -2,6 +2,7 @@ import { ShareNetwork, DotsThree } from '@phosphor-icons/react'
 import { ModelChip } from './ModelChip'
 import { ThemeToggle } from './ThemeToggle'
 import { SidebarToggle } from './SidebarToggle'
+import { InspectButton } from './InspectButton'
 
 export function ChatHeader() {
   return (
@@ -14,6 +15,7 @@ export function ChatHeader() {
         <ModelChip />
       </div>
       <div className="flex items-center gap-1">
+        <InspectButton />
         <ThemeToggle />
         <button
           className="inline-flex items-center justify-center w-9 h-9 rounded-lg transition-colors hover:bg-[var(--sand)]"
