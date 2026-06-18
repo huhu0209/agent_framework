@@ -25,11 +25,14 @@ async def serve_ws(
     token: str | None = None,
     allowed_origins: list[str] | None = None,
     production: bool = False,
+    snapshot_provider: Any = None,  # Callable[[str], list[dict] | None]
 ) -> None:
     """启动 WebSocket 服务端。
 
     B4: production=True 时 token 必须提供（fail-safe，防无认证裸奔）。
     allowed_origins 非 None 时启用 Origin 白名单校验（CSWSH 防护）。
+    snapshot_provider: 注入的 Callable[[session_id], list[dict] | None]，
+    供 get_snapshot 命令重推会话 config/system_prompt 快照（晚连接拉回）。
     """
     if production and token is None:
         raise ValueError("production mode requires a token")
@@ -40,7 +43,7 @@ async def serve_ws(
         logger.info("WebSocket server listening on ws://%s:%d (no auth, development mode)", host, port)
 
     async with serve(
-        lambda ws: _handler(ws, bus, token, allowed_origins), host, port
+        lambda ws: _handler(ws, bus, token, allowed_origins, snapshot_provider), host, port
     ) as server:
         await server.wait_closed()
 
@@ -50,6 +53,7 @@ async def _handler(
     bus: EventBus,
     token: str | None = None,
     allowed_origins: list[str] | None = None,
+    snapshot_provider: Any = None,
 ) -> None:
     """处理单个 WebSocket 连接：推送事件 + 接收命令。"""
 
@@ -73,7 +77,7 @@ async def _handler(
 
     queue = await bus.subscribe()
     try:
-        recv_task = asyncio.create_task(_handle_commands(websocket, bus))
+        recv_task = asyncio.create_task(_handle_commands(websocket, bus, snapshot_provider))
         push_task = asyncio.create_task(_push_events(websocket, queue))
         done, pending = await asyncio.wait(
             [recv_task, push_task], return_when=asyncio.FIRST_COMPLETED,
@@ -99,7 +103,9 @@ async def _push_events(websocket: ServerConnection, queue: asyncio.Queue[dict[st
         return  # H-S3: 连接已关闭，优雅退出推送循环（不冒泡到 _handler）
 
 
-async def _handle_commands(websocket: ServerConnection, bus: EventBus) -> None:
+async def _handle_commands(
+    websocket: ServerConnection, bus: EventBus, snapshot_provider: Any = None,
+) -> None:
     """接收并处理客户端控制命令。"""
     async for raw in websocket:
         try:
@@ -113,6 +119,8 @@ async def _handle_commands(websocket: ServerConnection, bus: EventBus) -> None:
             await _handle_start_team(cmd, websocket)
         elif cmd_type == "stop_team":
             await _handle_stop_team(cmd, websocket)
+        elif cmd_type == "get_snapshot":
+            await _handle_get_snapshot(cmd, websocket, snapshot_provider)
         else:
             await _send_response(websocket, False, f"Unknown command: {cmd_type}")
 
@@ -136,6 +144,23 @@ async def _handle_stop_team(cmd: dict[str, Any], websocket: ServerConnection) ->
         # H-S2: 无对应 runner 时诚实告知失败（_active_runners 当前恒空，
         # start_team 尚为 MVP 不填充，故 stop 永远走此分支——不再撒谎 success）
         await _send_response(websocket, False, "no active runner")
+
+
+async def _handle_get_snapshot(
+    cmd: dict[str, Any], websocket: ServerConnection, snapshot_provider: Any,
+) -> None:
+    """处理 get_snapshot 命令：重推会话 config/system_prompt 快照给请求客户端。"""
+    if snapshot_provider is None:
+        await _send_response(websocket, False, "snapshot not available")
+        return
+    session_id = cmd.get("session_id", "")
+    events = snapshot_provider(session_id)
+    if events is None:
+        await _send_response(websocket, False, "session not found")
+        return
+    for event in events:
+        await websocket.send(json.dumps(event))
+    await _send_response(websocket, True)
 
 
 async def _send_response(

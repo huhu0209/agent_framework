@@ -266,3 +266,50 @@ async def test_push_events_swallows_connection_closed() -> None:
     # 修复前：ConnectionClosed 冒泡抛出
     # 修复后：优雅 return，不抛
     await _push_events(FakeWS(), queue)  # 不应 raise
+
+
+# --- M2-T1: get_snapshot 命令（晚连接拉回会话级快照）---
+
+
+@pytest.fixture
+async def ws_server_with_snapshot():
+    bus = EventBus()
+    port = _free_port()
+
+    def provider(sid: str):
+        if sid == "known":
+            return [
+                {"type": "config", "agent": sid, "session_id": sid, "payload": {"model": "m"}, "timestamp": 1.0},
+                {"type": "system_prompt", "agent": sid, "session_id": sid, "payload": {"text": "t"}, "timestamp": 1.0},
+            ]
+        return None
+
+    task = asyncio.create_task(serve_ws(bus, port=port, snapshot_provider=provider))
+    await asyncio.sleep(0.05)
+    yield bus, port, task
+    task.cancel()
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
+async def test_get_snapshot_pushes_config_and_system_prompt(ws_server_with_snapshot: tuple) -> None:
+    _, port, _ = ws_server_with_snapshot
+    async with connect(f"ws://localhost:{port}") as ws:
+        await ws.send(json.dumps({"type": "get_snapshot", "session_id": "known"}))
+        e1 = json.loads(await asyncio.wait_for(ws.recv(), timeout=2.0))
+        e2 = json.loads(await asyncio.wait_for(ws.recv(), timeout=2.0))
+        resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=2.0))
+        assert e1["type"] == "config"
+        assert e2["type"] == "system_prompt"
+        assert resp["type"] == "command_response" and resp["success"] is True
+
+
+async def test_get_snapshot_unknown_session_returns_failure(ws_server_with_snapshot: tuple) -> None:
+    _, port, _ = ws_server_with_snapshot
+    async with connect(f"ws://localhost:{port}") as ws:
+        await ws.send(json.dumps({"type": "get_snapshot", "session_id": "missing"}))
+        resp = json.loads(await asyncio.wait_for(ws.recv(), timeout=2.0))
+        assert resp["success"] is False
+        assert "session not found" in resp["error"]

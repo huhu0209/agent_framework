@@ -250,3 +250,15 @@ def test_build_system_prompt_payload_maps_blocks() -> None:
     assert soul_block["content"] == "my soul"
     assert soul_block["source"] == "injected"
     assert soul_block["stability"] == "static"
+
+
+# --- M2-T1: emit_snapshot（晚连接拉回会话级快照）---
+
+
+def test_emit_snapshot_returns_config_and_system_prompt() -> None:
+    runner = _make_runner()
+    events = runner.emit_snapshot()
+    assert [e["type"] for e in events] == ["config", "system_prompt"]
+    assert all(e["session_id"] == "test-session" for e in events)
+    assert events[0]["payload"]["model"] == "mock-model"
+    assert isinstance(events[1]["payload"]["text"], str)

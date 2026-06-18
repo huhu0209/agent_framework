@@ -69,6 +69,22 @@ class AgentRunner:
         self._bus = bus
         self._session_id = session_id
 
+    def emit_snapshot(self) -> list[dict[str, Any]]:
+        """返回 config + system_prompt 事件的 dict 列表（供 get_snapshot 命令重推快照）。
+
+        用于前端晚连接（打开抽屉时错过启动事件）重新拉取会话级快照。
+        """
+        return [
+            VizEvent(
+                type="config", agent=self._session_id, session_id=self._session_id,
+                payload=_build_config_payload(self._loop), timestamp=time.time(),
+            ).model_dump(),
+            VizEvent(
+                type="system_prompt", agent=self._session_id, session_id=self._session_id,
+                payload=_build_system_prompt_payload(self._loop), timestamp=time.time(),
+            ).model_dump(),
+        ]
+
     async def wrap(
         self, loop_gen: AsyncGenerator[LoopEvent, None],
     ) -> AsyncGenerator[LoopEvent, None]:
