@@ -48,8 +48,13 @@ async def lifespan(app: FastAPI):
     settings = create_settings(framework_settings=fw_settings)
     app.state.settings = settings  # 供 verify_api_key 依赖读取
 
-    # --- 初始化 Agent 工厂 ---
-    factory = AgentFactory.from_configloader(config_loader, settings)
+    # --- 初始化 Agent 工厂（APP_AGENT_BACKEND=stub 时用 E2E stub，免真实 LLM）---
+    if os.getenv("APP_AGENT_BACKEND") == "stub":
+        from app.services.stub_factory import StubAgentFactory
+        factory = StubAgentFactory()
+        logger.warning("APP_AGENT_BACKEND=stub: using StubAgentFactory (E2E only, never production)")
+    else:
+        factory = AgentFactory.from_configloader(config_loader, settings)
 
     # --- 连接 Redis（可选，失败时降级为本地文件存储）---
     rdb = None
