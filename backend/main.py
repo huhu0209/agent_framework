@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from agent_framework.config.loader import ConfigLoader
 from agent_framework.viz.event_bus import EventBus
+from agent_framework.viz.recorder import RecordingSubscriber
 from agent_framework.viz.ws_server import serve_ws
 
 from app.api.v1.chat import router as chat_router
@@ -103,6 +104,12 @@ async def lifespan(app: FastAPI):
             "viz WebSocket server starting on ws://%s:%d", settings.ws_host, settings.ws_port,
         )
 
+    # --- viz 事件录制（回放种子，按 session 落盘）---
+    viz_storage = Path(__file__).parent / "data" / "viz_events"
+    recorder = RecordingSubscriber(app.state.bus, viz_storage)
+    await recorder.start()
+    app.state.viz_recorder = recorder
+
     yield  # 应用运行中
 
     # --- 应用关闭时清理资源 ---
@@ -118,6 +125,10 @@ async def lifespan(app: FastAPI):
             await ws_task
         except (asyncio.CancelledError, Exception):
             pass
+
+    recorder = getattr(app.state, "viz_recorder", None)
+    if recorder is not None:
+        await recorder.stop()
 
 
 app = FastAPI(title="Agent Chat", lifespan=lifespan)
