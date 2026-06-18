@@ -92,13 +92,21 @@ async def lifespan(app: FastAPI):
         ws_token = settings.ws_token.get_secret_value() or None
 
         def _snapshot_provider(session_id: str) -> list[dict] | None:
-            """从内存 session.agent_runner 取快照；不在内存时从 recorder 落盘兜底。"""
+            """重推会话快照：优先 recorder 全量回放（含工具链），无录制时内存兜底。
+
+            全量回放覆盖"历史 session 工具链被挤出 EventBus 200 条窗口"的场景：
+            前端晚连接/回看时，工具链也能从 jsonl 完整恢复。
+            """
+            rec = getattr(app.state, "viz_recorder", None)
+            if rec is not None:
+                replay = rec.read_replay(session_id)
+                if replay:
+                    return replay  # 全量：config/prompt/工具链
+            # 录制文件还没有（新 session 首条消息尚未落盘）：从内存 emit config/prompt
             session = sm.get(session_id)
             if session is not None and session.agent_runner is not None:
                 return session.agent_runner.emit_snapshot()
-            # 兜底：session 不在内存（历史/未激活），从 viz_events 录制读最后 config/system_prompt
-            rec = getattr(app.state, "viz_recorder", None)
-            return rec.read_snapshot(session_id) if rec is not None else None
+            return None
 
         app.state.ws_task = asyncio.create_task(
             serve_ws(
