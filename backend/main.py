@@ -92,11 +92,13 @@ async def lifespan(app: FastAPI):
         ws_token = settings.ws_token.get_secret_value() or None
 
         def _snapshot_provider(session_id: str) -> list[dict] | None:
-            """从 SessionManager 取 session.agent_runner，重推 config/system_prompt 快照。"""
+            """从内存 session.agent_runner 取快照；不在内存时从 recorder 落盘兜底。"""
             session = sm.get(session_id)
-            if session is None or session.agent_runner is None:
-                return None
-            return session.agent_runner.emit_snapshot()
+            if session is not None and session.agent_runner is not None:
+                return session.agent_runner.emit_snapshot()
+            # 兜底：session 不在内存（历史/未激活），从 viz_events 录制读最后 config/system_prompt
+            rec = getattr(app.state, "viz_recorder", None)
+            return rec.read_snapshot(session_id) if rec is not None else None
 
         app.state.ws_task = asyncio.create_task(
             serve_ws(

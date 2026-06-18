@@ -59,3 +59,32 @@ class RecordingSubscriber:
                 await self._task
             except (asyncio.CancelledError, Exception):
                 pass
+
+    def read_snapshot(self, session_id: str) -> list[dict[str, Any]] | None:
+        """从落盘的 viz_events 读最后 config/system_prompt（session 不在内存时兜底）。
+
+        返回 [config_event, system_prompt_event] 或 None（文件不存在/无记录）。
+        用于 get_snapshot：活跃 session 从内存 agent_runner 取，非活跃从录制文件兜底。
+        """
+        safe_sid = "".join(c for c in str(session_id) if c.isalnum()) or "unknown"
+        path = self._storage_dir / f"{safe_sid}.jsonl"
+        if not path.exists():
+            return None
+        config_ev: dict[str, Any] | None = None
+        sp_ev: dict[str, Any] | None = None
+        try:
+            with path.open(encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        ev = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if ev.get("type") == "config":
+                        config_ev = ev
+                    elif ev.get("type") == "system_prompt":
+                        sp_ev = ev
+        except OSError:
+            return None
+        if config_ev is None or sp_ev is None:
+            return None
+        return [config_ev, sp_ev]

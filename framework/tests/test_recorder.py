@@ -41,3 +41,27 @@ async def test_recorder_sanitizes_session_id(tmp_path: Path) -> None:
     await rec.stop()
     assert not (tmp_path / ".." / "etc").exists()  # 没越界
     assert any(p.suffix == ".jsonl" for p in tmp_path.iterdir())
+
+
+async def test_recorder_read_snapshot_returns_last_config_and_prompt(tmp_path: Path) -> None:
+    """read_snapshot 从落盘文件读最后 config/system_prompt（session 不在内存兜底）。"""
+    bus = EventBus()
+    rec = RecordingSubscriber(bus, tmp_path)
+    await rec.start()
+    await bus.publish({"type": "config", "session_id": "s1", "payload": {"model": "old"}, "timestamp": 1.0})
+    await bus.publish({"type": "system_prompt", "session_id": "s1", "payload": {"text": "old"}, "timestamp": 1.0})
+    await bus.publish({"type": "config", "session_id": "s1", "payload": {"model": "new"}, "timestamp": 2.0})
+    await bus.publish({"type": "system_prompt", "session_id": "s1", "payload": {"text": "new"}, "timestamp": 2.0})
+    await asyncio.sleep(0.1)
+    await rec.stop()
+
+    snapshot = rec.read_snapshot("s1")
+    assert snapshot is not None
+    assert [e["type"] for e in snapshot] == ["config", "system_prompt"]
+    assert snapshot[0]["payload"]["model"] == "new"  # 最后一次的
+    assert snapshot[1]["payload"]["text"] == "new"
+
+
+def test_recorder_read_snapshot_returns_none_for_unknown(tmp_path: Path) -> None:
+    rec = RecordingSubscriber(EventBus(), tmp_path)
+    assert rec.read_snapshot("nonexistent") is None
