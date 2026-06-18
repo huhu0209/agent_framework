@@ -162,5 +162,6 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE", "PATCH"],
     allow_headers=["Content-Type", "X-Session-Id", "X-API-Key"],  # A1/A3: 加 X-API-Key
+    expose_headers=["X-Session-Id"],  # 前端跨域读 X-Session-Id(connectInspector 启动拉 config 依赖)
 )
 app.include_router(chat_router, prefix="/api/v1")
