@@ -1,9 +1,15 @@
+import { lazy, Suspense } from 'react'
 import { Sparkle } from '@phosphor-icons/react'
 import type { AgentBlock, ChatMessage } from '../../types'
 import { ThinkingBlock } from './ThinkingBlock'
 import { ToolCallBlock } from './ToolCallBlock'
-import { TextResponseBlock } from './TextResponseBlock'
 import { MessageActions } from './MessageActions'
+
+// markdown 渲染管线重（react-markdown + remark-gfm + rehype-highlight/sanitize + highlight.js），
+// lazy 成独立 chunk：首屏（侧边栏）不必等它，显著加快冷启动。
+const TextResponseBlock = lazy(() =>
+  import('./TextResponseBlock').then((m) => ({ default: m.TextResponseBlock })),
+)
 
 function groupBlocks(blocks: AgentBlock[]) {
   const grouped: { block: AgentBlock; result?: AgentBlock }[] = []
@@ -58,7 +64,11 @@ export function AgentResponse({ message }: { message: ChatMessage }) {
               // 孤儿 tool_result（未配对/乱序）：无需渲染 —— 配对的结果已通过 tool_call 的 result prop 显示
               case 'tool_result':
                 return null
-              case 'text_response': return <TextResponseBlock key={block.id} block={block} />
+              case 'text_response': return (
+                <Suspense key={block.id} fallback={null}>
+                  <TextResponseBlock block={block} />
+                </Suspense>
+              )
               case 'error': return (
                 <div key={block.id} className="text-sm px-3 py-2 rounded-lg" style={{ backgroundColor: 'var(--danger-bg)', color: 'var(--danger-text)', border: '1px solid var(--danger-border)' }}>
                   {block.text}

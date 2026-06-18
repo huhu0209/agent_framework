@@ -258,7 +258,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   loadSessions: async () => {
     set({ sessionsLoading: true })
     try {
-      const res = await fetch(`${API_BASE}/api/v1/sessions?preview=5`, { headers: authHeaders() })
+      // preview=0：侧边栏只需 title，不触发后端 enrich（避免 redis 读/写拖慢列表）。
+      // 消息按需加载：hover 预取 + 切换会话 fetchMessages。
+      const res = await fetch(`${API_BASE}/api/v1/sessions?preview=0`, { headers: authHeaders() })
       if (res.ok) {
         const data = await res.json()
         const sessions: SessionInfo[] = Array.isArray(data) ? data : []

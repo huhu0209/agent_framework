@@ -23,11 +23,10 @@ export default function App() {
     mounted.current = true
     setTheme(readInitialTheme())
 
-    // Restore persistent cache, then load sessions with preview
-    restoreCache().then((cache) => {
-      useChatStore.setState({ messageCache: cache })
-      loadSessions()
-    })
+    // preview=0 后 loadSessions 不依赖 messageCache，与 restoreCache 并行：
+    // 让侧边栏数据立即发起，不再等 IndexedDB getAll 完成
+    restoreCache().then((cache) => useChatStore.setState({ messageCache: cache }))
+    loadSessions()
     clearStaleEntries(SEVEN_DAYS_MS)
   }, [loadSessions, setTheme])
 
