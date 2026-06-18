@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import { z } from 'zod'
-import type { AgentBlock, AgentBlockInit, CacheEntry, ChatMessage, MessageRole, SessionInfo, VizEvent } from './types'
+import type { AgentBlock, AgentBlockInit, CacheEntry, ChatMessage, ConfigPayload, InspectorState, MessageRole, SessionInfo, SystemPromptPayload, ToolCallEntry, VizEvent } from './types'
 import { persistCacheEntry } from './lib/cache'
+import { vizWs } from './lib/wsClient'
 
 const ssePayloadSchema = z.object({
   text: z.string().optional(),
@@ -155,6 +156,13 @@ interface ChatStore {
   toggleTheme: () => void
   setSearchQuery: (q: string) => void
   setComposerDraft: (text: string) => void
+  inspectorOpen: boolean
+  wsConnected: boolean
+  inspector: InspectorState
+  toggleInspector: () => void
+  openInspector: () => void
+  closeInspector: () => void
+  applyVizEvent: (ev: { type: string; payload: Record<string, unknown>; session_id?: string }) => void
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -175,6 +183,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   theme: 'light',
   searchQuery: '',
   composerDraft: '',
+  inspectorOpen: false,
+  wsConnected: false,
+  inspector: { config: null, systemPrompt: null, toolCalls: [] },
 
   setError: (msg: string) => {
     set({ errorToast: msg })
@@ -192,6 +203,57 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
   setSearchQuery: (q: string) => set({ searchQuery: q }),
   setComposerDraft: (text: string) => set({ composerDraft: text }),
+
+  toggleInspector: () => {
+    const open = !get().inspectorOpen
+    set({ inspectorOpen: open })
+    const sid = get().sessionId
+    if (open && sid && !sid.startsWith('temp-')) {
+      vizWs.setHandler((ev) => get().applyVizEvent(ev))
+      vizWs.connect(sid)
+    } else if (!open) {
+      vizWs.disconnect()
+      set({ inspector: { config: null, systemPrompt: null, toolCalls: [] } })
+    }
+  },
+  openInspector: () => { if (!get().inspectorOpen) get().toggleInspector() },
+  closeInspector: () => { if (get().inspectorOpen) get().toggleInspector() },
+
+  applyVizEvent: (ev) => {
+    const p = ev.payload
+    set((s) => {
+      switch (ev.type) {
+        case 'config':
+          return { inspector: { ...s.inspector, config: p as unknown as ConfigPayload } }
+        case 'system_prompt':
+          return { inspector: { ...s.inspector, systemPrompt: p as unknown as SystemPromptPayload } }
+        case 'tool_call': {
+          const tc: ToolCallEntry = {
+            tool_call_id: String(p.tool_call_id ?? ''),
+            tool_name: String(p.tool_name ?? ''),
+            params: (p.params as Record<string, unknown>) ?? {},
+            source: typeof p.source === 'string' ? p.source : undefined,
+            step: typeof p.step === 'number' ? p.step : undefined,
+          }
+          return { inspector: { ...s.inspector, toolCalls: [...s.inspector.toolCalls, tc] } }
+        }
+        case 'tool_result': {
+          const id = String(p.tool_call_id ?? '')
+          const toolCalls = s.inspector.toolCalls.map((t) =>
+            t.tool_call_id === id
+              ? { ...t, content: typeof p.content === 'string' ? p.content : JSON.stringify(p.content) }
+              : t,
+          )
+          return { inspector: { ...s.inspector, toolCalls } }
+        }
+        case 'idle':
+          // 新会话/新一轮：清空工具链重新累积
+          return { inspector: { ...s.inspector, toolCalls: [] } }
+        default:
+          return s
+      }
+    })
+  },
 
   addSystemMessage: (text: string) => {
     const msg: ChatMessage = {
