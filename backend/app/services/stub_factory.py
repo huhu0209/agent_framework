@@ -64,5 +64,5 @@ class _StubLoop:
 class StubAgentFactory:
     """E2E 用工厂 — create_loop 返回固定输出 stub loop。"""
 
-    def create_loop(self) -> _StubLoop:
+    def create_loop(self, working_dir: str | None = None) -> _StubLoop:
         return _StubLoop()
