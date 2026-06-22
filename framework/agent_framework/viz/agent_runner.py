@@ -11,6 +11,7 @@ from agent_framework.viz.viz_event import (
     ConfigPayload,
     PromptBlockPayload,
     SystemPromptPayload,
+    UsagePayload,
     VizEvent,
 )
 
@@ -68,6 +69,9 @@ class AgentRunner:
         self._loop = loop
         self._bus = bus
         self._session_id = session_id
+        self._cumulative_in = 0
+        self._cumulative_out = 0
+        self._max_context = 0
 
     def emit_snapshot(self) -> list[dict[str, Any]]:
         """返回 config + system_prompt 事件的 dict 列表（供 get_snapshot 命令重推快照）。
@@ -93,6 +97,7 @@ class AgentRunner:
         启动时先发 config + system_prompt + idle（会话级快照），
         随后映射每个 LoopEvent，结束发 shutdown。
         """
+        self._max_context = self._loop.effective_context_window()
         await self._publish("config", _build_config_payload(self._loop))
         await self._publish("system_prompt", _build_system_prompt_payload(self._loop))
         await self._publish("idle", {})
@@ -114,12 +119,28 @@ class AgentRunner:
         data = event.data
 
         if event_type == "step":
-            stop_reason = data.get("stop_reason")
+            results: list[VizEvent] = []
+            usage = data.get("usage")
+            if usage is not None:
+                inp = int(usage.get("input", 0))
+                out = int(usage.get("output", 0))
+                self._cumulative_in += inp
+                self._cumulative_out += out
+                results.append(self._make_viz("usage", UsagePayload(
+                    input=inp,
+                    output=out,
+                    cumulative_input=self._cumulative_in,
+                    cumulative_output=self._cumulative_out,
+                    max_context=self._max_context,
+                ).model_dump()))
+            # thinking/done 的 payload 排除 usage key（usage 已独立成事件）
+            viz_data = {k: v for k, v in data.items() if k != "usage"}
+            stop_reason = viz_data.get("stop_reason")
             if stop_reason == "tool_use":
-                return [self._make_viz("thinking", {"step": event.step, **data})]
-            if stop_reason in ("end_turn", "stop_sequence"):
-                return [self._make_viz("done", {"step": event.step, **data})]
-            return []
+                results.append(self._make_viz("thinking", {"step": event.step, **viz_data}))
+            elif stop_reason in ("end_turn", "stop_sequence"):
+                results.append(self._make_viz("done", {"step": event.step, **viz_data}))
+            return results
 
         if event_type == "tool_result":
             results: list[VizEvent] = []
