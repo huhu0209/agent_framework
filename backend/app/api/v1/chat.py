@@ -261,6 +261,29 @@ async def get_history(
 
 
 # ---------------------------------------------------------------------------
+# GET /sessions/buckets — 列出所有桶(必须在 /sessions 之前定义,避免被
+# /sessions/{session_id} 阴影匹配 "buckets")
+# ---------------------------------------------------------------------------
+
+
+@router.get("/sessions/buckets")
+async def list_buckets(request: Request) -> list[dict]:
+    """扫描 sessions/ 子目录,返回桶列表(default_chat 在前)。"""
+    sm = request.app.state.session_manager
+    storage = getattr(sm, "_storage_dir", None)
+    if storage is None or not storage.exists():
+        return [{"bucket": "default_chat", "display_name": "default_chat"}]
+    buckets: list[dict] = []
+    if (storage / "default_chat").exists():
+        buckets.append({"bucket": "default_chat", "display_name": "default_chat"})
+    for d in sorted(storage.iterdir()):
+        if d.is_dir() and d.name != "default_chat":
+            display = d.name.rsplit("_", 1)[0] if "_" in d.name else d.name
+            buckets.append({"bucket": d.name, "display_name": display})
+    return buckets
+
+
+# ---------------------------------------------------------------------------
 # GET /sessions — 列出历史会话
 # ---------------------------------------------------------------------------
 
@@ -270,12 +293,13 @@ PREVIEW_SESSION_LIMIT = 10  # Only enrich the N most recent sessions to limit I/
 @router.get("/sessions")
 async def list_sessions(
     request: Request,
+    bucket: str = Query("default_chat"),
     preview: int = Query(0, ge=0, le=50),
     limit: int = Query(50, ge=1, le=200),  # H-A5: 分页
     offset: int = Query(0, ge=0),  # H-A5: 分页
 ) -> list[dict]:
     sm = request.app.state.session_manager
-    sessions = await sm.list_sessions()
+    sessions = await sm.list_sessions(bucket=bucket)
     paged = sessions[offset:offset + limit]  # H-A5: 分页切片
     if preview <= 0:
         return paged

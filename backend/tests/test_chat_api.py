@@ -722,3 +722,34 @@ def test_post_chat_project_path_expands_tilde(client, tmp_path, monkeypatch):
     # working_dir 必须是展开后的绝对路径,而非字面 ~/myproj
     assert factory.last_working_dir == str(proj)
     assert "~" not in (factory.last_working_dir or "")
+
+
+def test_list_sessions_scoped_by_bucket(client, tmp_path):
+    """/sessions?bucket= 收窄到指定桶,不影响默认桶列表。"""
+    from app.services.session import SessionManager, _bucket_for
+
+    client.app.state.session_manager = SessionManager(storage_dir=tmp_path)
+    client.post("/api/v1/chat", json={"message": "a"})  # default_chat
+    proj = tmp_path / "p"
+    proj.mkdir()
+    client.post("/api/v1/chat", json={"message": "b", "project_path": str(proj)})
+    b = _bucket_for(str(proj))
+
+    default_only = client.get("/api/v1/sessions?preview=0").json()
+    proj_only = client.get(f"/api/v1/sessions?preview=0&bucket={b}").json()
+
+    assert all(s.get("bucket", "default_chat") == "default_chat" for s in default_only)
+    assert len(proj_only) == 1
+    assert proj_only[0].get("bucket") == b
+
+
+def test_list_buckets(client, tmp_path):
+    """/sessions/buckets 扫描子目录返回桶列表,default_chat 必在内。"""
+    from app.services.session import SessionManager
+
+    client.app.state.session_manager = SessionManager(storage_dir=tmp_path)
+    client.post("/api/v1/chat", json={"message": "a"})  # creates default_chat/
+
+    res = client.get("/api/v1/sessions/buckets").json()
+    names = [x["bucket"] for x in res]
+    assert "default_chat" in names
