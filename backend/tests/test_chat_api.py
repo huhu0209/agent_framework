@@ -86,8 +86,10 @@ def _make_tool_events() -> list[LoopEvent]:
 class _FakeFactory:
     def __init__(self, events: list[LoopEvent] | None = None) -> None:
         self._events = events or _make_done_events()
+        self.last_working_dir: str | None = None
 
     def create_loop(self, working_dir: str | None = None) -> _FakeAgentLoop:
+        self.last_working_dir = working_dir
         return _FakeAgentLoop(self._events)
 
 
@@ -696,3 +698,27 @@ def test_post_chat_with_project_path_routes_to_bucket(client, tmp_path, monkeypa
     bucket = _bucket_for(str(proj))
     # 桶目录被创建,history 落在桶内
     assert (tmp_path / bucket / "history.jsonl").exists()
+
+
+def test_post_chat_project_path_expands_tilde(client, tmp_path, monkeypatch):
+    """HIGH 修复: project_path 含 ~ 时 working_dir 必须是展开后的绝对路径。
+
+    旧实现把 req.project_path 原样传给 create_loop(working_dir=...),
+    导致 ~/myproj 字面量落到 file_tools 的 Path(ctx.working_dir),~ 不被展开,
+    写入会落在 CWD 下字面名为 ~ 的目录。此测试锁定修复。
+    """
+    from app.services.session import SessionManager
+
+    # 把 HOME 指到 tmp_path,造一个 ~/myproj
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = tmp_path / "myproj"
+    proj.mkdir()
+    factory = _FakeFactory()
+    client.app.state.agent_factory = factory
+    client.app.state.session_manager = SessionManager(storage_dir=tmp_path)
+
+    res = client.post("/api/v1/chat", json={"message": "hi", "project_path": "~/myproj"})
+    assert res.status_code == 200
+    # working_dir 必须是展开后的绝对路径,而非字面 ~/myproj
+    assert factory.last_working_dir == str(proj)
+    assert "~" not in (factory.last_working_dir or "")

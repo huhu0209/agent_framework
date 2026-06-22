@@ -142,23 +142,25 @@ async def create_chat(req: ChatRequest, request: Request):
         raise HTTPException(400, "message is required")
 
     bucket = _bucket_for(req.project_path)
+    working_dir: str | None = None
     if req.project_path is not None:
         resolved = FilePath(req.project_path).expanduser().resolve()
         if not resolved.is_dir():
             raise HTTPException(status_code=400, detail="project_path must be an existing directory")
+        working_dir = str(resolved)
 
     sm = request.app.state.session_manager
     factory = request.app.state.agent_factory
 
     is_resume = False
     if req.session_id:
-        agent_loop = factory.create_loop(working_dir=req.project_path)
+        agent_loop = factory.create_loop(working_dir=working_dir)
         session = await sm.get_or_restore(req.session_id, agent_loop, bucket=bucket)
         if session is None:
             raise HTTPException(404, "session not found")
         is_resume = True
     else:
-        agent_loop = factory.create_loop(working_dir=req.project_path)
+        agent_loop = factory.create_loop(working_dir=working_dir)
         session = await sm.create(
             agent_loop, bucket=bucket, project_path=req.project_path,
         )
