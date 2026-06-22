@@ -10,6 +10,8 @@ import logging
 import time
 from typing import Any, AsyncGenerator
 
+from pathlib import Path as FilePath
+
 from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Request
 from starlette.responses import StreamingResponse
 
@@ -23,6 +25,7 @@ from agent_framework.llm.base import (
 )
 from agent_framework.transcript import TranscriptConsumer
 from app.models import SESSION_ID_RE, ChatRequest, HistoryResponse, RenameRequest
+from app.services.session import _bucket_for
 
 logger = logging.getLogger(__name__)
 
@@ -138,19 +141,27 @@ async def create_chat(req: ChatRequest, request: Request):
     if not req.message.strip():
         raise HTTPException(400, "message is required")
 
+    bucket = _bucket_for(req.project_path)
+    if req.project_path is not None:
+        resolved = FilePath(req.project_path).expanduser().resolve()
+        if not resolved.is_dir():
+            raise HTTPException(status_code=400, detail="project_path must be an existing directory")
+
     sm = request.app.state.session_manager
     factory = request.app.state.agent_factory
 
     is_resume = False
     if req.session_id:
-        agent_loop = factory.create_loop()
-        session = await sm.get_or_restore(req.session_id, agent_loop)
+        agent_loop = factory.create_loop(working_dir=req.project_path)
+        session = await sm.get_or_restore(req.session_id, agent_loop, bucket=bucket)
         if session is None:
             raise HTTPException(404, "session not found")
         is_resume = True
     else:
-        agent_loop = factory.create_loop()
-        session = await sm.create(agent_loop)
+        agent_loop = factory.create_loop(working_dir=req.project_path)
+        session = await sm.create(
+            agent_loop, bucket=bucket, project_path=req.project_path,
+        )
 
     # viz 事件层：构造 runner（bus 不可用时跳过，退回纯 SSE）
     bus = getattr(request.app.state, "bus", None)

@@ -683,3 +683,16 @@ def test_chat_request_accepts_project_path():
     assert req2.project_path is None
     req3 = ChatRequest(message="hi", project_path="   ")  # 空白 → None
     assert req3.project_path is None
+
+
+def test_post_chat_with_project_path_routes_to_bucket(client, tmp_path, monkeypatch):
+    """Task6: POST /chat 带 project_path → 算 bucket + history 落在桶内。"""
+    proj = tmp_path / "myproj"
+    proj.mkdir()
+    from app.services.session import SessionManager, _bucket_for
+    client.app.state.session_manager = SessionManager(storage_dir=tmp_path)
+    res = client.post("/api/v1/chat", json={"message": "hi", "project_path": str(proj)})
+    assert res.status_code == 200
+    bucket = _bucket_for(str(proj))
+    # 桶目录被创建,history 落在桶内
+    assert (tmp_path / bucket / "history.jsonl").exists()
