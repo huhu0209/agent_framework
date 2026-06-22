@@ -673,3 +673,13 @@ def test_viz_lifespan_creates_bus_and_chat_runs_through_runner(
         session = client.app.state.session_manager.get(sid)
         assert session is not None
         assert session.agent_runner is not None  # T7: runner 装配生效
+
+
+def test_chat_request_accepts_project_path():
+    from app.models import ChatRequest
+    req = ChatRequest(message="hi", project_path="/tmp/x")
+    assert req.project_path == "/tmp/x"
+    req2 = ChatRequest(message="hi")  # 默认 None
+    assert req2.project_path is None
+    req3 = ChatRequest(message="hi", project_path="   ")  # 空白 → None
+    assert req3.project_path is None
