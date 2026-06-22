@@ -335,9 +335,10 @@ async def list_sessions(
 async def delete_session(
     request: Request,
     session_id: str = Path(pattern=SESSION_ID_RE.pattern),
+    bucket: str = Query("default_chat"),
 ) -> dict:
     sm = request.app.state.session_manager
-    deleted = await sm.delete_session(session_id)
+    deleted = await sm.delete_session(session_id, bucket=bucket)
     if not deleted:
         raise HTTPException(404, "session not found")
     return {"status": "ok"}
@@ -351,10 +352,11 @@ async def delete_session(
 async def rename_session(
     request: Request,
     session_id: str = Path(pattern=SESSION_ID_RE.pattern),
+    bucket: str = Query("default_chat"),
     req: RenameRequest = ...,  # body — required
 ) -> dict:
     sm = request.app.state.session_manager
-    updated = await sm.update_title(session_id, req.title)
+    updated = await sm.update_title(session_id, req.title, bucket=bucket)
     if not updated:
         raise HTTPException(404, "session not found")
     return {"status": "ok"}

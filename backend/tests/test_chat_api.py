@@ -773,3 +773,29 @@ def test_get_history_scoped_by_bucket(client, tmp_path):
     # 不传 bucket(默认 default_chat)应找不到该 session(它在项目桶里)
     miss = client.get(f"/api/v1/chat/{sid}")
     assert miss.status_code == 404
+
+
+def test_delete_session_scoped_by_bucket(client, tmp_path):
+    from app.services.session import SessionManager, _bucket_for
+    client.app.state.session_manager = SessionManager(storage_dir=tmp_path)
+    proj = tmp_path / "p"; proj.mkdir()
+    sid = client.post("/api/v1/chat", json={"message": "hi", "project_path": str(proj)}).headers["X-Session-Id"]
+    b = _bucket_for(str(proj))
+    # 不传 bucket(默认 default_chat)→ 该 session 不在默认桶 → 404
+    miss = client.delete(f"/api/v1/sessions/{sid}")
+    assert miss.status_code == 404
+    # 传对 bucket → 200
+    ok = client.delete(f"/api/v1/sessions/{sid}?bucket={b}")
+    assert ok.status_code == 200
+
+
+def test_rename_session_scoped_by_bucket(client, tmp_path):
+    from app.services.session import SessionManager, _bucket_for
+    client.app.state.session_manager = SessionManager(storage_dir=tmp_path)
+    proj = tmp_path / "p"; proj.mkdir()
+    sid = client.post("/api/v1/chat", json={"message": "hi", "project_path": str(proj)}).headers["X-Session-Id"]
+    b = _bucket_for(str(proj))
+    miss = client.patch(f"/api/v1/sessions/{sid}", json={"title": "new"})
+    assert miss.status_code == 404
+    ok = client.patch(f"/api/v1/sessions/{sid}?bucket={b}", json={"title": "new"})
+    assert ok.status_code == 200
