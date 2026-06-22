@@ -306,7 +306,7 @@ class SessionManager:
                 logger.warning("Redis meta delete failed for %s: %s", session_id, exc)
         return updated
 
-    async def list_sessions(self, bucket: str = DEFAULT_BUCKET) -> list[dict]:
+    async def list_sessions(self, *, bucket: str = DEFAULT_BUCKET) -> list[dict]:
         """列出指定桶下的历史会话（按桶缓存）。"""
         if self._session_list_cache is not None and bucket in self._session_list_cache:
             return self._session_list_cache[bucket]
@@ -380,44 +380,8 @@ class SessionManager:
         return [json.loads(item) for item in raw]
 
     async def persist_messages(self, session_id: str, messages: list[dict]) -> None:
-        """持久化消息：回填 Redis 缓存 + 同步写 JSONL 快照（按桶）。
-
-        JSONL 快照用于无 Redis 时的冷读兜底；桶取自内存 session 的 bucket 字段，
-        session 不在内存或无 storage_dir 时仅写 Redis。
-        """
+        """持久化消息到 Redis 缓存。JSONL 由 TranscriptConsumer 在 stream 期间写入。"""
         await self._redis_set_messages(session_id, messages)  # H-A1: async
-        session = self._sessions.get(session_id)
-        if session is None or not self._storage_dir or not messages:
-            return
-        bucket_dir = self._bucket_dir(session.bucket)
-        transcript_path = bucket_dir / f"{session_id}.jsonl"
-        lines = [
-            json.dumps(self._message_to_transcript_event(m), ensure_ascii=False)
-            for m in messages
-        ]
-        await self._atomic_write(transcript_path, "\n".join(lines) + "\n")
-
-    @staticmethod
-    def _message_to_transcript_event(message: dict) -> dict:
-        """把内存消息结构转写为 transcript JSONL 事件（供 _cold_read_jsonl 解析）。"""
-        role = message.get("role")
-        if role == "user":
-            return {
-                "type": "user",
-                "content": message.get("content", ""),
-                "timestamp": message.get("timestamp", 0),
-            }
-        if role == "agent":
-            return {
-                "type": "assistant",
-                "content": message.get("blocks", []),
-                "timestamp": message.get("timestamp", 0),
-            }
-        return {
-            "type": role or "unknown",
-            "content": message.get("content", ""),
-            "timestamp": message.get("timestamp", 0),
-        }
 
     async def restore_messages(
         self, session_id: str, *, bucket: str = DEFAULT_BUCKET
@@ -426,7 +390,7 @@ class SessionManager:
         return await self._get_all_messages(session_id, bucket=bucket)
 
     async def delete_session(
-        self, session_id: str, bucket: str = DEFAULT_BUCKET
+        self, session_id: str, *, bucket: str = DEFAULT_BUCKET
     ) -> bool:
         """删除会话及其 transcript。"""
         self._validate_session_id(session_id)  # A2

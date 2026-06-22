@@ -454,7 +454,7 @@ async def test_list_sessions_cache_invalidated_on_create(client_with_storage: Te
 
     client_with_storage.post("/api/v1/chat", json={"message": "second"})
     # 按桶缓存：默认桶条目应被清除
-    assert sm._session_list_cache is None or DEFAULT_BUCKET not in sm._session_list_cache
+    assert DEFAULT_BUCKET not in (sm._session_list_cache or {})
 
 
 def test_get_history_with_pagination(client_with_storage: TestClient) -> None:
