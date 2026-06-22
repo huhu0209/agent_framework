@@ -272,11 +272,13 @@ def client_with_storage(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Test
 
 
 def test_transcript_file_created_after_chat(client_with_storage: TestClient, tmp_path: Path) -> None:
+    from app.services.session import DEFAULT_BUCKET
+
     res = client_with_storage.post("/api/v1/chat", json={"message": "hello"})
     assert res.status_code == 200
     sid = res.headers["X-Session-Id"]
 
-    transcript_path = tmp_path / "sessions" / f"{sid}.jsonl"
+    transcript_path = tmp_path / "sessions" / DEFAULT_BUCKET / f"{sid}.jsonl"
     assert transcript_path.exists()
     content = transcript_path.read_text()
     assert len(content) > 0
@@ -297,10 +299,12 @@ def test_list_sessions_returns_created_session(client_with_storage: TestClient) 
 
 
 def test_delete_session_removes_transcript(client_with_storage: TestClient, tmp_path: Path) -> None:
+    from app.services.session import DEFAULT_BUCKET
+
     res = client_with_storage.post("/api/v1/chat", json={"message": "hello"})
     sid = res.headers["X-Session-Id"]
 
-    transcript_path = tmp_path / "sessions" / f"{sid}.jsonl"
+    transcript_path = tmp_path / "sessions" / DEFAULT_BUCKET / f"{sid}.jsonl"
     assert transcript_path.exists()
 
     del_res = client_with_storage.delete(f"/api/v1/sessions/{sid}")
@@ -441,13 +445,16 @@ async def test_list_sessions_uses_cache(client_with_storage: TestClient) -> None
 
 
 async def test_list_sessions_cache_invalidated_on_create(client_with_storage: TestClient) -> None:
-    """创建 session 后缓存应失效。"""
+    """创建 session 后对应桶的缓存应失效。"""
+    from app.services.session import DEFAULT_BUCKET
+
     client_with_storage.post("/api/v1/chat", json={"message": "first"})
     sm = client_with_storage.app.state.session_manager
     await sm.list_sessions()
 
     client_with_storage.post("/api/v1/chat", json={"message": "second"})
-    assert sm._session_list_cache is None
+    # 按桶缓存：默认桶条目应被清除
+    assert sm._session_list_cache is None or DEFAULT_BUCKET not in sm._session_list_cache
 
 
 def test_get_history_with_pagination(client_with_storage: TestClient) -> None:

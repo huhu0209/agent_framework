@@ -52,6 +52,9 @@ SESSION_TTL = 3600  # 1 hour
 # A2: 与 app.models.SESSION_ID_RE 一致；本地定义避免 services → models 循环依赖
 _SESSION_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
+# 桶名校验：[a-zA-Z0-9_-]，1-128 字符，防目录注入
+_BUCKET_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,128}$")
+
 
 def _safe_json_loads(line: str, *, source: str) -> dict | None:
     """A4: 容错 JSON 解析。坏行返回 None 并告警，不抛 JSONDecodeError。"""
@@ -65,6 +68,8 @@ def _safe_json_loads(line: str, *, source: str) -> dict | None:
 @dataclass
 class ChatSession:
     session_id: str
+    bucket: str = DEFAULT_BUCKET
+    project_path: str | None = None
     messages: list[dict] = field(default_factory=list)
     agent_loop: AgentLoop | None = None
     task: asyncio.Task | None = None  # type: ignore[type-arg]
@@ -83,7 +88,7 @@ class SessionManager:
         self._storage_dir = storage_dir
         self._redis = redis_client
         self._cleanup_task: asyncio.Task | None = None  # type: ignore[type-arg]
-        self._session_list_cache: list[dict] | None = None
+        self._session_list_cache: dict[str, list[dict]] | None = None
         self._history_lock = asyncio.Lock()  # H-A6: 保护 history.jsonl 并发 append
 
     @staticmethod
@@ -91,6 +96,12 @@ class SessionManager:
         """A2: 校验 session_id 为 32 位 hex，防路径遍历。非法则 raise ValueError。"""
         if not isinstance(session_id, str) or not _SESSION_ID_RE.match(session_id):
             raise ValueError(f"invalid session_id: {session_id!r}")
+
+    def _bucket_dir(self, bucket: str) -> Path:
+        """返回桶子目录；校验桶名防目录注入。"""
+        if not _BUCKET_NAME_RE.match(bucket):
+            raise ValueError(f"invalid bucket: {bucket!r}")
+        return self._storage_dir / bucket
 
     async def _atomic_write(self, path: Path, content: str) -> None:
         """原子写入：write-to-temp + os.replace，防止崩溃时丢失。"""
@@ -116,16 +127,30 @@ class SessionManager:
         if self._cleanup_task and not self._cleanup_task.done():
             self._cleanup_task.cancel()
 
-    async def create(self, agent_loop: AgentLoop, *, title: str = "") -> ChatSession:
+    async def create(
+        self,
+        agent_loop: AgentLoop,
+        *,
+        bucket: str = DEFAULT_BUCKET,
+        project_path: str | None = None,
+        title: str = "",
+    ) -> ChatSession:
         sid = uuid.uuid4().hex
         writer = None
         if self._storage_dir:
-            transcript_path = self._storage_dir / f"{sid}.jsonl"
+            bucket_dir = self._bucket_dir(bucket)
+            transcript_path = bucket_dir / f"{sid}.jsonl"
             writer = TranscriptWriter(transcript_path)
-            await self._append_history(sid, title or "新会话")
-        session = ChatSession(session_id=sid, agent_loop=agent_loop, transcript_writer=writer)
+            await self._append_history(sid, bucket, title or "新会话")
+        session = ChatSession(
+            session_id=sid,
+            bucket=bucket,
+            project_path=project_path,
+            agent_loop=agent_loop,
+            transcript_writer=writer,
+        )
         self._sessions[sid] = session
-        self._invalidate_list_cache()
+        self._invalidate_list_cache(bucket)
         return session
 
     def get(self, session_id: str) -> ChatSession | None:
@@ -138,11 +163,12 @@ class SessionManager:
         self,
         session_id: str,
         *,
+        bucket: str = DEFAULT_BUCKET,
         limit: int | None = None,
         before: float | None = None,
     ) -> tuple[list[dict], bool, str | None] | None:
         """获取消息，支持分页。返回 (messages, has_more, next_cursor) 或 None。"""
-        all_messages = await self._get_all_messages(session_id)
+        all_messages = await self._get_all_messages(session_id, bucket=bucket)
         if all_messages is None:
             return None
 
@@ -167,14 +193,16 @@ class SessionManager:
 
         return page, has_more, next_cursor
 
-    async def count_messages(self, session_id: str) -> int | None:
+    async def count_messages(self, session_id: str, *, bucket: str = DEFAULT_BUCKET) -> int | None:
         """获取会话消息总数。"""
-        all_messages = await self._get_all_messages(session_id)
+        all_messages = await self._get_all_messages(session_id, bucket=bucket)
         if all_messages is None:
             return None
         return len(all_messages)
 
-    async def _get_all_messages(self, session_id: str) -> list[dict] | None:
+    async def _get_all_messages(
+        self, session_id: str, *, bucket: str = DEFAULT_BUCKET
+    ) -> list[dict] | None:
         """三层查找：内存 → Redis → JSONL。"""
         self._validate_session_id(session_id)  # A2
         # 1. 内存
@@ -188,7 +216,7 @@ class SessionManager:
         # 3. JSONL 冷读 → 回填 Redis
         if not self._storage_dir:
             return None
-        transcript_path = self._storage_dir / f"{session_id}.jsonl"
+        transcript_path = self._bucket_dir(bucket) / f"{session_id}.jsonl"
         if not transcript_path.exists():
             return None
         return await self._cold_read_jsonl(transcript_path, session_id)  # H-A1: _cold_read 已 async
@@ -231,12 +259,13 @@ class SessionManager:
             session.task.cancel()
         session.task = new_task
 
-    async def _append_history(self, session_id: str, title: str) -> None:
+    async def _append_history(self, session_id: str, bucket: str, title: str) -> None:
         if not self._storage_dir:
             return
-        history_path = self._storage_dir / "history.jsonl"
+        history_path = self._bucket_dir(bucket) / "history.jsonl"
         entry = json.dumps({
             "session_id": session_id,
+            "bucket": bucket,
             "title": title,
             "created_at": time.time(),
         }, ensure_ascii=False)
@@ -245,11 +274,13 @@ class SessionManager:
             async with aiofiles.open(history_path, "a", encoding="utf-8") as f:
                 await f.write(entry + "\n")
 
-    async def update_title(self, session_id: str, title: str) -> bool:
+    async def update_title(
+        self, session_id: str, title: str, *, bucket: str = DEFAULT_BUCKET
+    ) -> bool:
         """更新 history.jsonl 中的标题，返回是否实际更新。"""
         if not self._storage_dir:
             return False
-        history_path = self._storage_dir / "history.jsonl"
+        history_path = self._bucket_dir(bucket) / "history.jsonl"
         if not history_path.exists():
             return False
         lines = []
@@ -267,7 +298,7 @@ class SessionManager:
                 updated = True
             lines.append(json.dumps(entry, ensure_ascii=False))
         await self._atomic_write(history_path, "\n".join(lines) + "\n")
-        self._invalidate_list_cache()
+        self._invalidate_list_cache(bucket)
         if self._redis:
             try:
                 await self._redis.delete(f"session:{session_id}:meta")  # H-A1: async
@@ -275,16 +306,16 @@ class SessionManager:
                 logger.warning("Redis meta delete failed for %s: %s", session_id, exc)
         return updated
 
-    async def list_sessions(self) -> list[dict]:
-        """列出所有历史会话（带缓存）。"""
-        if self._session_list_cache is not None:
-            return self._session_list_cache
+    async def list_sessions(self, bucket: str = DEFAULT_BUCKET) -> list[dict]:
+        """列出指定桶下的历史会话（按桶缓存）。"""
+        if self._session_list_cache is not None and bucket in self._session_list_cache:
+            return self._session_list_cache[bucket]
         if not self._storage_dir:
             return []
-        history_path = self._storage_dir / "history.jsonl"
+        history_path = self._bucket_dir(bucket) / "history.jsonl"
         if not history_path.exists():
             return []
-        sessions = []
+        sessions: list[dict] = []
         async with aiofiles.open(history_path, "r", encoding="utf-8") as f:
             content = await f.read()
         for line in content.strip().split("\n"):
@@ -299,16 +330,22 @@ class SessionManager:
             except ValueError:
                 logger.warning("Skipping history entry with invalid session_id: %r", sid)
                 continue
-            transcript_path = self._storage_dir / f"{sid}.jsonl"
+            transcript_path = self._bucket_dir(bucket) / f"{sid}.jsonl"
             if transcript_path.exists():
                 sessions.append(entry)
         sessions.reverse()  # 最新的在前
-        self._session_list_cache = sessions
+        self._session_list_cache = {
+            **(self._session_list_cache or {}),
+            bucket: sessions,
+        }
         return sessions
 
-    def _invalidate_list_cache(self) -> None:
-        """使 session 列表缓存失效。"""
-        self._session_list_cache = None
+    def _invalidate_list_cache(self, bucket: str | None = None) -> None:
+        """使 session 列表缓存失效。None 清全部，否则仅删该桶。"""
+        if bucket is None or self._session_list_cache is None:
+            self._session_list_cache = None
+        else:
+            self._session_list_cache.pop(bucket, None)
 
     async def _redis_set_messages(self, session_id: str, messages: list[dict]) -> None:
         """将消息列表写入 Redis Sorted Set。运行时失败静默（消息已落 JSONL）。"""
@@ -343,17 +380,57 @@ class SessionManager:
         return [json.loads(item) for item in raw]
 
     async def persist_messages(self, session_id: str, messages: list[dict]) -> None:
-        """持久化消息到 Redis 缓存。"""
+        """持久化消息：回填 Redis 缓存 + 同步写 JSONL 快照（按桶）。
+
+        JSONL 快照用于无 Redis 时的冷读兜底；桶取自内存 session 的 bucket 字段，
+        session 不在内存或无 storage_dir 时仅写 Redis。
+        """
         await self._redis_set_messages(session_id, messages)  # H-A1: async
+        session = self._sessions.get(session_id)
+        if session is None or not self._storage_dir or not messages:
+            return
+        bucket_dir = self._bucket_dir(session.bucket)
+        transcript_path = bucket_dir / f"{session_id}.jsonl"
+        lines = [
+            json.dumps(self._message_to_transcript_event(m), ensure_ascii=False)
+            for m in messages
+        ]
+        await self._atomic_write(transcript_path, "\n".join(lines) + "\n")
 
-    async def restore_messages(self, session_id: str) -> list[dict] | None:
+    @staticmethod
+    def _message_to_transcript_event(message: dict) -> dict:
+        """把内存消息结构转写为 transcript JSONL 事件（供 _cold_read_jsonl 解析）。"""
+        role = message.get("role")
+        if role == "user":
+            return {
+                "type": "user",
+                "content": message.get("content", ""),
+                "timestamp": message.get("timestamp", 0),
+            }
+        if role == "agent":
+            return {
+                "type": "assistant",
+                "content": message.get("blocks", []),
+                "timestamp": message.get("timestamp", 0),
+            }
+        return {
+            "type": role or "unknown",
+            "content": message.get("content", ""),
+            "timestamp": message.get("timestamp", 0),
+        }
+
+    async def restore_messages(
+        self, session_id: str, *, bucket: str = DEFAULT_BUCKET
+    ) -> list[dict] | None:
         """从缓存/存储恢复消息。"""
-        return await self._get_all_messages(session_id)
+        return await self._get_all_messages(session_id, bucket=bucket)
 
-    async def delete_session(self, session_id: str) -> bool:
+    async def delete_session(
+        self, session_id: str, bucket: str = DEFAULT_BUCKET
+    ) -> bool:
         """删除会话及其 transcript。"""
         self._validate_session_id(session_id)  # A2
-        self._invalidate_list_cache()
+        self._invalidate_list_cache(bucket)
         if self._redis:
             try:
                 await self._redis.delete(f"session:{session_id}:messages", f"session:{session_id}:meta")  # H-A1: async
@@ -362,14 +439,15 @@ class SessionManager:
         self.remove(session_id)
         if not self._storage_dir:
             return False
+        bucket_dir = self._bucket_dir(bucket)
         # 删除 transcript 文件
-        transcript_path = self._storage_dir / f"{session_id}.jsonl"
+        transcript_path = bucket_dir / f"{session_id}.jsonl"
         deleted = False
         if transcript_path.exists():
             transcript_path.unlink()
             deleted = True
         # 从 history.jsonl 移除（原子写入）
-        history_path = self._storage_dir / "history.jsonl"
+        history_path = bucket_dir / "history.jsonl"
         if history_path.exists():
             async with aiofiles.open(history_path, "r", encoding="utf-8") as f:
                 content = await f.read()
@@ -388,7 +466,13 @@ class SessionManager:
             await self._atomic_write(history_path, output)
         return deleted
 
-    async def get_or_restore(self, session_id: str, agent_loop: AgentLoop | None = None) -> ChatSession | None:
+    async def get_or_restore(
+        self,
+        session_id: str,
+        agent_loop: AgentLoop | None = None,
+        *,
+        bucket: str = DEFAULT_BUCKET,
+    ) -> ChatSession | None:
         """获取 session，如果不在内存中则从 transcript 恢复。"""
         self._validate_session_id(session_id)  # A2
         session = self.get(session_id)
@@ -397,7 +481,7 @@ class SessionManager:
         # 尝试从 transcript 恢复
         if not self._storage_dir or agent_loop is None:
             return None
-        transcript_path = self._storage_dir / f"{session_id}.jsonl"
+        transcript_path = self._bucket_dir(bucket) / f"{session_id}.jsonl"
         if not transcript_path.exists():
             return None
         from agent_framework.transcript import TranscriptReader
@@ -408,6 +492,7 @@ class SessionManager:
         writer = TranscriptWriter(transcript_path)
         session = ChatSession(
             session_id=session_id,
+            bucket=bucket,
             agent_loop=agent_loop,
             transcript_writer=writer,
         )

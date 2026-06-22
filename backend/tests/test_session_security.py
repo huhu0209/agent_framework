@@ -46,8 +46,11 @@ async def test_valid_hex_session_id_accepted(tmp_path: Path) -> None:
 
 async def test_list_sessions_skips_malformed_lines(tmp_path: Path, caplog) -> None:
     """A4: history.jsonl 含坏行时 list_sessions 应跳过并告警，不抛 500。"""
+    from app.services.session import DEFAULT_BUCKET
+
     sm = SessionManager(storage_dir=tmp_path)
-    history = tmp_path / "history.jsonl"
+    history = tmp_path / DEFAULT_BUCKET / "history.jsonl"
+    history.parent.mkdir(parents=True, exist_ok=True)
     valid_line = json.dumps({"session_id": "a" * 32, "title": "ok", "created_at": 1.0})
     history.write_text(valid_line + "\n{this is not valid json\n")
 
@@ -61,8 +64,11 @@ async def test_list_sessions_skips_malformed_lines(tmp_path: Path, caplog) -> No
 
 async def test_update_title_skips_malformed_lines(tmp_path: Path) -> None:
     """A4: update_title 遇坏行应跳过，不抛 500。"""
+    from app.services.session import DEFAULT_BUCKET
+
     sm = SessionManager(storage_dir=tmp_path)
-    history = tmp_path / "history.jsonl"
+    history = tmp_path / DEFAULT_BUCKET / "history.jsonl"
+    history.parent.mkdir(parents=True, exist_ok=True)
     history.write_text("{bad json\n")
 
     result = await sm.update_title("a" * 32, "new title")
@@ -71,8 +77,11 @@ async def test_update_title_skips_malformed_lines(tmp_path: Path) -> None:
 
 async def test_delete_session_skips_malformed_lines(tmp_path: Path) -> None:
     """A4: delete_session 遇坏行应跳过，不抛 500。"""
+    from app.services.session import DEFAULT_BUCKET
+
     sm = SessionManager(storage_dir=tmp_path)
-    history = tmp_path / "history.jsonl"
+    history = tmp_path / DEFAULT_BUCKET / "history.jsonl"
+    history.parent.mkdir(parents=True, exist_ok=True)
     history.write_text("{bad json\n")
 
     result = await sm.delete_session("a" * 32)
