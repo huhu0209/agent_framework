@@ -351,6 +351,51 @@ class SessionManager:
         else:
             self._session_list_cache.pop(bucket, None)
 
+    async def migrate_legacy_sessions(self, legacy_dir: Path) -> None:
+        """把旧扁平 sessions 目录迁到 default_chat 桶(幂等)。
+
+        - legacy_dir 不存在/非目录 → no-op
+        - 已迁移过(检测 .migrated_v1 marker) → no-op
+        - history.jsonl 每行补 bucket 字段后追加到目标 history.jsonl
+        - 其余 *.jsonl transcript 原样拷贝(已存在则跳过)
+        - 不删除 legacy_dir(留作备份)
+        """
+        if not legacy_dir.exists() or not legacy_dir.is_dir():
+            return
+        if not self._storage_dir:
+            return
+        marker = self._storage_dir / ".migrated_v1"
+        if marker.exists():
+            return
+        target = self._bucket_dir(DEFAULT_BUCKET)
+        target.mkdir(parents=True, exist_ok=True)
+        legacy_history = legacy_dir / "history.jsonl"
+        if legacy_history.exists():
+            migrated: list[str] = []
+            async with aiofiles.open(legacy_history, "r", encoding="utf-8") as f:
+                content = await f.read()
+            for line in content.strip().split("\n"):
+                if not line.strip():
+                    continue
+                entry = _safe_json_loads(line, source=str(legacy_history))
+                if entry is None:
+                    continue
+                entry["bucket"] = DEFAULT_BUCKET
+                migrated.append(json.dumps(entry, ensure_ascii=False))
+            async with self._history_lock:
+                th = target / "history.jsonl"
+                async with aiofiles.open(th, "a", encoding="utf-8") as f:
+                    for ln in migrated:
+                        await f.write(ln + "\n")
+        # 拷贝 transcript jsonl(跳过 history.jsonl)
+        for f in legacy_dir.glob("*.jsonl"):
+            if f.name == "history.jsonl":
+                continue
+            dest = target / f.name
+            if not dest.exists():
+                dest.write_bytes(f.read_bytes())
+        marker.write_text("1")
+
     async def _redis_set_messages(
         self, session_id: str, messages: list[dict], *, bucket: str = DEFAULT_BUCKET
     ) -> None:

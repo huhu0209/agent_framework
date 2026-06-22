@@ -75,6 +75,10 @@ async def lifespan(app: FastAPI):
     # --- 初始化会话管理器，启动定期清理任务 ---
     storage_dir = settings.sessions_dir
     sm = SessionManager(storage_dir=storage_dir, redis_client=rdb)
+    # 一次性迁移旧 backend/data/sessions → default_chat(幂等)
+    legacy_sessions = Path(__file__).parent / "data" / "sessions"
+    if legacy_sessions.exists():
+        await sm.migrate_legacy_sessions(legacy_sessions)
     sm.start_cleanup()
 
     # --- 挂载到 app.state，供各路由通过 request.app.state 访问 ---
