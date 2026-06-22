@@ -203,14 +203,16 @@ class SessionManager:
     async def _get_all_messages(
         self, session_id: str, *, bucket: str = DEFAULT_BUCKET
     ) -> list[dict] | None:
-        """三层查找：内存 → Redis → JSONL。"""
+        """三层查找：内存 → Redis → JSONL。每层均校验 bucket 隔离。"""
         self._validate_session_id(session_id)  # A2
-        # 1. 内存
+        # 1. 内存（校验 bucket 一致）
         session = self._sessions.get(session_id)
         if session is not None:
-            return session.messages
-        # 2. Redis
-        cached = await self._redis_get_messages(session_id)  # H-A1: async
+            if session.bucket == bucket:
+                return session.messages
+            return None  # 桶不匹配 → 视为未找到
+        # 2. Redis（key 带 bucket 前缀，天然隔离）
+        cached = await self._redis_get_messages(session_id, bucket=bucket)  # H-A1: async
         if cached is not None:
             return cached
         # 3. JSONL 冷读 → 回填 Redis
@@ -219,9 +221,11 @@ class SessionManager:
         transcript_path = self._bucket_dir(bucket) / f"{session_id}.jsonl"
         if not transcript_path.exists():
             return None
-        return await self._cold_read_jsonl(transcript_path, session_id)  # H-A1: _cold_read 已 async
+        return await self._cold_read_jsonl(transcript_path, session_id, bucket=bucket)  # H-A1: _cold_read 已 async
 
-    async def _cold_read_jsonl(self, transcript_path: Path, session_id: str) -> list[dict]:
+    async def _cold_read_jsonl(
+        self, transcript_path: Path, session_id: str, *, bucket: str = DEFAULT_BUCKET
+    ) -> list[dict]:
         """JSONL 冷读 → 回填 Redis。H-A1: 改 async（_redis_set_messages 已 async）。"""
         from agent_framework.transcript import TranscriptReader
         reader = TranscriptReader(transcript_path)
@@ -235,7 +239,7 @@ class SessionManager:
                 result.append({"role": "agent", "blocks": blocks, "timestamp": ev.timestamp})
             elif ev.type.value == "tool_result":
                 continue  # tool_result 不展示在历史中
-        await self._redis_set_messages(session_id, result)  # H-A1
+        await self._redis_set_messages(session_id, result, bucket=bucket)  # H-A1
         return result
 
     def remove(self, session_id: str) -> None:
@@ -301,7 +305,7 @@ class SessionManager:
         self._invalidate_list_cache(bucket)
         if self._redis:
             try:
-                await self._redis.delete(f"session:{session_id}:meta")  # H-A1: async
+                await self._redis.delete(f"session:{bucket}:{session_id}:meta")  # H-A1: async
             except (RedisConnectionError, RedisTimeoutError) as exc:
                 logger.warning("Redis meta delete failed for %s: %s", session_id, exc)
         return updated
@@ -347,11 +351,13 @@ class SessionManager:
         else:
             self._session_list_cache.pop(bucket, None)
 
-    async def _redis_set_messages(self, session_id: str, messages: list[dict]) -> None:
+    async def _redis_set_messages(
+        self, session_id: str, messages: list[dict], *, bucket: str = DEFAULT_BUCKET
+    ) -> None:
         """将消息列表写入 Redis Sorted Set。运行时失败静默（消息已落 JSONL）。"""
         if not self._redis:
             return
-        key = f"session:{session_id}:messages"
+        key = f"session:{bucket}:{session_id}:messages"
         try:
             pipe = self._redis.pipeline()
             pipe.delete(key)
@@ -363,11 +369,13 @@ class SessionManager:
         except (RedisConnectionError, RedisTimeoutError) as exc:
             logger.warning("Redis write failed for %s, cache skipped: %s", session_id, exc)
 
-    async def _redis_get_messages(self, session_id: str) -> list[dict] | None:
+    async def _redis_get_messages(
+        self, session_id: str, *, bucket: str = DEFAULT_BUCKET
+    ) -> list[dict] | None:
         """从 Redis Sorted Set 读取消息。运行时失败返回 None，降级走 JSONL。"""
         if not self._redis:
             return None
-        key = f"session:{session_id}:messages"
+        key = f"session:{bucket}:{session_id}:messages"
         try:
             if not await self._redis.exists(key):  # H-A1: async redis
                 return None
@@ -379,9 +387,11 @@ class SessionManager:
             return None
         return [json.loads(item) for item in raw]
 
-    async def persist_messages(self, session_id: str, messages: list[dict]) -> None:
+    async def persist_messages(
+        self, session_id: str, messages: list[dict], *, bucket: str = DEFAULT_BUCKET
+    ) -> None:
         """持久化消息到 Redis 缓存。JSONL 由 TranscriptConsumer 在 stream 期间写入。"""
-        await self._redis_set_messages(session_id, messages)  # H-A1: async
+        await self._redis_set_messages(session_id, messages, bucket=bucket)  # H-A1: async
 
     async def restore_messages(
         self, session_id: str, *, bucket: str = DEFAULT_BUCKET
@@ -397,7 +407,10 @@ class SessionManager:
         self._invalidate_list_cache(bucket)
         if self._redis:
             try:
-                await self._redis.delete(f"session:{session_id}:messages", f"session:{session_id}:meta")  # H-A1: async
+                await self._redis.delete(
+                    f"session:{bucket}:{session_id}:messages",
+                    f"session:{bucket}:{session_id}:meta",
+                )  # H-A1: async
             except (RedisConnectionError, RedisTimeoutError) as exc:
                 logger.warning("Redis delete failed for %s: %s", session_id, exc)
         self.remove(session_id)

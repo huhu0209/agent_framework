@@ -53,8 +53,9 @@ async def test_get_messages_caches_to_redis_after_cold_read(sm_with_redis: Sessi
     messages, _, _ = result
     assert any(m["role"] == "user" for m in messages)
 
-    # 验证 Redis 已缓存
-    cached = await rdb.zrange(f"session:{sid}:messages", 0, -1)
+    # 验证 Redis 已缓存（key 带 bucket 前缀）
+    from app.services.session import DEFAULT_BUCKET
+    cached = await rdb.zrange(f"session:{DEFAULT_BUCKET}:{sid}:messages", 0, -1)
     assert len(cached) > 0
 
 
@@ -93,7 +94,8 @@ async def test_delete_session_clears_redis(sm_with_redis: SessionManager, rdb) -
     await sm.delete_session(sid)
 
     # Redis 应已清理
-    assert await rdb.exists(f"session:{sid}:messages") == 0
+    from app.services.session import DEFAULT_BUCKET
+    assert await rdb.exists(f"session:{DEFAULT_BUCKET}:{sid}:messages") == 0
 
 
 async def _create_session_with_message(sm: SessionManager) -> str:

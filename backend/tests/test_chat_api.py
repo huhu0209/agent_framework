@@ -753,3 +753,23 @@ def test_list_buckets(client, tmp_path):
     res = client.get("/api/v1/sessions/buckets").json()
     names = [x["bucket"] for x in res]
     assert "default_chat" in names
+
+
+def test_get_history_scoped_by_bucket(client, tmp_path):
+    """GET /chat/{sid} 按 bucket 定位历史；错桶应 404。"""
+    from app.services.session import SessionManager, _bucket_for
+
+    client.app.state.session_manager = SessionManager(storage_dir=tmp_path)
+    proj = tmp_path / "p"
+    proj.mkdir()
+    res = client.post("/api/v1/chat", json={"message": "hi", "project_path": str(proj)})
+    sid = res.headers["X-Session-Id"]
+    b = _bucket_for(str(proj))
+
+    hist = client.get(f"/api/v1/chat/{sid}?bucket={b}")
+    assert hist.status_code == 200
+    assert hist.json()["session_id"] == sid
+
+    # 不传 bucket(默认 default_chat)应找不到该 session(它在项目桶里)
+    miss = client.get(f"/api/v1/chat/{sid}")
+    assert miss.status_code == 404

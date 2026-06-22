@@ -177,7 +177,7 @@ async def create_chat(req: ChatRequest, request: Request):
         "content": req.message,
         "timestamp": time.time(),
     })
-    await sm.persist_messages(session.session_id, session.messages)
+    await sm.persist_messages(session.session_id, session.messages, bucket=bucket)
 
     async def event_stream() -> AsyncGenerator[str, None]:
         loop = session.agent_loop
@@ -205,7 +205,7 @@ async def create_chat(req: ChatRequest, request: Request):
                         "blocks": content,
                         "timestamp": time.time(),
                     })
-                    await sm.persist_messages(session.session_id, session.messages)
+                    await sm.persist_messages(session.session_id, session.messages, bucket=bucket)
                     # 更新会话标题（取第一条用户消息前 50 字符）
                     if len(session.messages) <= 2:
                         await sm.update_title(session.session_id, req.message[:50])
@@ -238,6 +238,7 @@ async def create_chat(req: ChatRequest, request: Request):
 async def get_history(
     request: Request,
     session_id: str = Path(pattern=SESSION_ID_RE.pattern),
+    bucket: str = Query("default_chat"),
     limit: int | None = Query(None, ge=1, le=500),  # H-A4: 上限防滥用
     before: str | None = Query(None),  # H-A4
 ) -> HistoryResponse:
@@ -248,7 +249,7 @@ async def get_history(
             before_ts = float(before)
         except (TypeError, ValueError):
             raise HTTPException(422, "before must be a numeric timestamp")  # H-A4
-    result = await sm.get_messages(session_id, limit=limit, before=before_ts)
+    result = await sm.get_messages(session_id, bucket=bucket, limit=limit, before=before_ts)
     if result is None:
         raise HTTPException(404, "session not found")
     messages, has_more, next_cursor = result
