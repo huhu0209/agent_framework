@@ -16,6 +16,7 @@ from agent_framework.viz.recorder import RecordingSubscriber
 from agent_framework.viz.ws_server import serve_ws
 
 from app.api.v1.chat import router as chat_router
+from app.api.v1.fs import router as fs_router
 from app.config import Settings, create_settings
 from app.services.agent_factory import AgentFactory
 from app.services.session import SessionManager
@@ -165,3 +166,4 @@ app.add_middleware(
     expose_headers=["X-Session-Id"],  # 前端跨域读 X-Session-Id(connectInspector 启动拉 config 依赖)
 )
 app.include_router(chat_router, prefix="/api/v1")
+app.include_router(fs_router, prefix="/api/v1/fs")
