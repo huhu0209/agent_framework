@@ -10,6 +10,7 @@ VizEventType = Literal[
     "idle", "thinking", "tool_call", "tool_result",
     "done", "error", "shutdown",
     "config", "system_prompt", "memory",
+    "usage",
 ]
 
 
@@ -37,6 +38,21 @@ class ConfigPayload(BaseModel):
     profile: str | None = None
     permission_mode: str | None = None
     tools: list[str] = []
+
+
+class UsagePayload(BaseModel):
+    """usage 事件的 payload 契约 — 单步与 session 累计 token 用量 + 模型上限。
+
+    - input/output:最近一次单步 LLM 调用的 token(input 即当前上下文大小)
+    - cumulative_input/output:当前会话累计 token
+    - max_context:模型(provider)上下文上限,随每次事件携带
+    """
+
+    input: int
+    output: int
+    cumulative_input: int
+    cumulative_output: int
+    max_context: int
 
 
 class VizEvent(BaseModel):

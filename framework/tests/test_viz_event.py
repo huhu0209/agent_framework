@@ -98,3 +98,25 @@ def test_system_prompt_payload_contract() -> None:
     assert p.text == "hi"
     assert p.blocks[0].name == "SOUL"
     assert p.blocks[0].source == "injected"
+
+
+from agent_framework.viz.viz_event import UsagePayload
+
+
+def test_usage_payload_fields():
+    """UsagePayload 契约:本次 in/out + 累计 in/out + 模型上限。"""
+    p = UsagePayload(
+        input=1234,
+        output=567,
+        cumulative_input=8900,
+        cumulative_output=3400,
+        max_context=200000,
+    )
+    dumped = p.model_dump()
+    assert dumped == {
+        "input": 1234,
+        "output": 567,
+        "cumulative_input": 8900,
+        "cumulative_output": 3400,
+        "max_context": 200000,
+    }
