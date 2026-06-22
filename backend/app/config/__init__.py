@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     llm_api_key: SecretStr = SecretStr("")
     llm_model: str = "claude-sonnet-4-20250514"
     llm_base_url: str | None = None
+    llm_max_context: int | None = None  # 显式覆盖模型上下文上限(env APP_LLM_MAX_CONTEXT);None → 走 provider 默认占位值
     redis_url: str = "redis://localhost:6379/0"
     api_key: SecretStr = SecretStr("")  # 后端 API 鉴权 key（env APP_API_KEY）
     max_message_length: int = 8000  # ChatRequest.message 长度上限（与 models.MAX_MESSAGE_LENGTH 对齐）

@@ -46,6 +46,7 @@ class AgentFactory:
             api_key=settings.llm_api_key.get_secret_value(),
             model=settings.llm_model,
             base_url=settings.llm_base_url,
+            max_context_tokens=settings.llm_max_context,
         )
         return cls(adapter=adapter, model=settings.llm_model, storage_dir=storage_dir)
 
@@ -62,6 +63,7 @@ class AgentFactory:
             api_key=backend_settings.llm_api_key.get_secret_value(),
             model=backend_settings.llm_model,
             base_url=backend_settings.llm_base_url,
+            max_context_tokens=backend_settings.llm_max_context,
         )
         factory = cls(adapter=adapter, model=backend_settings.llm_model)
 
