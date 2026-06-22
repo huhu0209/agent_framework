@@ -72,7 +72,7 @@ async def lifespan(app: FastAPI):
         rdb = None
 
     # --- 初始化会话管理器，启动定期清理任务 ---
-    storage_dir = Path(__file__).parent / "data" / "sessions"
+    storage_dir = settings.sessions_dir
     sm = SessionManager(storage_dir=storage_dir, redis_client=rdb)
     sm.start_cleanup()
 
