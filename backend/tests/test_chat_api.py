@@ -40,6 +40,10 @@ class _FakeAgentLoop:
         self.system_prompt_blocks = []
         self.router = _FakeRouter()
 
+    def effective_context_window(self) -> int:
+        """匹配 AgentLoop 接口 — viz AgentRunner.wrap 启动时读取（Inspector 用量指标）。"""
+        return 200000
+
     def load_messages(self, messages: list[Any]) -> None:
         """noop — 支持 transcript 恢复路径。"""
 
