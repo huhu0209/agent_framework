@@ -87,12 +87,12 @@ class _FakeFactory:
     def __init__(self, events: list[LoopEvent] | None = None) -> None:
         self._events = events or _make_done_events()
 
-    def create_loop(self) -> _FakeAgentLoop:
+    def create_loop(self, working_dir: str | None = None) -> _FakeAgentLoop:
         return _FakeAgentLoop(self._events)
 
 
 class _FailingFactory:
-    def create_loop(self) -> _FailingAgentLoop:
+    def create_loop(self, working_dir: str | None = None) -> _FailingAgentLoop:
         return _FailingAgentLoop()
 
 

@@ -87,10 +87,16 @@ class AgentFactory:
 
         return factory
 
-    def create_loop(self) -> AgentLoop:
-        """创建 AgentLoop 实例，传递 from_configloader() 加载的所有组件。"""
+    def create_loop(self, working_dir: str | None = None) -> AgentLoop:
+        """创建 AgentLoop 实例，传递 from_configloader() 加载的所有组件。
+
+        working_dir 显式指定时优先使用；否则回退到 storage_dir/shared_workspace；
+        两者都无时保持 ToolUseContext 默认（.）。
+        """
         ctx = ToolUseContext()
-        if self._storage_dir is not None:
+        if working_dir is not None:
+            ctx.working_dir = working_dir
+        elif self._storage_dir is not None:
             ctx.working_dir = str(self._storage_dir / "shared_workspace")
 
         # 从 loader 获取 skill_dirs，让 AgentLoop 创建自己的 SkillRegistry
