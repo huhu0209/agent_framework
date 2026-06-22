@@ -474,6 +474,37 @@ describe('useChatStore', () => {
     expect(mockFetch).not.toHaveBeenCalled()
   })
 
+  it('applyVizEvent 处理 usage 事件更新 inspector.usage', () => {
+    useChatStore.setState({
+      inspector: { config: null, systemPrompt: null, toolCalls: [], usage: null },
+    })
+    useChatStore.getState().applyVizEvent({
+      type: 'usage', agent: 's1', session_id: 's1', timestamp: 0,
+      payload: { input: 1000, output: 200, cumulative_input: 3000, cumulative_output: 600, max_context: 200000 },
+    })
+    expect(useChatStore.getState().inspector.usage).toEqual({
+      input: 1000, output: 200, cumulative_input: 3000, cumulative_output: 600, max_context: 200000,
+    })
+  })
+
+  it('applyVizEvent 多次 usage 覆盖为最新值', () => {
+    useChatStore.setState({
+      inspector: { config: null, systemPrompt: null, toolCalls: [], usage: null },
+    })
+    const store = useChatStore.getState()
+    store.applyVizEvent({
+      type: 'usage', agent: 's1', session_id: 's1', timestamp: 0,
+      payload: { input: 1000, output: 200, cumulative_input: 1000, cumulative_output: 200, max_context: 200000 },
+    })
+    store.applyVizEvent({
+      type: 'usage', agent: 's1', session_id: 's1', timestamp: 1,
+      payload: { input: 1500, output: 300, cumulative_input: 2500, cumulative_output: 500, max_context: 200000 },
+    })
+    expect(useChatStore.getState().inspector.usage).toEqual({
+      input: 1500, output: 300, cumulative_input: 2500, cumulative_output: 500, max_context: 200000,
+    })
+  })
+
   it('deduplicates concurrent fetches for the same session', async () => {
     let fetchCount = 0
     mockFetch.mockImplementation(async () => {

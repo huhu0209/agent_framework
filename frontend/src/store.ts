@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { z } from 'zod'
-import type { AgentBlock, AgentBlockInit, CacheEntry, ChatMessage, ConfigPayload, InspectorState, MessageRole, SessionInfo, SystemPromptPayload, ToolCallEntry, VizEvent } from './types'
+import type { AgentBlock, AgentBlockInit, CacheEntry, ChatMessage, ConfigPayload, InspectorState, MessageRole, SessionInfo, SystemPromptPayload, ToolCallEntry, UsageState, VizEvent } from './types'
 import { persistCacheEntry } from './lib/cache'
 import { vizWs, type WsStatus } from './lib/wsClient'
 
@@ -187,7 +187,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   composerDraft: '',
   inspectorOpen: false,
   wsStatus: 'disconnected' as WsStatus,
-  inspector: { config: null, systemPrompt: null, toolCalls: [] },
+  inspector: { config: null, systemPrompt: null, toolCalls: [], usage: null },
 
   setError: (msg: string) => {
     set({ errorToast: msg })
@@ -221,7 +221,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     vizWs.disconnect()
     set({
       wsStatus: 'disconnected',
-      inspector: { config: null, systemPrompt: null, toolCalls: [] },
+      inspector: { config: null, systemPrompt: null, toolCalls: [], usage: null },
     })
   },
 
@@ -256,6 +256,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
               : t,
           )
           return { inspector: { ...s.inspector, toolCalls } }
+        }
+        case 'usage': {
+          const u = p as unknown as UsageState
+          return { inspector: { ...s.inspector, usage: u } }
         }
         // 决策 1：工具链会话全量累积，不再因 idle 清空
         default:

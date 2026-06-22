@@ -27,7 +27,7 @@ export type AgentBlockInit =
   | Omit<Extract<AgentBlock, { kind: 'error' }>, 'id'>
 
 export interface VizEvent {
-  type: 'idle' | 'thinking' | 'tool_call' | 'tool_result' | 'done' | 'error' | 'shutdown' | 'config' | 'system_prompt' | 'memory'
+  type: 'idle' | 'thinking' | 'tool_call' | 'tool_result' | 'done' | 'error' | 'shutdown' | 'config' | 'system_prompt' | 'memory' | 'usage'
   agent: string
   session_id?: string
   payload: Record<string, unknown>
@@ -69,6 +69,14 @@ export interface SystemPromptPayload {
   blocks: PromptBlockPayload[]
 }
 
+export interface UsageState {
+  input: number
+  output: number
+  cumulative_input: number
+  cumulative_output: number
+  max_context: number
+}
+
 export interface ToolCallEntry {
   tool_call_id: string
   tool_name: string
@@ -82,4 +90,5 @@ export interface InspectorState {
   config: ConfigPayload | null
   systemPrompt: SystemPromptPayload | null
   toolCalls: ToolCallEntry[]
+  usage: UsageState | null
 }
