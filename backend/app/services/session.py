@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -27,6 +28,24 @@ if TYPE_CHECKING:
     from agent_framework.viz.agent_runner import AgentRunner
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_BUCKET = "default_chat"
+
+
+def _safe_basename(path: Path) -> str:
+    """清洗目录名为 [a-zA-Z0-9-],空则回退 'project',防桶名注入。"""
+    name = re.sub(r"[^a-zA-Z0-9-]", "_", path.name).strip("_")
+    return name or "project"
+
+
+def _bucket_for(project_path: str | None) -> str:
+    """项目路径 → 稳定桶名;None → default_chat。"""
+    if project_path is None:
+        return DEFAULT_BUCKET
+    resolved = Path(project_path).expanduser().resolve()
+    digest = hashlib.sha256(str(resolved).encode("utf-8")).hexdigest()[:8]
+    return f"{_safe_basename(resolved)}_{digest}"
+
 
 SESSION_TTL = 3600  # 1 hour
 
