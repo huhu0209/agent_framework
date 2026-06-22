@@ -48,7 +48,7 @@ function UsageRow({ label, input, output }: { label: string; input: number; outp
     <div className="flex justify-between gap-2">
       <span className="font-mono text-[13px]" style={{ color: 'var(--text-3)' }}>{label}</span>
       <span className="font-mono text-[13px]" style={{ color: 'var(--text)' }}>
-        ↑ {formatNum(input)}　↓ {formatNum(output)}
+        ↑ {formatNum(input)}{'　'}↓ {formatNum(output)}
       </span>
     </div>
   )

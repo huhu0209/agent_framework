@@ -479,7 +479,7 @@ describe('useChatStore', () => {
       inspector: { config: null, systemPrompt: null, toolCalls: [], usage: null },
     })
     useChatStore.getState().applyVizEvent({
-      type: 'usage', agent: 's1', session_id: 's1', timestamp: 0,
+      type: 'usage', session_id: 's1',
       payload: { input: 1000, output: 200, cumulative_input: 3000, cumulative_output: 600, max_context: 200000 },
     })
     expect(useChatStore.getState().inspector.usage).toEqual({
@@ -493,11 +493,11 @@ describe('useChatStore', () => {
     })
     const store = useChatStore.getState()
     store.applyVizEvent({
-      type: 'usage', agent: 's1', session_id: 's1', timestamp: 0,
+      type: 'usage', session_id: 's1',
       payload: { input: 1000, output: 200, cumulative_input: 1000, cumulative_output: 200, max_context: 200000 },
     })
     store.applyVizEvent({
-      type: 'usage', agent: 's1', session_id: 's1', timestamp: 1,
+      type: 'usage', session_id: 's1',
       payload: { input: 1500, output: 300, cumulative_input: 2500, cumulative_output: 500, max_context: 200000 },
     })
     expect(useChatStore.getState().inspector.usage).toEqual({
