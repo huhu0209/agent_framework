@@ -148,6 +148,7 @@ interface ChatStore {
   loadSessions: (bucket?: string) => Promise<void>
   loadBuckets: () => Promise<void>
   setCurrentBucket: (bucket: string, projectPath: string | null) => void
+  ensureBucketFor: (projectPath: string) => Promise<void>
   switchSession: (id: string) => Promise<void>
   deleteSession: (id: string) => Promise<void>
   renameSession: (id: string, title: string) => Promise<void>
@@ -391,6 +392,18 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     localStorage.setItem('af.currentBucket', bucket)
     set({ currentBucket: bucket, projectPath })
     void get().loadSessions(bucket)
+  },
+
+  ensureBucketFor: async (projectPath: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/sessions/bucket-for?project_path=${encodeURIComponent(projectPath)}`, { headers: authHeaders() })
+      if (!res.ok) { get().setError('项目目录无效'); return }
+      const { bucket } = await res.json()
+      get().setCurrentBucket(bucket, projectPath)
+      await get().loadBuckets()
+    } catch {
+      get().setError('切换项目失败')
+    }
   },
 
   switchSession: async (id: string) => {
