@@ -291,6 +291,19 @@ async def list_buckets(request: Request) -> list[dict]:
 PREVIEW_SESSION_LIMIT = 10  # Only enrich the N most recent sessions to limit I/O
 
 
+@router.get("/sessions/bucket-for")
+async def bucket_for(project_path: str | None = Query(None)) -> dict:
+    """返回 project_path 对应的桶名(供前端选项目后立即切桶)。"""
+    if not project_path:
+        raise HTTPException(status_code=400, detail="project_path is required")
+    resolved = FilePath(project_path).expanduser().resolve()
+    if not resolved.is_dir():
+        raise HTTPException(status_code=400, detail="project_path must be an existing directory")
+    bucket = _bucket_for(str(resolved))
+    display = bucket.rsplit("_", 1)[0] if "_" in bucket else bucket
+    return {"bucket": bucket, "display_name": display}
+
+
 @router.get("/sessions")
 async def list_sessions(
     request: Request,

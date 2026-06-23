@@ -799,3 +799,22 @@ def test_rename_session_scoped_by_bucket(client, tmp_path):
     assert miss.status_code == 404
     ok = client.patch(f"/api/v1/sessions/{sid}?bucket={b}", json={"title": "new"})
     assert ok.status_code == 200
+
+
+def test_bucket_for_returns_bucket_name(client, tmp_path):
+    proj = tmp_path / "myapp"; proj.mkdir()
+    res = client.get("/api/v1/sessions/bucket-for", params={"project_path": str(proj)})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["bucket"].startswith("myapp_")
+    assert body["display_name"] == "myapp"
+
+
+def test_bucket_for_missing_path_400(client):
+    res = client.get("/api/v1/sessions/bucket-for", params={"project_path": "/no/such/xyz"})
+    assert res.status_code == 400
+
+
+def test_bucket_for_no_path_400(client):
+    res = client.get("/api/v1/sessions/bucket-for")
+    assert res.status_code == 400
