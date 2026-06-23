@@ -15,10 +15,10 @@ export function TextResponseBlock({ block }: { block: AgentBlock }) {
         prose-headings:font-serif prose-headings:text-[var(--text)]
         prose-p:my-1.5 prose-headings:mt-3 prose-headings:mb-1.5
         prose-ul:my-1.5 prose-ol:my-1.5 prose-li:my-0
-        prose-blockquote:my-1.5 prose-pre:my-1.5 prose-table:my-1.5
+        prose-blockquote:my-1.5 prose-pre:my-1.5 prose-table:my-1.5 prose-hr:my-3
         prose-a:text-[var(--coral)]
         prose-code:text-[var(--brand)]
-        prose-blockquote:border-[var(--brand)]
+        prose-blockquote:border-[var(--brand)] prose-hr:border-[var(--border)]
         prose-blockquote:text-[var(--text-2)]"
       style={{ color: 'var(--text)', lineHeight: '1.7', fontSize: '15.5px' }}
     >

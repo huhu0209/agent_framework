@@ -54,20 +54,18 @@ export function SessionItem({ session, isActive, onSelect, onDelete, onRename, o
         <span className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r" style={{ backgroundColor: 'var(--brand)' }} />
       )}
       <ChatTeardrop size={15} className="shrink-0" style={{ color: 'var(--sb-muted)' }} />
+      <span className="flex-1 truncate text-[13.5px]" style={{ color: 'var(--sb-text)' }}>{session.title}</span>
       {confirmDelete ? (
-        <div className="flex items-center gap-1 text-xs flex-1" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-1 text-xs" onClick={(e) => e.stopPropagation()}>
           <span style={{ color: 'var(--sb-muted)' }}>删除？</span>
-          <button onClick={() => { onDelete(); setConfirmDelete(false) }} className="px-1.5 py-0.5 rounded inline-flex items-center" style={{ backgroundColor: 'var(--danger)', color: 'var(--ivory)' }} aria-label="确认删除"><Check size={12} /></button>
-          <button onClick={() => setConfirmDelete(false)} className="px-1.5 py-0.5 rounded inline-flex items-center" style={{ backgroundColor: 'var(--sb-active)', color: 'var(--sb-text)' }} aria-label="取消"><X size={12} /></button>
+          <button onClick={() => { onDelete(); setConfirmDelete(false) }} className="p-1 rounded inline-flex items-center" style={{ backgroundColor: 'var(--danger)', color: 'var(--ivory)' }} aria-label="确认删除"><Check size={14} /></button>
+          <button onClick={() => setConfirmDelete(false)} className="p-1 rounded inline-flex items-center" style={{ backgroundColor: 'var(--sb-active)', color: 'var(--sb-text)' }} aria-label="取消"><X size={14} /></button>
         </div>
       ) : (
-        <>
-          <span className="flex-1 truncate text-[13.5px]" style={{ color: 'var(--sb-text)' }}>{session.title}</span>
-          <div className="hidden group-hover:flex gap-0.5" onClick={(e) => e.stopPropagation()}>
-            <button onClick={() => { setEditTitle(session.title); setIsEditing(true) }} className="p-1 rounded hover:bg-[var(--sb-active)] inline-flex items-center" style={{ color: 'var(--sb-muted)' }} aria-label="重命名"><PencilSimple size={14} /></button>
-            <button onClick={() => setConfirmDelete(true)} className="p-1 rounded hover:bg-[var(--sb-active)] inline-flex items-center" style={{ color: 'var(--sb-muted)' }} aria-label="删除"><Trash size={14} /></button>
-          </div>
-        </>
+        <div className="flex opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto gap-0.5 transition-opacity" onClick={(e) => e.stopPropagation()}>
+          <button onClick={() => { setEditTitle(session.title); setIsEditing(true) }} className="p-1 rounded hover:bg-[var(--sb-active)] inline-flex items-center" style={{ color: 'var(--sb-muted)' }} aria-label="重命名"><PencilSimple size={14} /></button>
+          <button onClick={() => setConfirmDelete(true)} className="p-1 rounded hover:bg-[var(--sb-active)] inline-flex items-center" style={{ color: 'var(--sb-muted)' }} aria-label="删除"><Trash size={14} /></button>
+        </div>
       )}
     </div>
   )

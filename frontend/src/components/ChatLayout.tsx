@@ -3,19 +3,27 @@ import { MessageList } from './message/MessageList'
 import { ChatInput } from './composer/ChatInput'
 import { SessionSidebar } from './sidebar/SessionSidebar'
 import { InspectorPanel } from './inspector/InspectorPanel'
+import { ComingSoon } from './ComingSoon'
 import { useChatStore } from '../store'
 
 export function ChatLayout() {
   const errorToast = useChatStore((s) => s.errorToast)
   const clearError = useChatStore((s) => s.clearError)
+  const activeView = useChatStore((s) => s.activeView)
 
   return (
     <div className="flex h-full">
-      <SessionSidebar />
+      {activeView === 'chat' && <SessionSidebar />}
       <div className="flex flex-col flex-1 min-w-0">
         <ChatHeader />
-        <MessageList />
-        <ChatInput />
+        {activeView === 'chat' ? (
+          <>
+            <MessageList />
+            <ChatInput />
+          </>
+        ) : (
+          <ComingSoon name={activeView} />
+        )}
       </div>
       <InspectorPanel />
       {errorToast && (

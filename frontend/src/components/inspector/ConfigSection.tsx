@@ -1,3 +1,4 @@
+import { Sparkle } from '@phosphor-icons/react'
 import type { ConfigPayload } from '../../types'
 
 export function ConfigSection({ config, offline }: { config: ConfigPayload | null; offline?: boolean }) {
@@ -6,13 +7,22 @@ export function ConfigSection({ config, offline }: { config: ConfigPayload | nul
   }
   if (!config) return <div className="text-sm" style={{ color: 'var(--text-3)' }}>等待 config…</div>
   return (
-    <div className="space-y-2 text-sm">
-      <Row label="模型" value={config.model} />
-      <Row label="max_steps" value={String(config.max_steps)} />
-      <Row label="profile" value={config.profile ?? '—'} />
-      <Row label="permission" value={config.permission_mode ?? '—'} />
+    <div className="space-y-3 text-sm">
       <div>
-        <div className="text-xs mb-1" style={{ color: 'var(--text-3)' }}>工具（{config.tools.length}）</div>
+        <div className="text-[11px] uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-3)' }}>模型</div>
+        <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md text-[13px] font-medium font-mono"
+          style={{ backgroundColor: 'var(--brand)', color: 'var(--ivory)' }}>
+          <Sparkle size={12} weight="fill" />
+          {config.model}
+        </span>
+      </div>
+      <div className="space-y-1.5 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
+        <Row label="max_steps" value={String(config.max_steps)} />
+        <Row label="profile" value={config.profile ?? '—'} />
+        <Row label="permission" value={config.permission_mode ?? '—'} />
+      </div>
+      <div className="pt-3" style={{ borderTop: '1px solid var(--border)' }}>
+        <div className="text-[11px] uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-3)' }}>工具（{config.tools.length}）</div>
         <div className="flex flex-wrap gap-1">
           {config.tools.map((t) => (
             <span key={t} className="px-1.5 py-0.5 rounded text-xs font-mono"
@@ -27,8 +37,8 @@ export function ConfigSection({ config, offline }: { config: ConfigPayload | nul
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-2">
-      <span style={{ color: 'var(--text-3)' }}>{label}</span>
-      <span className="font-mono" style={{ color: 'var(--text)' }}>{value}</span>
+      <span className="font-mono text-[13px]" style={{ color: 'var(--text-3)' }}>{label}</span>
+      <span className="font-mono text-[13px]" style={{ color: 'var(--text)' }}>{value}</span>
     </div>
   )
 }

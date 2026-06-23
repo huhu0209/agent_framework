@@ -122,6 +122,8 @@ function vizEventToBlock(event: VizEvent): AgentBlockInit | null {
   }
 }
 
+export type ViewName = 'chat' | 'agent' | 'teammate' | 'orchestrator'
+
 interface ChatStore {
   messages: ChatMessage[]
   streamingMessage: ChatMessage | null
@@ -130,6 +132,7 @@ interface ChatStore {
   sessionId: string | null
   sessions: SessionInfo[]
   sidebarOpen: boolean
+  activeView: ViewName
   sessionsLoading: boolean
   switchingSession: boolean
   messageCache: Map<string, CacheEntry>
@@ -148,6 +151,7 @@ interface ChatStore {
   renameSession: (id: string, title: string) => Promise<void>
   newSession: () => void
   toggleSidebar: () => void
+  setActiveView: (v: ViewName) => void
   prefetchSession: (id: string) => Promise<void>
   theme: 'light' | 'dark'
   searchQuery: string
@@ -175,6 +179,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   sessionId: null,
   sessions: [],
   sidebarOpen: true,
+  activeView: 'chat',
   sessionsLoading: false,
   switchingSession: false,
   messageCache: new Map(),
@@ -205,6 +210,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
   setSearchQuery: (q: string) => set({ searchQuery: q }),
   setComposerDraft: (text: string) => set({ composerDraft: text }),
+  setActiveView: (v) => set({ activeView: v }),
 
   toggleInspector: () => set((s) => ({ inspectorOpen: !s.inspectorOpen })),
   openInspector: () => set({ inspectorOpen: true }),
@@ -404,7 +410,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       return
     }
     if (id.startsWith('temp-')) {
-      set({ messages: [], sessionId: id, streamingMessage: null })
+      // temp- 是前端占位会话，真实 id 等后端创建后由 X-Session-Id 返回。
+      // 必须保持 sessionId=null，否则发消息会把 'temp-xxx' 当 session_id 发出，
+      // 后端 ChatRequest.session_id 校验（^[0-9a-f]{32}$）失败 → 422。
+      set({ messages: [], sessionId: null, streamingMessage: null })
       return
     }
     set({ switchingSession: true })

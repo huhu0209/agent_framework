@@ -85,7 +85,20 @@ export function MessageList() {
         {virtualizer.getVirtualItems().map((virtualItem) => {
           const msg = allItems[virtualItem.index]
           return (
-            <div key={virtualItem.key} data-testid="message-item" style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${virtualItem.start}px)` }}>
+            <div
+              key={virtualItem.key}
+              data-index={virtualItem.index}
+              ref={virtualizer.measureElement}
+              data-testid="message-item"
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                transform: `translateY(${virtualItem.start}px)`,
+                paddingBottom: '16px',
+              }}
+            >
               {msg.role === 'user' && <UserBubble message={msg} />}
               {msg.role === 'agent' && <AgentResponse message={msg} />}
               {msg.role === 'system' && <SystemNotification message={msg} />}

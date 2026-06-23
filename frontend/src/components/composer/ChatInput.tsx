@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, type KeyboardEvent } from 'react'
-import { ArrowUp } from '@phosphor-icons/react'
+import { ArrowUp, Plus, Microphone } from '@phosphor-icons/react'
 import { useChatStore } from '../../store'
 
 export function ChatInput() {
@@ -57,6 +57,22 @@ export function ChatInput() {
           onChange={(e) => { setValue(e.target.value); adjustHeight() }}
           onKeyDown={handleKeyDown}
         />
+        <button
+          aria-label="添加"
+          title="添加"
+          className="shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-full transition-colors hover:bg-[var(--sand)]"
+          style={{ color: 'var(--text-2)' }}
+        >
+          <Plus size={18} />
+        </button>
+        <button
+          aria-label="语音输入"
+          title="语音输入"
+          className="shrink-0 w-9 h-9 inline-flex items-center justify-center rounded-full transition-colors hover:bg-[var(--sand)]"
+          style={{ color: 'var(--text-2)' }}
+        >
+          <Microphone size={18} />
+        </button>
         <button
           onClick={handleSend}
           disabled={!canSend}
