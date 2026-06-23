@@ -561,3 +561,24 @@ describe('theme / searchQuery / composerDraft', () => {
     expect(useChatStore.getState().composerDraft).toBe('你好')
   })
 })
+
+describe('store bucket state', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('loadSessions sends bucket query', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => [] })
+
+    await useChatStore.getState().loadSessions('projA_abcd1234')
+
+    const url = mockFetch.mock.calls[0][0] as string
+    expect(url).toContain('bucket=projA_abcd1234')
+  })
+
+  it('setCurrentBucket persists to localStorage and updates state', () => {
+    useChatStore.getState().setCurrentBucket('projB_ffff', '/tmp/projB')
+
+    expect(useChatStore.getState().currentBucket).toBe('projB_ffff')
+    expect(useChatStore.getState().projectPath).toBe('/tmp/projB')
+    expect(localStorage.getItem('af.currentBucket')).toBe('projB_ffff')
+  })
+})

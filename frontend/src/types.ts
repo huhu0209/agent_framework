@@ -42,6 +42,11 @@ export interface SessionInfo {
   message_count?: number
 }
 
+export interface BucketInfo {
+  bucket: string
+  display_name: string
+}
+
 export interface CacheEntry {
   messages: ChatMessage[]
   hasMore: boolean

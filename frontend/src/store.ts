@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { z } from 'zod'
-import type { AgentBlock, AgentBlockInit, CacheEntry, ChatMessage, ConfigPayload, InspectorState, MessageRole, SessionInfo, SystemPromptPayload, ToolCallEntry, UsageState, VizEvent } from './types'
+import type { AgentBlock, AgentBlockInit, BucketInfo, CacheEntry, ChatMessage, ConfigPayload, InspectorState, MessageRole, SessionInfo, SystemPromptPayload, ToolCallEntry, UsageState, VizEvent } from './types'
 import { persistCacheEntry } from './lib/cache'
 import { vizWs, type WsStatus } from './lib/wsClient'
 
@@ -43,7 +43,7 @@ export function resetIdCounter() {
   _nextId = 1
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? ''
+export const API_BASE = import.meta.env.VITE_API_BASE ?? ''
 const API_KEY = import.meta.env.VITE_APP_API_KEY ?? ''
 
 function applyTheme(t: 'light' | 'dark') {
@@ -52,7 +52,7 @@ function applyTheme(t: 'light' | 'dark') {
 }
 
 /** A1 鉴权：所有 backend 请求需带 X-API-Key 头，值取自 VITE_APP_API_KEY */
-function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+export function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
   return { 'X-API-Key': API_KEY, ...extra }
 }
 
@@ -129,6 +129,9 @@ interface ChatStore {
   isStreaming: boolean
   sessionId: string | null
   sessions: SessionInfo[]
+  currentBucket: string
+  projectPath: string | null
+  buckets: BucketInfo[]
   sidebarOpen: boolean
   sessionsLoading: boolean
   switchingSession: boolean
@@ -142,7 +145,9 @@ interface ChatStore {
   loadOlderMessages: () => Promise<void>
   sendMessage: (text: string) => Promise<void>
   addSystemMessage: (text: string) => void
-  loadSessions: () => Promise<void>
+  loadSessions: (bucket?: string) => Promise<void>
+  loadBuckets: () => Promise<void>
+  setCurrentBucket: (bucket: string, projectPath: string | null) => void
   switchSession: (id: string) => Promise<void>
   deleteSession: (id: string) => Promise<void>
   renameSession: (id: string, title: string) => Promise<void>
@@ -174,6 +179,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   isStreaming: false,
   sessionId: null,
   sessions: [],
+  currentBucket: localStorage.getItem('af.currentBucket') ?? 'default_chat',
+  projectPath: null,
+  buckets: [],
   sidebarOpen: true,
   sessionsLoading: false,
   switchingSession: false,
@@ -330,12 +338,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
-  loadSessions: async () => {
+  loadSessions: async (bucket?: string) => {
+    const b = bucket ?? get().currentBucket
     set({ sessionsLoading: true })
     try {
       // preview=0：侧边栏只需 title，不触发后端 enrich（避免 redis 读/写拖慢列表）。
       // 消息按需加载：hover 预取 + 切换会话 fetchMessages。
-      const res = await fetch(`${API_BASE}/api/v1/sessions?preview=0`, { headers: authHeaders() })
+      const res = await fetch(`${API_BASE}/api/v1/sessions?preview=0&bucket=${encodeURIComponent(b)}`, { headers: authHeaders() })
       if (res.ok) {
         const data = await res.json()
         const sessions: SessionInfo[] = Array.isArray(data) ? data : []
@@ -369,6 +378,19 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       get().setError('加载会话列表失败')
       set({ sessionsLoading: false })
     }
+  },
+
+  loadBuckets: async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/sessions/buckets`, { headers: authHeaders() })
+      if (res.ok) set({ buckets: await res.json() })
+    } catch { /* 静默 */ }
+  },
+
+  setCurrentBucket: (bucket, projectPath) => {
+    localStorage.setItem('af.currentBucket', bucket)
+    set({ currentBucket: bucket, projectPath })
+    void get().loadSessions(bucket)
   },
 
   switchSession: async (id: string) => {
@@ -533,6 +555,7 @@ async function sendViaSse(
     body: JSON.stringify({
       message: text,
       session_id: currentSessionId ?? undefined,
+      project_path: get().projectPath ?? undefined,
     }),
   })
 
