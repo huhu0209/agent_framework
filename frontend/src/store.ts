@@ -58,12 +58,12 @@ export function authHeaders(extra: Record<string, string> = {}): Record<string, 
 
 const inflightRequests = new Map<string, Promise<{ messages: ChatMessage[], hasMore: boolean }>>()
 
-async function fetchMessages(id: string): Promise<{ messages: ChatMessage[], hasMore: boolean }> {
+async function fetchMessages(id: string, bucket: string): Promise<{ messages: ChatMessage[], hasMore: boolean }> {
   const existing = inflightRequests.get(id)
   if (existing) return existing
 
   const promise = (async () => {
-    const res = await fetch(`${API_BASE}/api/v1/chat/${id}`, { headers: authHeaders() })
+    const res = await fetch(`${API_BASE}/api/v1/chat/${id}?bucket=${encodeURIComponent(bucket)}`, { headers: authHeaders() })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
     const messages: ChatMessage[] = data.messages.map((m: Record<string, unknown>, i: number) =>
@@ -415,7 +415,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       if (cached.hasMore) {
         set({ loadingFullHistory: true })
         const fetchStartedAt = Date.now()
-        fetchMessages(id).then(({ messages, hasMore }) => {
+        fetchMessages(id, get().currentBucket).then(({ messages, hasMore }) => {
           // H-FE3: fetch 期间若有 sendMessage 更新缓存（cachedAt > fetchStartedAt），跳过覆盖
           const current = get().messageCache.get(id)
           if (current && current.cachedAt > fetchStartedAt) {
@@ -444,7 +444,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
     set({ switchingSession: true })
     try {
-      const { messages, hasMore } = await fetchMessages(id)
+      const { messages, hasMore } = await fetchMessages(id, get().currentBucket)
       const entry: CacheEntry = { messages, hasMore, cachedAt: Date.now() }
       const cache = new Map(get().messageCache)
       cache.set(id, entry)
@@ -459,7 +459,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   deleteSession: async (id: string) => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/sessions/${id}`, { method: 'DELETE', headers: authHeaders() })
+      const res = await fetch(`${API_BASE}/api/v1/sessions/${id}?bucket=${encodeURIComponent(get().currentBucket)}`, { method: 'DELETE', headers: authHeaders() })
       if (!res.ok) return
       const { sessions, sessionId } = get()
       const next = sessions.filter((s) => s.session_id !== id)
@@ -476,7 +476,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   renameSession: async (id: string, title: string) => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/sessions/${id}`, {
+      const res = await fetch(`${API_BASE}/api/v1/sessions/${id}?bucket=${encodeURIComponent(get().currentBucket)}`, {
         method: 'PATCH',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ title }),
@@ -517,7 +517,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const existing = get().messageCache.get(id)
     if (existing && !existing.hasMore) return
     try {
-      const { messages, hasMore } = await fetchMessages(id)
+      const { messages, hasMore } = await fetchMessages(id, get().currentBucket)
       const entry: CacheEntry = { messages, hasMore, cachedAt: Date.now() }
       const cache = new Map(get().messageCache)
       cache.set(id, entry)
@@ -534,7 +534,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const oldestTs = messages[0].timestamp / 1000
     set({ loadingOlder: true })
     try {
-      const res = await fetch(`${API_BASE}/api/v1/chat/${sessionId}?limit=50&before=${oldestTs}`)
+      const res = await fetch(`${API_BASE}/api/v1/chat/${sessionId}?limit=50&before=${oldestTs}&bucket=${encodeURIComponent(get().currentBucket)}`, { headers: authHeaders() })
       if (!res.ok) { set({ loadingOlder: false }); return }
       const data = await res.json()
       const older: ChatMessage[] = data.messages.map((m: Record<string, unknown>, i: number) =>
