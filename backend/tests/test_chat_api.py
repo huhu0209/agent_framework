@@ -86,13 +86,15 @@ def _make_tool_events() -> list[LoopEvent]:
 class _FakeFactory:
     def __init__(self, events: list[LoopEvent] | None = None) -> None:
         self._events = events or _make_done_events()
+        self.last_working_dir: str | None = None
 
-    def create_loop(self) -> _FakeAgentLoop:
+    def create_loop(self, working_dir: str | None = None) -> _FakeAgentLoop:
+        self.last_working_dir = working_dir
         return _FakeAgentLoop(self._events)
 
 
 class _FailingFactory:
-    def create_loop(self) -> _FailingAgentLoop:
+    def create_loop(self, working_dir: str | None = None) -> _FailingAgentLoop:
         return _FailingAgentLoop()
 
 
@@ -272,11 +274,13 @@ def client_with_storage(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Test
 
 
 def test_transcript_file_created_after_chat(client_with_storage: TestClient, tmp_path: Path) -> None:
+    from app.services.session import DEFAULT_BUCKET
+
     res = client_with_storage.post("/api/v1/chat", json={"message": "hello"})
     assert res.status_code == 200
     sid = res.headers["X-Session-Id"]
 
-    transcript_path = tmp_path / "sessions" / f"{sid}.jsonl"
+    transcript_path = tmp_path / "sessions" / DEFAULT_BUCKET / f"{sid}.jsonl"
     assert transcript_path.exists()
     content = transcript_path.read_text()
     assert len(content) > 0
@@ -297,10 +301,12 @@ def test_list_sessions_returns_created_session(client_with_storage: TestClient) 
 
 
 def test_delete_session_removes_transcript(client_with_storage: TestClient, tmp_path: Path) -> None:
+    from app.services.session import DEFAULT_BUCKET
+
     res = client_with_storage.post("/api/v1/chat", json={"message": "hello"})
     sid = res.headers["X-Session-Id"]
 
-    transcript_path = tmp_path / "sessions" / f"{sid}.jsonl"
+    transcript_path = tmp_path / "sessions" / DEFAULT_BUCKET / f"{sid}.jsonl"
     assert transcript_path.exists()
 
     del_res = client_with_storage.delete(f"/api/v1/sessions/{sid}")
@@ -441,13 +447,16 @@ async def test_list_sessions_uses_cache(client_with_storage: TestClient) -> None
 
 
 async def test_list_sessions_cache_invalidated_on_create(client_with_storage: TestClient) -> None:
-    """创建 session 后缓存应失效。"""
+    """创建 session 后对应桶的缓存应失效。"""
+    from app.services.session import DEFAULT_BUCKET
+
     client_with_storage.post("/api/v1/chat", json={"message": "first"})
     sm = client_with_storage.app.state.session_manager
     await sm.list_sessions()
 
     client_with_storage.post("/api/v1/chat", json={"message": "second"})
-    assert sm._session_list_cache is None
+    # 按桶缓存：默认桶条目应被清除
+    assert DEFAULT_BUCKET not in (sm._session_list_cache or {})
 
 
 def test_get_history_with_pagination(client_with_storage: TestClient) -> None:
@@ -666,3 +675,146 @@ def test_viz_lifespan_creates_bus_and_chat_runs_through_runner(
         session = client.app.state.session_manager.get(sid)
         assert session is not None
         assert session.agent_runner is not None  # T7: runner 装配生效
+
+
+def test_chat_request_accepts_project_path():
+    from app.models import ChatRequest
+    req = ChatRequest(message="hi", project_path="/tmp/x")
+    assert req.project_path == "/tmp/x"
+    req2 = ChatRequest(message="hi")  # 默认 None
+    assert req2.project_path is None
+    req3 = ChatRequest(message="hi", project_path="   ")  # 空白 → None
+    assert req3.project_path is None
+
+
+def test_post_chat_with_project_path_routes_to_bucket(client, tmp_path, monkeypatch):
+    """Task6: POST /chat 带 project_path → 算 bucket + history 落在桶内。"""
+    proj = tmp_path / "myproj"
+    proj.mkdir()
+    from app.services.session import SessionManager, _bucket_for
+    client.app.state.session_manager = SessionManager(storage_dir=tmp_path)
+    res = client.post("/api/v1/chat", json={"message": "hi", "project_path": str(proj)})
+    assert res.status_code == 200
+    bucket = _bucket_for(str(proj))
+    # 桶目录被创建,history 落在桶内
+    assert (tmp_path / bucket / "history.jsonl").exists()
+
+
+def test_post_chat_project_path_expands_tilde(client, tmp_path, monkeypatch):
+    """HIGH 修复: project_path 含 ~ 时 working_dir 必须是展开后的绝对路径。
+
+    旧实现把 req.project_path 原样传给 create_loop(working_dir=...),
+    导致 ~/myproj 字面量落到 file_tools 的 Path(ctx.working_dir),~ 不被展开,
+    写入会落在 CWD 下字面名为 ~ 的目录。此测试锁定修复。
+    """
+    from app.services.session import SessionManager
+
+    # 把 HOME 指到 tmp_path,造一个 ~/myproj
+    monkeypatch.setenv("HOME", str(tmp_path))
+    proj = tmp_path / "myproj"
+    proj.mkdir()
+    factory = _FakeFactory()
+    client.app.state.agent_factory = factory
+    client.app.state.session_manager = SessionManager(storage_dir=tmp_path)
+
+    res = client.post("/api/v1/chat", json={"message": "hi", "project_path": "~/myproj"})
+    assert res.status_code == 200
+    # working_dir 必须是展开后的绝对路径,而非字面 ~/myproj
+    assert factory.last_working_dir == str(proj)
+    assert "~" not in (factory.last_working_dir or "")
+
+
+def test_list_sessions_scoped_by_bucket(client, tmp_path):
+    """/sessions?bucket= 收窄到指定桶,不影响默认桶列表。"""
+    from app.services.session import SessionManager, _bucket_for
+
+    client.app.state.session_manager = SessionManager(storage_dir=tmp_path)
+    client.post("/api/v1/chat", json={"message": "a"})  # default_chat
+    proj = tmp_path / "p"
+    proj.mkdir()
+    client.post("/api/v1/chat", json={"message": "b", "project_path": str(proj)})
+    b = _bucket_for(str(proj))
+
+    default_only = client.get("/api/v1/sessions?preview=0").json()
+    proj_only = client.get(f"/api/v1/sessions?preview=0&bucket={b}").json()
+
+    assert all(s.get("bucket", "default_chat") == "default_chat" for s in default_only)
+    assert len(proj_only) == 1
+    assert proj_only[0].get("bucket") == b
+
+
+def test_list_buckets(client, tmp_path):
+    """/sessions/buckets 扫描子目录返回桶列表,default_chat 必在内。"""
+    from app.services.session import SessionManager
+
+    client.app.state.session_manager = SessionManager(storage_dir=tmp_path)
+    client.post("/api/v1/chat", json={"message": "a"})  # creates default_chat/
+
+    res = client.get("/api/v1/sessions/buckets").json()
+    names = [x["bucket"] for x in res]
+    assert "default_chat" in names
+
+
+def test_get_history_scoped_by_bucket(client, tmp_path):
+    """GET /chat/{sid} 按 bucket 定位历史；错桶应 404。"""
+    from app.services.session import SessionManager, _bucket_for
+
+    client.app.state.session_manager = SessionManager(storage_dir=tmp_path)
+    proj = tmp_path / "p"
+    proj.mkdir()
+    res = client.post("/api/v1/chat", json={"message": "hi", "project_path": str(proj)})
+    sid = res.headers["X-Session-Id"]
+    b = _bucket_for(str(proj))
+
+    hist = client.get(f"/api/v1/chat/{sid}?bucket={b}")
+    assert hist.status_code == 200
+    assert hist.json()["session_id"] == sid
+
+    # 不传 bucket(默认 default_chat)应找不到该 session(它在项目桶里)
+    miss = client.get(f"/api/v1/chat/{sid}")
+    assert miss.status_code == 404
+
+
+def test_delete_session_scoped_by_bucket(client, tmp_path):
+    from app.services.session import SessionManager, _bucket_for
+    client.app.state.session_manager = SessionManager(storage_dir=tmp_path)
+    proj = tmp_path / "p"; proj.mkdir()
+    sid = client.post("/api/v1/chat", json={"message": "hi", "project_path": str(proj)}).headers["X-Session-Id"]
+    b = _bucket_for(str(proj))
+    # 不传 bucket(默认 default_chat)→ 该 session 不在默认桶 → 404
+    miss = client.delete(f"/api/v1/sessions/{sid}")
+    assert miss.status_code == 404
+    # 传对 bucket → 200
+    ok = client.delete(f"/api/v1/sessions/{sid}?bucket={b}")
+    assert ok.status_code == 200
+
+
+def test_rename_session_scoped_by_bucket(client, tmp_path):
+    from app.services.session import SessionManager, _bucket_for
+    client.app.state.session_manager = SessionManager(storage_dir=tmp_path)
+    proj = tmp_path / "p"; proj.mkdir()
+    sid = client.post("/api/v1/chat", json={"message": "hi", "project_path": str(proj)}).headers["X-Session-Id"]
+    b = _bucket_for(str(proj))
+    miss = client.patch(f"/api/v1/sessions/{sid}", json={"title": "new"})
+    assert miss.status_code == 404
+    ok = client.patch(f"/api/v1/sessions/{sid}?bucket={b}", json={"title": "new"})
+    assert ok.status_code == 200
+
+
+def test_bucket_for_returns_bucket_name(client, tmp_path):
+    proj = tmp_path / "myapp"; proj.mkdir()
+    res = client.get("/api/v1/sessions/bucket-for", params={"project_path": str(proj)})
+    assert res.status_code == 200
+    body = res.json()
+    assert body["bucket"].startswith("myapp_")
+    assert body["display_name"] == "myapp"
+
+
+def test_bucket_for_missing_path_400(client):
+    res = client.get("/api/v1/sessions/bucket-for", params={"project_path": "/no/such/xyz"})
+    assert res.status_code == 400
+
+
+def test_bucket_for_no_path_400(client):
+    res = client.get("/api/v1/sessions/bucket-for")
+    assert res.status_code == 400

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { z } from 'zod'
-import type { AgentBlock, AgentBlockInit, CacheEntry, ChatMessage, ConfigPayload, InspectorState, MessageRole, SessionInfo, SystemPromptPayload, ToolCallEntry, UsageState, VizEvent } from './types'
+import type { AgentBlock, AgentBlockInit, BucketInfo, CacheEntry, ChatMessage, ConfigPayload, InspectorState, MessageRole, SessionInfo, SystemPromptPayload, ToolCallEntry, UsageState, VizEvent } from './types'
 import { persistCacheEntry } from './lib/cache'
 import { vizWs, type WsStatus } from './lib/wsClient'
 
@@ -43,7 +43,7 @@ export function resetIdCounter() {
   _nextId = 1
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? ''
+export const API_BASE = import.meta.env.VITE_API_BASE ?? ''
 const API_KEY = import.meta.env.VITE_APP_API_KEY ?? ''
 
 function applyTheme(t: 'light' | 'dark') {
@@ -52,18 +52,18 @@ function applyTheme(t: 'light' | 'dark') {
 }
 
 /** A1 鉴权：所有 backend 请求需带 X-API-Key 头，值取自 VITE_APP_API_KEY */
-function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+export function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
   return { 'X-API-Key': API_KEY, ...extra }
 }
 
 const inflightRequests = new Map<string, Promise<{ messages: ChatMessage[], hasMore: boolean }>>()
 
-async function fetchMessages(id: string): Promise<{ messages: ChatMessage[], hasMore: boolean }> {
+async function fetchMessages(id: string, bucket: string): Promise<{ messages: ChatMessage[], hasMore: boolean }> {
   const existing = inflightRequests.get(id)
   if (existing) return existing
 
   const promise = (async () => {
-    const res = await fetch(`${API_BASE}/api/v1/chat/${id}`, { headers: authHeaders() })
+    const res = await fetch(`${API_BASE}/api/v1/chat/${id}?bucket=${encodeURIComponent(bucket)}`, { headers: authHeaders() })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
     const messages: ChatMessage[] = data.messages.map((m: Record<string, unknown>, i: number) =>
@@ -131,6 +131,9 @@ interface ChatStore {
   isStreaming: boolean
   sessionId: string | null
   sessions: SessionInfo[]
+  currentBucket: string
+  projectPath: string | null
+  buckets: BucketInfo[]
   sidebarOpen: boolean
   activeView: ViewName
   sessionsLoading: boolean
@@ -145,7 +148,10 @@ interface ChatStore {
   loadOlderMessages: () => Promise<void>
   sendMessage: (text: string) => Promise<void>
   addSystemMessage: (text: string) => void
-  loadSessions: () => Promise<void>
+  loadSessions: (bucket?: string) => Promise<void>
+  loadBuckets: () => Promise<void>
+  setCurrentBucket: (bucket: string, projectPath: string | null) => void
+  ensureBucketFor: (projectPath: string) => Promise<void>
   switchSession: (id: string) => Promise<void>
   deleteSession: (id: string) => Promise<void>
   renameSession: (id: string, title: string) => Promise<void>
@@ -178,6 +184,9 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   isStreaming: false,
   sessionId: null,
   sessions: [],
+  currentBucket: localStorage.getItem('af.currentBucket') ?? 'default_chat',
+  projectPath: null,
+  buckets: [],
   sidebarOpen: true,
   activeView: 'chat',
   sessionsLoading: false,
@@ -336,12 +345,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
-  loadSessions: async () => {
+  loadSessions: async (bucket?: string) => {
+    const b = bucket ?? get().currentBucket
     set({ sessionsLoading: true })
     try {
       // preview=0：侧边栏只需 title，不触发后端 enrich（避免 redis 读/写拖慢列表）。
       // 消息按需加载：hover 预取 + 切换会话 fetchMessages。
-      const res = await fetch(`${API_BASE}/api/v1/sessions?preview=0`, { headers: authHeaders() })
+      const res = await fetch(`${API_BASE}/api/v1/sessions?preview=0&bucket=${encodeURIComponent(b)}`, { headers: authHeaders() })
       if (res.ok) {
         const data = await res.json()
         const sessions: SessionInfo[] = Array.isArray(data) ? data : []
@@ -377,6 +387,31 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
   },
 
+  loadBuckets: async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/sessions/buckets`, { headers: authHeaders() })
+      if (res.ok) set({ buckets: await res.json() })
+    } catch { /* 静默 */ }
+  },
+
+  setCurrentBucket: (bucket, projectPath) => {
+    localStorage.setItem('af.currentBucket', bucket)
+    set({ currentBucket: bucket, projectPath })
+    void get().loadSessions(bucket)
+  },
+
+  ensureBucketFor: async (projectPath: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/sessions/bucket-for?project_path=${encodeURIComponent(projectPath)}`, { headers: authHeaders() })
+      if (!res.ok) { get().setError('项目目录无效'); return }
+      const { bucket } = await res.json()
+      get().setCurrentBucket(bucket, projectPath)
+      await get().loadBuckets()
+    } catch {
+      get().setError('切换项目失败')
+    }
+  },
+
   switchSession: async (id: string) => {
     const cached = get().messageCache.get(id)
     if (cached) {
@@ -386,7 +421,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       if (cached.hasMore) {
         set({ loadingFullHistory: true })
         const fetchStartedAt = Date.now()
-        fetchMessages(id).then(({ messages, hasMore }) => {
+        fetchMessages(id, get().currentBucket).then(({ messages, hasMore }) => {
           // H-FE3: fetch 期间若有 sendMessage 更新缓存（cachedAt > fetchStartedAt），跳过覆盖
           const current = get().messageCache.get(id)
           if (current && current.cachedAt > fetchStartedAt) {
@@ -418,7 +453,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     }
     set({ switchingSession: true })
     try {
-      const { messages, hasMore } = await fetchMessages(id)
+      const { messages, hasMore } = await fetchMessages(id, get().currentBucket)
       const entry: CacheEntry = { messages, hasMore, cachedAt: Date.now() }
       const cache = new Map(get().messageCache)
       cache.set(id, entry)
@@ -433,7 +468,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   deleteSession: async (id: string) => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/sessions/${id}`, { method: 'DELETE', headers: authHeaders() })
+      const res = await fetch(`${API_BASE}/api/v1/sessions/${id}?bucket=${encodeURIComponent(get().currentBucket)}`, { method: 'DELETE', headers: authHeaders() })
       if (!res.ok) return
       const { sessions, sessionId } = get()
       const next = sessions.filter((s) => s.session_id !== id)
@@ -450,7 +485,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
   renameSession: async (id: string, title: string) => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/sessions/${id}`, {
+      const res = await fetch(`${API_BASE}/api/v1/sessions/${id}?bucket=${encodeURIComponent(get().currentBucket)}`, {
         method: 'PATCH',
         headers: authHeaders({ 'Content-Type': 'application/json' }),
         body: JSON.stringify({ title }),
@@ -491,7 +526,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const existing = get().messageCache.get(id)
     if (existing && !existing.hasMore) return
     try {
-      const { messages, hasMore } = await fetchMessages(id)
+      const { messages, hasMore } = await fetchMessages(id, get().currentBucket)
       const entry: CacheEntry = { messages, hasMore, cachedAt: Date.now() }
       const cache = new Map(get().messageCache)
       cache.set(id, entry)
@@ -508,7 +543,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const oldestTs = messages[0].timestamp / 1000
     set({ loadingOlder: true })
     try {
-      const res = await fetch(`${API_BASE}/api/v1/chat/${sessionId}?limit=50&before=${oldestTs}`)
+      const res = await fetch(`${API_BASE}/api/v1/chat/${sessionId}?limit=50&before=${oldestTs}&bucket=${encodeURIComponent(get().currentBucket)}`, { headers: authHeaders() })
       if (!res.ok) { set({ loadingOlder: false }); return }
       const data = await res.json()
       const older: ChatMessage[] = data.messages.map((m: Record<string, unknown>, i: number) =>
@@ -542,6 +577,7 @@ async function sendViaSse(
     body: JSON.stringify({
       message: text,
       session_id: currentSessionId ?? undefined,
+      project_path: get().projectPath ?? undefined,
     }),
   })
 

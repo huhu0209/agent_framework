@@ -1,6 +1,9 @@
-import { Plus, SidebarSimple } from '@phosphor-icons/react'
+import { FolderOpen, Plus, SidebarSimple } from '@phosphor-icons/react'
+import { useState } from 'react'
 import { useChatStore } from '../../store'
 import type { SessionInfo } from '../../types'
+import { BucketSwitcher } from './BucketSwitcher'
+import { ProjectPicker } from './ProjectPicker'
 import { SearchInput } from './SearchInput'
 import { SessionItem } from './SessionItem'
 import { UserArea } from './UserArea'
@@ -50,6 +53,8 @@ export function SessionSidebar() {
   const toggleSidebar = useChatStore((s) => s.toggleSidebar)
   const sessionsLoading = useChatStore((s) => s.sessionsLoading)
   const prefetchSession = useChatStore((s) => s.prefetchSession)
+  const ensureBucketFor = useChatStore((s) => s.ensureBucketFor)
+  const [picking, setPicking] = useState(false)
 
   const q = searchQuery.trim().toLowerCase()
   const filtered = q ? sessions.filter((s) => s.title.toLowerCase().includes(q)) : sessions
@@ -67,6 +72,8 @@ export function SessionSidebar() {
         transition: 'margin-left .3s cubic-bezier(.4,0,.2,1)',
       }}
     >
+      <BucketSwitcher />
+
       <div className="flex items-center gap-2 px-3 pt-3.5 pb-2.5">
         <button
           onClick={newSession}
@@ -75,6 +82,15 @@ export function SessionSidebar() {
         >
           <Plus size={18} style={{ color: 'var(--brand)' }} />
           新对话
+        </button>
+        <button
+          onClick={() => setPicking(true)}
+          className="inline-flex items-center justify-center w-9 h-9 rounded-lg transition-colors hover:bg-[var(--sb-hover)]"
+          style={{ color: 'var(--sb-muted)' }}
+          aria-label="添加项目"
+          title="添加项目"
+        >
+          <FolderOpen size={20} />
         </button>
         <button
           onClick={toggleSidebar}
@@ -117,6 +133,14 @@ export function SessionSidebar() {
       </nav>
 
       <UserArea />
+
+      {picking && (
+        <ProjectPicker
+          rootPath={navigator.platform.toLowerCase().includes('win') ? 'C:\\' : '/'}
+          onPick={(abs) => { setPicking(false); void ensureBucketFor(abs) }}
+          onClose={() => setPicking(false)}
+        />
+      )}
     </aside>
   )
 }

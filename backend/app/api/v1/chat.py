@@ -10,6 +10,8 @@ import logging
 import time
 from typing import Any, AsyncGenerator
 
+from pathlib import Path as FilePath
+
 from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query, Request
 from starlette.responses import StreamingResponse
 
@@ -23,6 +25,7 @@ from agent_framework.llm.base import (
 )
 from agent_framework.transcript import TranscriptConsumer
 from app.models import SESSION_ID_RE, ChatRequest, HistoryResponse, RenameRequest
+from app.services.session import _bucket_for
 
 logger = logging.getLogger(__name__)
 
@@ -138,19 +141,29 @@ async def create_chat(req: ChatRequest, request: Request):
     if not req.message.strip():
         raise HTTPException(400, "message is required")
 
+    bucket = _bucket_for(req.project_path)
+    working_dir: str | None = None
+    if req.project_path is not None:
+        resolved = FilePath(req.project_path).expanduser().resolve()
+        if not resolved.is_dir():
+            raise HTTPException(status_code=400, detail="project_path must be an existing directory")
+        working_dir = str(resolved)
+
     sm = request.app.state.session_manager
     factory = request.app.state.agent_factory
 
     is_resume = False
     if req.session_id:
-        agent_loop = factory.create_loop()
-        session = await sm.get_or_restore(req.session_id, agent_loop)
+        agent_loop = factory.create_loop(working_dir=working_dir)
+        session = await sm.get_or_restore(req.session_id, agent_loop, bucket=bucket)
         if session is None:
             raise HTTPException(404, "session not found")
         is_resume = True
     else:
-        agent_loop = factory.create_loop()
-        session = await sm.create(agent_loop)
+        agent_loop = factory.create_loop(working_dir=working_dir)
+        session = await sm.create(
+            agent_loop, bucket=bucket, project_path=req.project_path,
+        )
 
     # viz 事件层：构造 runner（bus 不可用时跳过，退回纯 SSE）
     bus = getattr(request.app.state, "bus", None)
@@ -164,7 +177,7 @@ async def create_chat(req: ChatRequest, request: Request):
         "content": req.message,
         "timestamp": time.time(),
     })
-    await sm.persist_messages(session.session_id, session.messages)
+    await sm.persist_messages(session.session_id, session.messages, bucket=bucket)
 
     async def event_stream() -> AsyncGenerator[str, None]:
         loop = session.agent_loop
@@ -192,7 +205,7 @@ async def create_chat(req: ChatRequest, request: Request):
                         "blocks": content,
                         "timestamp": time.time(),
                     })
-                    await sm.persist_messages(session.session_id, session.messages)
+                    await sm.persist_messages(session.session_id, session.messages, bucket=bucket)
                     # 更新会话标题（取第一条用户消息前 50 字符）
                     if len(session.messages) <= 2:
                         await sm.update_title(session.session_id, req.message[:50])
@@ -225,6 +238,7 @@ async def create_chat(req: ChatRequest, request: Request):
 async def get_history(
     request: Request,
     session_id: str = Path(pattern=SESSION_ID_RE.pattern),
+    bucket: str = Query("default_chat"),
     limit: int | None = Query(None, ge=1, le=500),  # H-A4: 上限防滥用
     before: str | None = Query(None),  # H-A4
 ) -> HistoryResponse:
@@ -235,7 +249,7 @@ async def get_history(
             before_ts = float(before)
         except (TypeError, ValueError):
             raise HTTPException(422, "before must be a numeric timestamp")  # H-A4
-    result = await sm.get_messages(session_id, limit=limit, before=before_ts)
+    result = await sm.get_messages(session_id, bucket=bucket, limit=limit, before=before_ts)
     if result is None:
         raise HTTPException(404, "session not found")
     messages, has_more, next_cursor = result
@@ -248,21 +262,58 @@ async def get_history(
 
 
 # ---------------------------------------------------------------------------
+# GET /sessions/buckets — 列出所有桶(必须在 /sessions 之前定义,避免被
+# /sessions/{session_id} 阴影匹配 "buckets")
+# ---------------------------------------------------------------------------
+
+
+@router.get("/sessions/buckets")
+async def list_buckets(request: Request) -> list[dict]:
+    """扫描 sessions/ 子目录,返回桶列表(default_chat 在前)。"""
+    sm = request.app.state.session_manager
+    storage = getattr(sm, "_storage_dir", None)
+    if storage is None or not storage.exists():
+        return [{"bucket": "default_chat", "display_name": "default_chat"}]
+    buckets: list[dict] = []
+    if (storage / "default_chat").exists():
+        buckets.append({"bucket": "default_chat", "display_name": "default_chat"})
+    for d in sorted(storage.iterdir()):
+        if d.is_dir() and d.name != "default_chat":
+            display = d.name.rsplit("_", 1)[0] if "_" in d.name else d.name
+            buckets.append({"bucket": d.name, "display_name": display})
+    return buckets
+
+
+# ---------------------------------------------------------------------------
 # GET /sessions — 列出历史会话
 # ---------------------------------------------------------------------------
 
 PREVIEW_SESSION_LIMIT = 10  # Only enrich the N most recent sessions to limit I/O
 
 
+@router.get("/sessions/bucket-for")
+async def bucket_for(project_path: str | None = Query(None)) -> dict:
+    """返回 project_path 对应的桶名(供前端选项目后立即切桶)。"""
+    if not project_path:
+        raise HTTPException(status_code=400, detail="project_path is required")
+    resolved = FilePath(project_path).expanduser().resolve()
+    if not resolved.is_dir():
+        raise HTTPException(status_code=400, detail="project_path must be an existing directory")
+    bucket = _bucket_for(str(resolved))
+    display = bucket.rsplit("_", 1)[0] if "_" in bucket else bucket
+    return {"bucket": bucket, "display_name": display}
+
+
 @router.get("/sessions")
 async def list_sessions(
     request: Request,
+    bucket: str = Query("default_chat"),
     preview: int = Query(0, ge=0, le=50),
     limit: int = Query(50, ge=1, le=200),  # H-A5: 分页
     offset: int = Query(0, ge=0),  # H-A5: 分页
 ) -> list[dict]:
     sm = request.app.state.session_manager
-    sessions = await sm.list_sessions()
+    sessions = await sm.list_sessions(bucket=bucket)
     paged = sessions[offset:offset + limit]  # H-A5: 分页切片
     if preview <= 0:
         return paged
@@ -297,9 +348,10 @@ async def list_sessions(
 async def delete_session(
     request: Request,
     session_id: str = Path(pattern=SESSION_ID_RE.pattern),
+    bucket: str = Query("default_chat"),
 ) -> dict:
     sm = request.app.state.session_manager
-    deleted = await sm.delete_session(session_id)
+    deleted = await sm.delete_session(session_id, bucket=bucket)
     if not deleted:
         raise HTTPException(404, "session not found")
     return {"status": "ok"}
@@ -313,10 +365,11 @@ async def delete_session(
 async def rename_session(
     request: Request,
     session_id: str = Path(pattern=SESSION_ID_RE.pattern),
+    bucket: str = Query("default_chat"),
     req: RenameRequest = ...,  # body — required
 ) -> dict:
     sm = request.app.state.session_manager
-    updated = await sm.update_title(session_id, req.title)
+    updated = await sm.update_title(session_id, req.title, bucket=bucket)
     if not updated:
         raise HTTPException(404, "session not found")
     return {"status": "ok"}

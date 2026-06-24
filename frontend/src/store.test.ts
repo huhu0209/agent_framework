@@ -561,3 +561,90 @@ describe('theme / searchQuery / composerDraft', () => {
     expect(useChatStore.getState().composerDraft).toBe('你好')
   })
 })
+
+describe('store bucket state', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('loadSessions sends bucket query', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => [] })
+
+    await useChatStore.getState().loadSessions('projA_abcd1234')
+
+    const url = mockFetch.mock.calls[0][0] as string
+    expect(url).toContain('bucket=projA_abcd1234')
+  })
+
+  it('setCurrentBucket persists to localStorage and updates state', () => {
+    useChatStore.getState().setCurrentBucket('projB_ffff', '/tmp/projB')
+
+    expect(useChatStore.getState().currentBucket).toBe('projB_ffff')
+    expect(useChatStore.getState().projectPath).toBe('/tmp/projB')
+    expect(localStorage.getItem('af.currentBucket')).toBe('projB_ffff')
+  })
+
+  // 修复跨桶 404：fetchMessages 透传 currentBucket（经由 switchSession 触发）
+  it('switchSession fetchMessages sends currentBucket query', async () => {
+    useChatStore.setState({ currentBucket: 'projA_abcd1234', messageCache: new Map() })
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ session_id: 's1', messages: [] }),
+    })
+
+    await useChatStore.getState().switchSession('s1')
+
+    const url = mockFetch.mock.calls[0][0] as string
+    expect(url).toContain('/api/v1/chat/s1')
+    expect(url).toContain('bucket=projA_abcd1234')
+  })
+
+  it('deleteSession sends currentBucket query', async () => {
+    useChatStore.setState({
+      currentBucket: 'projA_abcd1234',
+      sessions: [{ session_id: 'a', title: 'A', created_at: 1 }],
+      sessionId: null,
+    })
+    mockFetch.mockResolvedValueOnce({ ok: true })
+
+    await useChatStore.getState().deleteSession('a')
+
+    const url = mockFetch.mock.calls[0][0] as string
+    expect(url).toContain('/api/v1/sessions/a')
+    expect(url).toContain('bucket=projA_abcd1234')
+  })
+
+  it('renameSession sends currentBucket query', async () => {
+    useChatStore.setState({
+      currentBucket: 'projA_abcd1234',
+      sessions: [{ session_id: 'a', title: 'Old', created_at: 1 }],
+    })
+    mockFetch.mockResolvedValueOnce({ ok: true })
+
+    await useChatStore.getState().renameSession('a', 'New')
+
+    const url = mockFetch.mock.calls[0][0] as string
+    expect(url).toContain('/api/v1/sessions/a')
+    expect(url).toContain('bucket=projA_abcd1234')
+  })
+
+  // loadOlderMessages：bucket 透传 + 补 authHeaders（修复历史 401）
+  it('loadOlderMessages sends currentBucket query and authHeaders', async () => {
+    useChatStore.setState({
+      currentBucket: 'projA_abcd1234',
+      sessionId: 's1',
+      messages: [{ id: 'm1', role: 'user', timestamp: 1700000000000, content: 'hi' }],
+    })
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ messages: [], has_more: false }),
+    })
+
+    await useChatStore.getState().loadOlderMessages()
+
+    const [url, options] = mockFetch.mock.calls[0]
+    expect(url).toContain('/api/v1/chat/s1')
+    expect(url).toContain('bucket=projA_abcd1234')
+    expect((options.headers as Record<string, string>)['X-API-Key']).toBeDefined()
+  })
+})
