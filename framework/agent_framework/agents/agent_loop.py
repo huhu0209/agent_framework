@@ -205,6 +205,11 @@ class AgentLoop(Agent):
         tools = self.router.registry.get_definitions()
         return CompletionConfig(model=self.model, messages=messages, tools=tools)
 
+    def effective_context_window(self) -> int:
+        """当前有效上下文窗口(token),与 _maybe_compact 取值逻辑一致(三级优先级)。"""
+        config = self._build_config(self._messages)
+        return get_effective_window(self.adapter, config)
+
     def _extract_tool_calls(self, result: CompletionResult) -> list[ToolUseBlock]:
         return [b for b in result.content if isinstance(b, ToolUseBlock)]
 
@@ -558,7 +563,14 @@ class AgentLoop(Agent):
 
             yield LoopEvent(
                 type="step", step=step,
-                data={"stop_reason": result.stop_reason.value, "content": _serialize_content(result)},
+                data={
+                    "stop_reason": result.stop_reason.value,
+                    "content": _serialize_content(result),
+                    "usage": {
+                        "input": result.usage.input_tokens,
+                        "output": result.usage.output_tokens,
+                    },
+                },
                 plan=plan_snapshot,
             )
 

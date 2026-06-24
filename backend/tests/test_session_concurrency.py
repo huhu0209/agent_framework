@@ -18,12 +18,14 @@ async def test_session_manager_has_history_lock() -> None:
 
 async def test_append_history_concurrent_produces_complete_lines(tmp_path: Path) -> None:
     """H-A6: 并发 _append_history 每行完整 JSON（锁保护，不交错）。"""
+    from app.services.session import DEFAULT_BUCKET
+
     sm = SessionManager(storage_dir=tmp_path)
     await asyncio.gather(*[
-        sm._append_history(f"{i:032x}", f"title {i}") for i in range(20)
+        sm._append_history(f"{i:032x}", DEFAULT_BUCKET, f"title {i}") for i in range(20)
     ])
 
-    history = (tmp_path / "history.jsonl").read_text()
+    history = (tmp_path / DEFAULT_BUCKET / "history.jsonl").read_text()
     lines = [l for l in history.strip().split("\n") if l.strip()]
     assert len(lines) == 20  # 20 行
     for line in lines:

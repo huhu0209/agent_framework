@@ -699,3 +699,31 @@ def test_system_prompt_blocks_empty_without_profile() -> None:
     """无 profile 时 system_prompt_blocks 返回空列表（不抛错）。"""
     loop = _make_loop(_make_mock_adapter())
     assert loop.system_prompt_blocks == []
+
+
+@pytest.mark.asyncio
+async def test_step_event_carries_usage():
+    """step 事件 data 携带本次调用的 input/output usage。"""
+    adapter = _make_mock_adapter()
+    adapter.complete.return_value = CompletionResult(
+        id="test-id",
+        content=[TextBlock(text="回答")],
+        model="mock",
+        stop_reason=StopReason.END_TURN,
+        usage=UsageStats(input_tokens=1234, output_tokens=567),
+    )
+    loop = _make_loop(adapter)
+    events = await _collect_events(loop, "你好")
+
+    step_events = [e for e in events if e.type == "step"]
+    assert step_events, "应至少有一个 step 事件"
+    assert step_events[0].data["usage"] == {"input": 1234, "output": 567}
+
+
+def test_effective_context_window_uses_provider_info():
+    """effective_context_window 走三级取值,默认取 provider info。"""
+    from conftest import MockAdapter  # max_context_tokens=100_000
+
+    adapter = MockAdapter("回答")
+    loop = _make_loop(adapter)
+    assert loop.effective_context_window() == 100_000

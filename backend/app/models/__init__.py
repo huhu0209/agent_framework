@@ -16,6 +16,7 @@ MAX_MESSAGE_LENGTH = 8000
 class ChatRequest(BaseModel):
     message: str = Field(..., max_length=MAX_MESSAGE_LENGTH)
     session_id: str | None = None
+    project_path: str | None = None
 
     @field_validator("session_id")
     @classmethod
@@ -23,6 +24,14 @@ class ChatRequest(BaseModel):
         """验证是否为 32位十六进制小写字符串（即标准 UUID 去掉连字符的格式）"""
         if v is not None and not SESSION_ID_RE.match(v):
             raise ValueError("invalid session_id format")
+        return v
+
+    @field_validator("project_path")
+    @classmethod
+    def validate_project_path(cls, v: str | None) -> str | None:
+        """空白字符串归一化为 None"""
+        if v is not None and not v.strip():
+            return None
         return v
 
 

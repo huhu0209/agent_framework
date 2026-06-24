@@ -18,7 +18,7 @@ describe('InspectorPanel', () => {
     setState({
       inspectorOpen: true,
       wsStatus: 'disconnected',
-      inspector: { config: null, systemPrompt: null, toolCalls: [] },
+      inspector: { config: null, systemPrompt: null, toolCalls: [], usage: null },
     })
     render(<InspectorPanel />)
     expect(screen.getAllByText(/观测面板离线/).length).toBeGreaterThan(0)
@@ -33,10 +33,21 @@ describe('InspectorPanel', () => {
         config: { model: 'stub-model', max_steps: 5, profile: null, permission_mode: null, tools: ['search'] },
         systemPrompt: null,
         toolCalls: [],
+        usage: null,
       },
     })
     render(<InspectorPanel />)
     expect(screen.getByText('stub-model')).toBeDefined()
     expect(screen.getByText('已连接')).toBeDefined()
+  })
+
+  it('显示用量 section 标题', () => {
+    setState({
+      inspectorOpen: true,
+      wsStatus: 'connected',
+      inspector: { config: null, systemPrompt: null, toolCalls: [], usage: null },
+    })
+    render(<InspectorPanel />)
+    expect(screen.getByText('用量')).toBeDefined()
   })
 })

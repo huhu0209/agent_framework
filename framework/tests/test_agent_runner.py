@@ -262,3 +262,59 @@ def test_emit_snapshot_returns_config_and_system_prompt() -> None:
     assert all(e["session_id"] == "test-session" for e in events)
     assert events[0]["payload"]["model"] == "mock-model"
     assert isinstance(events[1]["payload"]["text"], str)
+
+
+# --- T3: step usage → usage VizEvent（单步 + 累计 + max_context）---
+
+
+async def test_step_with_usage_emits_usage_vizevent() -> None:
+    """step 携带 usage → 发出 usage VizEvent,字段含本次 + 累计 + max_context。"""
+    runner = _make_runner()
+    event = LoopEvent(type="step", step=1, data={
+        "stop_reason": "tool_use",
+        "usage": {"input": 1000, "output": 200},
+    })
+    _, viz_events = await _collect_events(runner, event)
+    usages = _find_by_type(viz_events, "usage")
+    assert len(usages) == 1
+    p = usages[0]["payload"]
+    assert p["input"] == 1000
+    assert p["output"] == 200
+    assert p["cumulative_input"] == 1000
+    assert p["cumulative_output"] == 200
+    assert p["max_context"] == 128000  # mock ProviderInfo 默认值
+
+
+async def test_usage_cumulative_across_steps() -> None:
+    """多步 usage 累计正确递增。"""
+    runner = _make_runner()
+    e1 = LoopEvent(type="step", step=1, data={
+        "stop_reason": "tool_use", "usage": {"input": 1000, "output": 200},
+    })
+    e2 = LoopEvent(type="step", step=2, data={
+        "stop_reason": "tool_use", "usage": {"input": 1500, "output": 300},
+    })
+    _, viz_events = await _collect_events(runner, e1, e2)
+    usages = _find_by_type(viz_events, "usage")
+    assert len(usages) == 2
+    assert usages[1]["payload"]["cumulative_input"] == 2500
+    assert usages[1]["payload"]["cumulative_output"] == 500
+
+
+async def test_step_without_usage_emits_no_usage_vizevent() -> None:
+    """step 不带 usage(如旧客户端兼容)不发 usage 事件,仍正常发 thinking/done。"""
+    runner = _make_runner()
+    event = LoopEvent(type="step", step=1, data={"stop_reason": "tool_use"})
+    _, viz_events = await _collect_events(runner, event)
+    assert _find_by_type(viz_events, "usage") == []
+    assert len(_find_by_type(viz_events, "thinking")) == 1
+
+
+async def test_usage_vizevent_carries_session_id() -> None:
+    runner = _make_runner()
+    event = LoopEvent(type="step", step=1, data={
+        "stop_reason": "tool_use", "usage": {"input": 1, "output": 1},
+    })
+    _, viz_events = await _collect_events(runner, event)
+    usages = _find_by_type(viz_events, "usage")
+    assert usages[0]["session_id"] == "test-session"

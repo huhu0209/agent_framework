@@ -49,25 +49,31 @@ class TestRedisRuntimeFallback:
 
     async def test_delete_session_swallows_redis_timeout(self, tmp_path: Path) -> None:
         """删会话：redis.delete 超时 → 静默，transcript 文件照常删除。"""
+        from app.services.session import DEFAULT_BUCKET
+
         storage_dir = tmp_path / "sessions"
-        storage_dir.mkdir()
+        bucket_dir = storage_dir / DEFAULT_BUCKET
+        bucket_dir.mkdir(parents=True)
         sid = "a" * 32
-        (storage_dir / f"{sid}.jsonl").write_text(
+        (bucket_dir / f"{sid}.jsonl").write_text(
             '{"role":"user","content":"hi","timestamp":1}\n'
         )
         sm = SessionManager(storage_dir=storage_dir, redis_client=_raising_redis("delete"))
         await sm.delete_session(sid)  # 不抛即通过
-        assert not (storage_dir / f"{sid}.jsonl").exists()
+        assert not (bucket_dir / f"{sid}.jsonl").exists()
 
     async def test_update_title_swallows_redis_timeout(self, tmp_path: Path) -> None:
         """重命名：redis.delete(meta) 超时 → 静默，history.jsonl 标题照常更新。"""
+        from app.services.session import DEFAULT_BUCKET
+
         storage_dir = tmp_path / "sessions"
-        storage_dir.mkdir()
+        bucket_dir = storage_dir / DEFAULT_BUCKET
+        bucket_dir.mkdir(parents=True)
         sid = "a" * 32
-        (storage_dir / "history.jsonl").write_text(
+        (bucket_dir / "history.jsonl").write_text(
             json.dumps({"session_id": sid, "title": "old", "created_at": 1}) + "\n"
         )
         sm = SessionManager(storage_dir=storage_dir, redis_client=_raising_redis("delete"))
         await sm.update_title(sid, "new")  # 不抛即通过
-        saved = (storage_dir / "history.jsonl").read_text()
+        saved = (bucket_dir / "history.jsonl").read_text()
         assert "new" in saved and "old" not in saved

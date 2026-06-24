@@ -53,8 +53,9 @@ async def test_get_messages_caches_to_redis_after_cold_read(sm_with_redis: Sessi
     messages, _, _ = result
     assert any(m["role"] == "user" for m in messages)
 
-    # 验证 Redis 已缓存
-    cached = await rdb.zrange(f"session:{sid}:messages", 0, -1)
+    # 验证 Redis 已缓存（key 带 bucket 前缀）
+    from app.services.session import DEFAULT_BUCKET
+    cached = await rdb.zrange(f"session:{DEFAULT_BUCKET}:{sid}:messages", 0, -1)
     assert len(cached) > 0
 
 
@@ -69,7 +70,9 @@ async def test_get_messages_hits_redis_cache(sm_with_redis: SessionManager, rdb)
     await sm.get_messages(sid)
 
     # 删除 JSONL 文件 — 如果 Redis 不起作用就会失败
-    jsonl_path = sm._storage_dir / f"{sid}.jsonl"
+    from app.services.session import DEFAULT_BUCKET
+
+    jsonl_path = sm._storage_dir / DEFAULT_BUCKET / f"{sid}.jsonl"
     jsonl_path.unlink()
 
     # 第二次应从 Redis 命中
@@ -91,12 +94,15 @@ async def test_delete_session_clears_redis(sm_with_redis: SessionManager, rdb) -
     await sm.delete_session(sid)
 
     # Redis 应已清理
-    assert await rdb.exists(f"session:{sid}:messages") == 0
+    from app.services.session import DEFAULT_BUCKET
+    assert await rdb.exists(f"session:{DEFAULT_BUCKET}:{sid}:messages") == 0
 
 
 async def _create_session_with_message(sm: SessionManager) -> str:
     """辅助：创建 session 并写入一条消息到 transcript 和内存。"""
     from unittest.mock import MagicMock
+
+    from app.services.session import DEFAULT_BUCKET
 
     loop = MagicMock()
     session = await sm.create(loop, title="test")
@@ -105,8 +111,8 @@ async def _create_session_with_message(sm: SessionManager) -> str:
     session.messages.append({"role": "user", "content": "hello", "timestamp": 1000.0})
     session.messages.append({"role": "agent", "blocks": [{"type": "text", "text": "hi"}], "timestamp": 1001.0})
 
-    # 直接写入 JSONL（模拟 TranscriptWriter 的输出）
-    jsonl_path = sm._storage_dir / f"{session.session_id}.jsonl"
+    # 直接写入 JSONL（模拟 TranscriptWriter 的输出）— 按桶布局
+    jsonl_path = sm._storage_dir / DEFAULT_BUCKET / f"{session.session_id}.jsonl"
     with open(jsonl_path, "a", encoding="utf-8") as f:
         f.write(json.dumps({"type": "user", "content": "hello", "timestamp": 1000.0}, ensure_ascii=False) + "\n")
         f.write(json.dumps({"type": "assistant", "content": [{"type": "text", "text": "hi"}], "timestamp": 1001.0}, ensure_ascii=False) + "\n")
