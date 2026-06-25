@@ -727,3 +727,33 @@ def test_effective_context_window_uses_provider_info():
     adapter = MockAdapter("回答")
     loop = _make_loop(adapter)
     assert loop.effective_context_window() == 100_000
+
+
+# === allowed_skills 过滤测试（Task 3）===
+
+
+def test_agent_loop_allowed_skills_filters_catalog(tmp_path):
+    """构造带 allowed_skills 的 loop,system_prompt 只含被允许的 skill。"""
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "SKILL.md").write_text(
+        "---\nname: a\ndescription: Alpha skill\n---\n", encoding="utf-8"
+    )
+    (tmp_path / "b").mkdir()
+    (tmp_path / "b" / "SKILL.md").write_text(
+        "---\nname: b\ndescription: Beta skill\n---\n", encoding="utf-8"
+    )
+    adapter = _make_mock_adapter()
+    loop = _make_loop(adapter, skill_dirs=[tmp_path], allowed_skills=["a"])
+    assert "Alpha skill" in loop.system_prompt_text
+    assert "Beta skill" not in loop.system_prompt_text
+
+
+def test_agent_loop_allowed_skills_none_keeps_all(tmp_path):
+    """allowed_skills=None 时保留全部 skill(同原行为)。"""
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "SKILL.md").write_text(
+        "---\nname: a\ndescription: Alpha skill\n---\n", encoding="utf-8"
+    )
+    adapter = _make_mock_adapter()
+    loop = _make_loop(adapter, skill_dirs=[tmp_path])
+    assert "Alpha skill" in loop.system_prompt_text

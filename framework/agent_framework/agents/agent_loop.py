@@ -95,6 +95,7 @@ class AgentLoop(Agent):
         enable_subagent: bool = False,
         team_manager: TeamManager | None = None,
         config_loader: ConfigLoader | None = None,
+        allowed_skills: list[str] | None = None,
     ) -> None:
         self.adapter = adapter
         self.model = model
@@ -110,6 +111,7 @@ class AgentLoop(Agent):
         self._messages_at_last_call = 0
         self._messages: list[Message] = []
         self.profile = profile
+        self._allowed_skills = allowed_skills
 
         # Skills 集成
         self._skill_registry = SkillRegistry(skill_dirs) if skill_dirs else None
@@ -138,10 +140,11 @@ class AgentLoop(Agent):
 
         if self.profile is not None:
             self._system_prompt_text = self._assembler.render(
-                self._config_loader or ConfigLoader(), self.profile
+                self._config_loader or ConfigLoader(), self.profile,
+                allowed_skills=self._allowed_skills,
             )
         elif self._skill_registry is not None:
-            catalog = self._skill_registry.describe_available()
+            catalog = self._skill_registry.describe_available(self._allowed_skills)
             self._system_prompt_text = (
                 f"{system_prompt}\n\n"
                 f"可用 Skills（按需调用 load_skill 加载完整指令）：\n{catalog}"
