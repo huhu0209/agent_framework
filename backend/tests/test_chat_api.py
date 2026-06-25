@@ -88,13 +88,13 @@ class _FakeFactory:
         self._events = events or _make_done_events()
         self.last_working_dir: str | None = None
 
-    def create_loop(self, working_dir: str | None = None) -> _FakeAgentLoop:
+    def create_loop(self, working_dir: str | None = None, agent_name: str | None = None) -> _FakeAgentLoop:
         self.last_working_dir = working_dir
         return _FakeAgentLoop(self._events)
 
 
 class _FailingFactory:
-    def create_loop(self, working_dir: str | None = None) -> _FailingAgentLoop:
+    def create_loop(self, working_dir: str | None = None, agent_name: str | None = None) -> _FailingAgentLoop:
         return _FailingAgentLoop()
 
 
@@ -818,3 +818,22 @@ def test_bucket_for_missing_path_400(client):
 def test_bucket_for_no_path_400(client):
     res = client.get("/api/v1/sessions/bucket-for")
     assert res.status_code == 400
+
+
+def test_chat_request_accepts_agent_name(client: TestClient) -> None:
+    """Task6: ChatRequest 接受 agent_name 字段,不报 422。
+
+    本 task 只铺路(模型/Session/stub factory 签名兼容);
+    透传到 factory.create_loop 的断言留到 Task 7 chat.py 接线后。
+    """
+    res = client.post("/api/v1/chat", json={"message": "hi", "agent_name": "reviewer"})
+    assert res.status_code == 200
+
+
+def test_chat_request_model_has_agent_name_field() -> None:
+    """Task6: ChatRequest 模型直接构造时 agent_name 可传入且默认 None。"""
+    from app.models import ChatRequest
+    req = ChatRequest(message="hi", agent_name="reviewer")
+    assert req.agent_name == "reviewer"
+    req2 = ChatRequest(message="hi")  # 默认 None
+    assert req2.agent_name is None

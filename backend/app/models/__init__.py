@@ -17,6 +17,7 @@ class ChatRequest(BaseModel):
     message: str = Field(..., max_length=MAX_MESSAGE_LENGTH)
     session_id: str | None = None
     project_path: str | None = None
+    agent_name: str | None = None  # 选用哪个具名 agent;None=默认
 
     @field_validator("session_id")
     @classmethod

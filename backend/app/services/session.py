@@ -70,6 +70,7 @@ class ChatSession:
     session_id: str
     bucket: str = DEFAULT_BUCKET
     project_path: str | None = None
+    agent_name: str | None = None  # 该会话绑定的 agent(None=默认)
     messages: list[dict] = field(default_factory=list)
     agent_loop: AgentLoop | None = None
     task: asyncio.Task | None = None  # type: ignore[type-arg]
@@ -134,6 +135,7 @@ class SessionManager:
         bucket: str = DEFAULT_BUCKET,
         project_path: str | None = None,
         title: str = "",
+        agent_name: str | None = None,
     ) -> ChatSession:
         sid = uuid.uuid4().hex
         writer = None
@@ -146,6 +148,7 @@ class SessionManager:
             session_id=sid,
             bucket=bucket,
             project_path=project_path,
+            agent_name=agent_name,
             agent_loop=agent_loop,
             transcript_writer=writer,
         )
