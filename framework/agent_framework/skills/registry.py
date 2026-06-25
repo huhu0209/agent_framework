@@ -47,12 +47,19 @@ class SkillRegistry:
         paths = loader.discover("skills")
         return cls(skills_dirs=list(reversed(paths)))
 
-    def describe_available(self) -> str:
-        """L1: 轻量目录，注入 system prompt。自动检查更新。仅显示 active skills。"""
+    def describe_available(self, names: list[str] | None = None) -> str:
+        """L1: 轻量目录，注入 system prompt。自动检查更新。仅显示 active skills。
+
+        names 给定时，只返回名单内的 active skill（用于 agent 按技能名单过滤）。
+        names=None 时返回全部（同原行为）。
+        """
         self._maybe_refresh()
         active = {
             n: d for n, d in self._documents.items() if d.active
         }
+        if names is not None:
+            wanted = set(names)
+            active = {n: d for n, d in active.items() if n in wanted}
         if not active:
             return "(没有可用的 skills)"
         lines = []

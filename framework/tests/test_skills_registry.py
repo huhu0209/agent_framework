@@ -513,3 +513,35 @@ class TestIsActive:
     def test_unknown_skill_returns_false(self):
         registry = SkillRegistry([])
         assert registry.is_active("nope") is False
+
+
+def test_describe_available_filters_by_names(tmp_path):
+    """names 给定时,只返回名单内的 active skill。"""
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "SKILL.md").write_text(
+        "---\nname: a\ndescription: Alpha skill\n---\nbody a", encoding="utf-8"
+    )
+    (tmp_path / "b").mkdir()
+    (tmp_path / "b" / "SKILL.md").write_text(
+        "---\nname: b\ndescription: Beta skill\n---\nbody b", encoding="utf-8"
+    )
+    from agent_framework.skills.registry import SkillRegistry
+    reg = SkillRegistry([tmp_path])
+
+    full = reg.describe_available()
+    assert "Alpha skill" in full and "Beta skill" in full
+
+    filtered = reg.describe_available(["a"])
+    assert "Alpha skill" in filtered
+    assert "Beta skill" not in filtered
+
+
+def test_describe_available_names_none_returns_all(tmp_path):
+    """names=None 时行为不变(返回全部 active)。"""
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "SKILL.md").write_text(
+        "---\nname: a\ndescription: Alpha\n---\n", encoding="utf-8"
+    )
+    from agent_framework.skills.registry import SkillRegistry
+    reg = SkillRegistry([tmp_path])
+    assert "Alpha" in reg.describe_available(None)
