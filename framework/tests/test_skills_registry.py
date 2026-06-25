@@ -160,6 +160,45 @@ class TestDescribeAvailable:
         registry = SkillRegistry([skills_dir])
         assert registry.describe_available() == "(没有可用的 skills)"
 
+    def test_filters_by_names(self, tmp_path):
+        """names 给定时,只返回名单内的 active skill。"""
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        create_skill(skills_dir, "a", "Alpha skill")
+        create_skill(skills_dir, "b", "Beta skill")
+
+        registry = SkillRegistry([skills_dir])
+        full = registry.describe_available()
+        assert "Alpha skill" in full and "Beta skill" in full
+
+        filtered = registry.describe_available(["a"])
+        assert "Alpha skill" in filtered
+        assert "Beta skill" not in filtered
+
+    def test_names_none_returns_all(self, tmp_path):
+        """names=None 时行为不变(返回全部 active)。"""
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        create_skill(skills_dir, "a", "Alpha")
+
+        registry = SkillRegistry([skills_dir])
+        assert "Alpha" in registry.describe_available(None)
+
+    def test_empty_names_list_returns_placeholder(self, tmp_path):
+        """names=[](空名单,非 None)返回占位符,与 None 返回全部区分。
+
+        钉住"names is not None"语义,防未来被误改成 truthy 判断。
+        """
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        create_skill(skills_dir, "a", "Alpha")
+
+        registry = SkillRegistry([skills_dir])
+        # 空名单 → 过滤后无 active skill → 占位符
+        assert registry.describe_available([]) == "(没有可用的 skills)"
+        # 对照:None 仍返回全部
+        assert "Alpha" in registry.describe_available(None)
+
 
 class TestLoadFullText:
     def test_existing_skill_returns_wrapped_body(self, tmp_path):
@@ -513,35 +552,3 @@ class TestIsActive:
     def test_unknown_skill_returns_false(self):
         registry = SkillRegistry([])
         assert registry.is_active("nope") is False
-
-
-def test_describe_available_filters_by_names(tmp_path):
-    """names 给定时,只返回名单内的 active skill。"""
-    (tmp_path / "a").mkdir()
-    (tmp_path / "a" / "SKILL.md").write_text(
-        "---\nname: a\ndescription: Alpha skill\n---\nbody a", encoding="utf-8"
-    )
-    (tmp_path / "b").mkdir()
-    (tmp_path / "b" / "SKILL.md").write_text(
-        "---\nname: b\ndescription: Beta skill\n---\nbody b", encoding="utf-8"
-    )
-    from agent_framework.skills.registry import SkillRegistry
-    reg = SkillRegistry([tmp_path])
-
-    full = reg.describe_available()
-    assert "Alpha skill" in full and "Beta skill" in full
-
-    filtered = reg.describe_available(["a"])
-    assert "Alpha skill" in filtered
-    assert "Beta skill" not in filtered
-
-
-def test_describe_available_names_none_returns_all(tmp_path):
-    """names=None 时行为不变(返回全部 active)。"""
-    (tmp_path / "a").mkdir()
-    (tmp_path / "a" / "SKILL.md").write_text(
-        "---\nname: a\ndescription: Alpha\n---\n", encoding="utf-8"
-    )
-    from agent_framework.skills.registry import SkillRegistry
-    reg = SkillRegistry([tmp_path])
-    assert "Alpha" in reg.describe_available(None)
