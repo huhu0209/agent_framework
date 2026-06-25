@@ -837,3 +837,44 @@ def test_chat_request_model_has_agent_name_field() -> None:
     assert req.agent_name == "reviewer"
     req2 = ChatRequest(message="hi")  # 默认 None
     assert req2.agent_name is None
+
+
+# --- Task 7: agent_name 透传到 factory.create_loop ---
+
+
+class _CapturingFactory:
+    """记录 create_loop 收到的 agent_name(关键字调用,兼容多种参数顺序)。"""
+
+    def __init__(self, events: list[LoopEvent] | None = None) -> None:
+        self._events = events or _make_done_events()
+        self.last_agent_name = "UNSET"
+
+    def create_loop(self, working_dir: str | None = None, agent_name: str | None = None) -> _FakeAgentLoop:
+        self.last_agent_name = agent_name
+        return _FakeAgentLoop(self._events)
+
+
+def test_chat_new_session_passes_agent_name(client: TestClient) -> None:
+    """新建会话时,agent_name 透传给 factory.create_loop。"""
+    from main import app
+    factory = _CapturingFactory()
+    app.state.agent_factory = factory
+
+    res = client.post("/api/v1/chat", json={"message": "hi", "agent_name": "reviewer"})
+    assert res.status_code == 200
+    assert factory.last_agent_name == "reviewer"
+
+
+def test_chat_resume_passes_agent_name(client: TestClient) -> None:
+    """resume 已有 session 时,agent_name 也透传给 factory.create_loop。"""
+    from main import app
+    factory = _CapturingFactory()
+    app.state.agent_factory = factory
+
+    res1 = client.post("/api/v1/chat", json={"message": "first"})
+    sid = res1.headers["X-Session-Id"]
+    res2 = client.post("/api/v1/chat", json={
+        "message": "second", "session_id": sid, "agent_name": "reviewer",
+    })
+    assert res2.status_code == 200
+    assert factory.last_agent_name == "reviewer"

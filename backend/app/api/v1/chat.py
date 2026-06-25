@@ -154,15 +154,16 @@ async def create_chat(req: ChatRequest, request: Request):
 
     is_resume = False
     if req.session_id:
-        agent_loop = factory.create_loop(working_dir=working_dir)
+        agent_loop = factory.create_loop(agent_name=req.agent_name, working_dir=working_dir)
         session = await sm.get_or_restore(req.session_id, agent_loop, bucket=bucket)
         if session is None:
             raise HTTPException(404, "session not found")
         is_resume = True
     else:
-        agent_loop = factory.create_loop(working_dir=working_dir)
+        agent_loop = factory.create_loop(agent_name=req.agent_name, working_dir=working_dir)
         session = await sm.create(
             agent_loop, bucket=bucket, project_path=req.project_path,
+            agent_name=req.agent_name,
         )
 
     # viz 事件层：构造 runner（bus 不可用时跳过，退回纯 SSE）
