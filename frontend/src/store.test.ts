@@ -648,3 +648,44 @@ describe('store bucket state', () => {
     expect((options.headers as Record<string, string>)['X-API-Key']).toBeDefined()
   })
 })
+
+describe('agent management', () => {
+  beforeEach(() => {
+    useChatStore.setState({ agents: [], activeAgentName: null, skills: [] })
+  })
+
+  it('loadAgents 拉取并写入 agents', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true, status: 200,
+      json: () => Promise.resolve([{ name: 'reviewer', description: '审查员' }]),
+    })
+    await useChatStore.getState().loadAgents()
+    expect(useChatStore.getState().agents).toEqual([{ name: 'reviewer', description: '审查员' }])
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/agents'),
+      expect.objectContaining({ headers: expect.any(Object) }),
+    )
+  })
+
+  it('createAgent POST 后刷新列表', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 201, json: () => Promise.resolve({ name: 'a' }) })
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve([]) })
+    await useChatStore.getState().createAgent({
+      name: 'a', description: '', model: null, skills: null, tools: null,
+      permission_mode: 'ask', soul: '', identity: '', agents_rules: '', tool_guidance: '',
+    })
+    expect(mockFetch).toHaveBeenNthCalledWith(1,
+      expect.stringContaining('/api/v1/agents'),
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
+  it('loadSkills 写入 skills', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true, status: 200,
+      json: () => Promise.resolve([{ name: 'web-search', description: '联网搜索' }]),
+    })
+    await useChatStore.getState().loadSkills()
+    expect(useChatStore.getState().skills).toEqual([{ name: 'web-search', description: '联网搜索' }])
+  })
+})
