@@ -56,6 +56,10 @@ class _StubLoop:
     def load_messages(self, messages: list[Any]) -> None:
         """noop — 支持 transcript 恢复路径。"""
 
+    def effective_context_window(self) -> int:
+        """固定值 — AgentRunner.wrap 启动读此字段构造 config 快照，stub 须提供。"""
+        return 200_000
+
     async def run(self, user_message: str, *, resume: bool = False) -> AsyncGenerator[LoopEvent, None]:
         for event in _STUB_EVENTS:
             yield event
