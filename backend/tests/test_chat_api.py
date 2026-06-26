@@ -878,3 +878,22 @@ def test_chat_resume_passes_agent_name(client: TestClient) -> None:
     })
     assert res2.status_code == 200
     assert factory.last_agent_name == "reviewer"
+
+
+def test_chat_resume_uses_session_agent_when_request_omits(client: TestClient) -> None:
+    """resume 时若请求没带 agent_name,回退到内存 session 绑定的 agent(session 级绑定)。
+
+    场景:前端页面刷新后 currentChatAgent 内存丢失、resume 不带 agent_name,
+    应使用该 session 绑定的 agent,而非静默回退 default(spec §6.2)。
+    """
+    from main import app
+    factory = _CapturingFactory()
+    app.state.agent_factory = factory
+
+    # 先建一个带 agent_name 的 session(进内存)
+    res1 = client.post("/api/v1/chat", json={"message": "first", "agent_name": "reviewer"})
+    sid = res1.headers["X-Session-Id"]
+    # resume 不带 agent_name
+    res2 = client.post("/api/v1/chat", json={"message": "second", "session_id": sid})
+    assert res2.status_code == 200
+    assert factory.last_agent_name == "reviewer"  # 用 session 绑定的 agent

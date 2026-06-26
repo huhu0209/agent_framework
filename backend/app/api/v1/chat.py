@@ -154,7 +154,14 @@ async def create_chat(req: ChatRequest, request: Request):
 
     is_resume = False
     if req.session_id:
-        agent_loop = factory.create_loop(agent_name=req.agent_name, working_dir=working_dir)
+        # resume: agent_name 优先请求带的;若没带,回退到内存 session 绑定的 agent
+        # (spec §6.2 session 级绑定 — 前端刷新后 currentChatAgent 丢失不应静默回退 default)
+        effective_agent_name = req.agent_name
+        if effective_agent_name is None:
+            existing = sm.get(req.session_id)
+            if existing is not None:
+                effective_agent_name = existing.agent_name
+        agent_loop = factory.create_loop(agent_name=effective_agent_name, working_dir=working_dir)
         session = await sm.get_or_restore(req.session_id, agent_loop, bucket=bucket)
         if session is None:
             raise HTTPException(404, "session not found")
