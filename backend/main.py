@@ -15,6 +15,7 @@ from agent_framework.viz.event_bus import EventBus
 from agent_framework.viz.recorder import RecordingSubscriber
 from agent_framework.viz.ws_server import serve_ws
 
+from app.api.v1.agents import router as agents_router
 from app.api.v1.chat import router as chat_router
 from app.api.v1.fs import router as fs_router
 from app.config import Settings, create_settings
@@ -84,6 +85,7 @@ async def lifespan(app: FastAPI):
     # --- 挂载到 app.state，供各路由通过 request.app.state 访问 ---
     app.state.session_manager = sm
     app.state.agent_factory = factory
+    app.state.config_loader = config_loader
 
     # --- viz 事件总线 + WebSocket 服务（失败降级，不影响 SSE 聊天）---
     app.state.bus = EventBus()
@@ -171,3 +173,4 @@ app.add_middleware(
 )
 app.include_router(chat_router, prefix="/api/v1")
 app.include_router(fs_router, prefix="/api/v1/fs")
+app.include_router(agents_router, prefix="/api/v1")
