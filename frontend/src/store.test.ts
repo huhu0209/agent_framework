@@ -93,7 +93,9 @@ describe('useChatStore', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1)
     const [url, options] = mockFetch.mock.calls[0]
     expect(url).toContain('/api/v1/chat')
-    expect(JSON.parse(options.body)).toEqual({ message: 'hello', session_id: undefined })
+    // toEqual 把 {a: undefined} 和缺失 key 视作相等；但新增 project_path/agent_name 字段后会脆裂，
+    // 故只断言 message 字段（其余字段由专门测试覆盖）。
+    expect(JSON.parse(options.body)).toEqual(expect.objectContaining({ message: 'hello' }))
 
     const { messages } = useChatStore.getState()
     expect(messages).toHaveLength(2)
@@ -687,5 +689,38 @@ describe('agent management', () => {
     })
     await useChatStore.getState().loadSkills()
     expect(useChatStore.getState().skills).toEqual([{ name: 'web-search', description: '联网搜索' }])
+  })
+})
+
+describe('chat agent 绑定', () => {
+  beforeEach(() => {
+    useChatStore.setState({
+      agents: [{ name: 'reviewer', description: '' }],
+      currentChatAgent: null,
+      sessionId: null,
+      isStreaming: false,
+    })
+  })
+
+  it('setCurrentChatAgent 切换当前 agent', () => {
+    useChatStore.getState().setCurrentChatAgent('reviewer')
+    expect(useChatStore.getState().currentChatAgent).toBe('reviewer')
+  })
+
+  it('sendMessage 请求体带 currentChatAgent 作为 agent_name', async () => {
+    useChatStore.setState({ currentChatAgent: 'reviewer' })
+    mockFetch.mockResolvedValueOnce(createMockSseResponse([]))
+    await useChatStore.getState().sendMessage('hi')
+    const call = mockFetch.mock.calls[0]
+    const body = JSON.parse(call[1].body)
+    expect(body.agent_name).toBe('reviewer')
+  })
+
+  it('currentChatAgent 为 null 时 agent_name 为 undefined', async () => {
+    mockFetch.mockResolvedValueOnce(createMockSseResponse([]))
+    await useChatStore.getState().sendMessage('hi')
+    const call = mockFetch.mock.calls[0]
+    const body = JSON.parse(call[1].body)
+    expect(body.agent_name).toBeUndefined()
   })
 })

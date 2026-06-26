@@ -688,6 +688,7 @@ async function sendViaSse(
       message: text,
       session_id: currentSessionId ?? undefined,
       project_path: get().projectPath ?? undefined,
+      agent_name: get().currentChatAgent ?? undefined,
     }),
   })
 
