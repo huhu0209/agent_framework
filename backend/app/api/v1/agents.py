@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
+import tempfile
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -56,18 +58,33 @@ class AgentCreate(AgentWrite):
 
 
 def _write_agent(agent_dir: Path, body: AgentCreate) -> None:
-    agent_dir.mkdir(parents=True, exist_ok=True)
-    meta = {
-        "name": body.name,
-        "description": body.description,
-        "model": body.model,
-        "skills": body.skills,
-        "tools": body.tools,
-        "permission_mode": body.permission_mode,
-    }
-    (agent_dir / "agent.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
-    for field_name, fname in _PERSONA_FILES.items():
-        (agent_dir / fname).write_text(getattr(body, field_name), encoding="utf-8")
+    """原子写:先写同文件系统临时目录,全部成功后替换目标(防中途崩溃损坏)。
+
+    PUT 更新已有 agent 时尤其关键 — 非原子实现写到一半崩溃会留下混合/损坏状态。
+    失败回滚(删临时目录),目标目录原样保留。
+    """
+    parent = agent_dir.parent
+    parent.mkdir(parents=True, exist_ok=True)
+    tmp_dir = Path(tempfile.mkdtemp(dir=parent, prefix=f".{agent_dir.name}."))
+    try:
+        meta = {
+            "name": body.name,
+            "description": body.description,
+            "model": body.model,
+            "skills": body.skills,
+            "tools": body.tools,
+            "permission_mode": body.permission_mode,
+        }
+        (tmp_dir / "agent.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        for field_name, fname in _PERSONA_FILES.items():
+            (tmp_dir / fname).write_text(getattr(body, field_name), encoding="utf-8")
+        # 全部写成功 → 替换目标(删旧 + rename)
+        if agent_dir.exists():
+            shutil.rmtree(agent_dir)
+        os.replace(tmp_dir, agent_dir)
+    except BaseException:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise
 
 
 @router.get("/agents")
