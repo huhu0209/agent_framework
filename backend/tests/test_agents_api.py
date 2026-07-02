@@ -158,3 +158,63 @@ def test_write_agent_failure_rolls_back_no_corruption(agents_client, monkeypatch
     agents_root = agents_client.app.state.settings.agents_dir
     residues = [p for p in agents_root.iterdir() if p.name.startswith(".victim.")]
     assert residues == []
+
+
+def test_create_rejects_invalid_permission_mode(agents_client):
+    """M2: POST 非法 permission_mode → 422(API 入口校验,锁前后端契约)。"""
+    res = agents_client.post("/api/v1/agents", json={
+        "name": "bad", "permission_mode": "bogus",
+    })
+    assert res.status_code == 422
+
+
+def test_update_rejects_invalid_permission_mode(agents_client):
+    """M2: PUT 非法 permission_mode → 422。"""
+    agents_client.post("/api/v1/agents", json={"name": "a"})
+    res = agents_client.put("/api/v1/agents/a", json={
+        "name": "a", "permission_mode": "nope",
+    })
+    assert res.status_code == 422
+
+
+def test_create_accepts_valid_permission_modes(agents_client):
+    """M2: 合法 permission_mode 值均接受(accept/ask/deny)。"""
+    for mode in ["accept", "ask", "deny"]:
+        res = agents_client.post("/api/v1/agents", json={"name": f"agent-{mode}", "permission_mode": mode})
+        assert res.status_code == 201, f"{mode} should be valid"
+
+
+def test_update_partial_preserves_untouched_persona(agents_client):
+    """LOW#1: PUT 只发部分字段,未提供的 persona 字段保留(部分更新,非全量覆盖)。"""
+    agents_client.post("/api/v1/agents", json={
+        "name": "a", "soul": "keep-soul", "identity": "keep-id", "description": "desc",
+    })
+    # 裸 PUT 只发 name+description,不传 persona
+    res = agents_client.put("/api/v1/agents/a", json={"name": "a", "description": "new-desc"})
+    assert res.status_code == 200
+    body = agents_client.get("/api/v1/agents/a").json()
+    assert body["description"] == "new-desc"
+    assert body["soul"] == "keep-soul"  # 未被清空
+    assert body["identity"] == "keep-id"  # 未被清空
+
+
+def test_write_agent_replace_failure_restores_old(agents_client, monkeypatch):
+    """LOW#2: os.replace 失败时,旧 agent 目录原样恢复(rename 模式,非 rmtree-then-replace 丢数据)。"""
+    agents_client.post("/api/v1/agents", json={
+        "name": "victim", "soul": "original", "identity": "orig-id",
+    })
+    from app.api.v1 import agents as agents_module
+
+    def failing_replace(*args, **kwargs):
+        raise OSError("simulated rename failure")
+
+    monkeypatch.setattr(agents_module.os, "replace", failing_replace)
+
+    app = agents_client.app
+    with TestClient(app, headers={"X-API-Key": "test-key"}, raise_server_exceptions=False) as client:
+        res = client.put("/api/v1/agents/victim", json={"name": "victim", "soul": "corrupted"})
+    assert res.status_code == 500
+    # 关键:旧目录恢复,内容原样(非「已删未就位」丢数据窗口)
+    body = agents_client.get("/api/v1/agents/victim").json()
+    assert body["soul"] == "original"
+    assert body["identity"] == "orig-id"

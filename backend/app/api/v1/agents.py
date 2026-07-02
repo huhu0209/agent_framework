@@ -8,6 +8,7 @@ import re
 import shutil
 import tempfile
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
@@ -47,7 +48,7 @@ class AgentWrite(BaseModel):
     model: str | None = None
     skills: list[str] | None = None
     tools: list[str] | None = None
-    permission_mode: str = "ask"
+    permission_mode: Literal["accept", "ask", "deny"] = "ask"
 
 
 class AgentCreate(AgentWrite):
@@ -57,11 +58,45 @@ class AgentCreate(AgentWrite):
     tool_guidance: str = ""
 
 
-def _write_agent(agent_dir: Path, body: AgentCreate) -> None:
-    """原子写:先写同文件系统临时目录,全部成功后替换目标(防中途崩溃损坏)。
+class AgentUpdate(BaseModel):
+    """PUT 部分更新模型 — 仅非 None 字段覆盖(避免裸 PUT 清空 persona,LOW#1 review)。"""
 
-    PUT 更新已有 agent 时尤其关键 — 非原子实现写到一半崩溃会留下混合/损坏状态。
-    失败回滚(删临时目录),目标目录原样保留。
+    name: str
+    description: str | None = None
+    model: str | None = None
+    skills: list[str] | None = None
+    tools: list[str] | None = None
+    permission_mode: Literal["accept", "ask", "deny"] | None = None
+    soul: str | None = None
+    identity: str | None = None
+    agents_rules: str | None = None
+    tool_guidance: str | None = None
+
+
+def _read_existing_as_create(agent_dir: Path) -> AgentCreate:
+    """读现有 agent 目录为 AgentCreate(供 PUT 部分更新合并基线,LOW#1)。"""
+    meta = _read_meta(agent_dir / "agent.json")
+    persona: dict[str, str] = {}
+    for field_name, fname in _PERSONA_FILES.items():
+        p = agent_dir / fname
+        persona[field_name] = p.read_text(encoding="utf-8") if p.exists() else ""
+    return AgentCreate(
+        name=meta.get("name", agent_dir.name),
+        description=meta.get("description", ""),
+        model=meta.get("model"),
+        skills=meta.get("skills"),
+        tools=meta.get("tools"),
+        permission_mode=meta.get("permission_mode", "ask"),
+        **persona,
+    )
+
+
+def _write_agent(agent_dir: Path, body: AgentCreate) -> None:
+    """原子写:先写临时目录,全部成功后用 rename 替换目标(防中途崩溃损坏)。
+
+    PUT 更新已有 agent 时:旧目录先 rename 成 backup → tmp rename 到目标 → 删 backup。
+    任一步失败可回滚(rename 在同文件系统原子)。比「rmtree 后 replace」更安全 —
+    不存在「旧目录已删、新目录未就位」的丢数据窗口(LOW#2 review)。
     """
     parent = agent_dir.parent
     parent.mkdir(parents=True, exist_ok=True)
@@ -78,10 +113,22 @@ def _write_agent(agent_dir: Path, body: AgentCreate) -> None:
         (tmp_dir / "agent.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
         for field_name, fname in _PERSONA_FILES.items():
             (tmp_dir / fname).write_text(getattr(body, field_name), encoding="utf-8")
-        # 全部写成功 → 替换目标(删旧 + rename)
+        # 旧目录 → backup(同盘原子 rename),腾出目标位
+        backup_dir: Path | None = None
         if agent_dir.exists():
-            shutil.rmtree(agent_dir)
-        os.replace(tmp_dir, agent_dir)
+            backup_dir = Path(tempfile.mkdtemp(dir=parent, prefix=f".{agent_dir.name}.old."))
+            backup_dir.rmdir()  # mkdtemp 建了空目录,删掉作 rename 目标名
+            os.rename(agent_dir, backup_dir)
+        # tmp → 目标;失败则回滚 backup → 目标
+        try:
+            os.replace(tmp_dir, agent_dir)
+        except OSError:
+            if backup_dir is not None:
+                os.rename(backup_dir, agent_dir)
+            raise
+        # 成功 → 清理 backup
+        if backup_dir is not None:
+            shutil.rmtree(backup_dir, ignore_errors=True)
     except BaseException:
         shutil.rmtree(tmp_dir, ignore_errors=True)
         raise
@@ -133,15 +180,18 @@ async def create_agent(request: Request, body: AgentCreate) -> dict:
 
 
 @router.put("/agents/{name}")
-async def update_agent(request: Request, name: str, body: AgentCreate) -> dict:
+async def update_agent(request: Request, name: str, body: AgentUpdate) -> dict:
     _validate_name(name)
     if body.name != name:
         raise HTTPException(status_code=400, detail="name in body must match path")
     agent_dir = _agents_dir(request) / name
     if not agent_dir.exists():
         raise HTTPException(status_code=404, detail="agent not found")
-    _write_agent(agent_dir, body)
-    return {"name": body.name}
+    # 部分更新:读现有 + 合并 body 中非 None 字段(LOW#1,防裸 PUT 清空 persona)
+    existing = _read_existing_as_create(agent_dir)
+    merged = existing.model_copy(update=body.model_dump(exclude_none=True))
+    _write_agent(agent_dir, merged)
+    return {"name": merged.name}
 
 
 @router.delete("/agents/{name}", status_code=204)
