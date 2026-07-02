@@ -897,3 +897,26 @@ def test_chat_resume_uses_session_agent_when_request_omits(client: TestClient) -
     res2 = client.post("/api/v1/chat", json={"message": "second", "session_id": sid})
     assert res2.status_code == 200
     assert factory.last_agent_name == "reviewer"  # 用 session 绑定的 agent
+
+
+def test_chat_resume_uses_disk_agent_after_eviction(client: TestClient, tmp_path: Path) -> None:
+    """M1: 冷恢复 — session 内存淘汰(重启/TTL)后,resume 不带 agent_name,
+    应从磁盘 history 恢复 session 绑定的 agent,而非静默回退 default(spec §6.2)。"""
+    from main import app
+    from app.services.session import SessionManager
+
+    factory = _CapturingFactory()
+    app.state.agent_factory = factory
+    app.state.session_manager = SessionManager(storage_dir=tmp_path)
+
+    # 建一个绑定 reviewer 的 session(写磁盘 history + transcript)
+    res1 = client.post("/api/v1/chat", json={"message": "first", "agent_name": "reviewer"})
+    sid = res1.headers["X-Session-Id"]
+    # 模拟重启/TTL 淘汰:清空内存,磁盘数据保留
+    app.state.session_manager.remove(sid)
+    assert sid not in app.state.session_manager._sessions
+
+    # resume 不带 agent_name → 应从磁盘 history 恢复 "reviewer"
+    res2 = client.post("/api/v1/chat", json={"message": "second", "session_id": sid})
+    assert res2.status_code == 200
+    assert factory.last_agent_name == "reviewer"
