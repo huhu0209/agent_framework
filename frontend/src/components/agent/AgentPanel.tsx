@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Plus, Trash } from '@phosphor-icons/react'
+import { useEffect, useRef, useState } from 'react'
+import { Check, Plus, Trash, X } from '@phosphor-icons/react'
 import { useChatStore } from '../../store'
 import type { AgentDetail } from '../../types'
 
@@ -29,6 +29,8 @@ export function AgentPanel() {
 
   const [draft, setDraft] = useState<AgentDetail | null>(null)
   const [isNew, setIsNew] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const reqIdRef = useRef(0)
 
   useEffect(() => {
     loadAgents()
@@ -37,18 +39,24 @@ export function AgentPanel() {
 
   useEffect(() => {
     if (!activeAgentName || isNew) return
-    getAgent(activeAgentName).then((d) => { if (d) setDraft(d) })
+    // LOW#5: 请求版本号 guard — 快切 agent 时,旧 promise 后 resolve 不覆盖新 draft
+    const myId = ++reqIdRef.current
+    getAgent(activeAgentName).then((d) => {
+      if (myId === reqIdRef.current && d) setDraft(d)
+    })
   }, [activeAgentName, isNew, getAgent])
 
   function startNew() {
     setIsNew(true)
     setActiveAgentName(null)
     setDraft({ ...EMPTY })
+    setConfirmDelete(false)
   }
 
   function selectAgent(name: string) {
     setIsNew(false)
     setActiveAgentName(name)
+    setConfirmDelete(false)
   }
 
   async function save() {
@@ -148,11 +156,29 @@ export function AgentPanel() {
               <button onClick={save} className="px-4 py-1.5 rounded-md text-[13px] font-medium"
                 style={{ backgroundColor: 'var(--brand)', color: '#fff' }}>保存</button>
               {!isNew && activeAgentName && (
-                <button onClick={() => { if (confirm(`删除 agent ${activeAgentName}?`)) { deleteAgent(activeAgentName); setDraft(null) } }}
-                  className="flex items-center gap-1 px-3 py-1.5 rounded-md text-[13px]"
-                  style={{ border: '1px solid var(--border)', color: 'var(--danger)' }}>
-                  <Trash size={16} /> 删除
-                </button>
+                confirmDelete ? (
+                  <div className="flex items-center gap-1 text-[13px]">
+                    <span style={{ color: 'var(--text-3)' }}>确认?</span>
+                    <button onClick={() => { deleteAgent(activeAgentName); setDraft(null); setConfirmDelete(false) }}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-md"
+                      style={{ border: '1px solid var(--border)', color: 'var(--danger)' }}
+                      aria-label="确认删除">
+                      <Check size={16} /> 删除
+                    </button>
+                    <button onClick={() => setConfirmDelete(false)}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-md"
+                      style={{ border: '1px solid var(--border)', color: 'var(--text-2)' }}
+                      aria-label="取消删除">
+                      <X size={16} /> 取消
+                    </button>
+                  </div>
+                ) : (
+                  <button onClick={() => setConfirmDelete(true)}
+                    className="flex items-center gap-1 px-3 py-1.5 rounded-md text-[13px]"
+                    style={{ border: '1px solid var(--border)', color: 'var(--danger)' }}>
+                    <Trash size={16} /> 删除
+                  </button>
+                )
               )}
             </div>
           </div>
