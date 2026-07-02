@@ -113,19 +113,29 @@ class AgentFactory:
         model = self._model
         allowed_skills: list[str] | None = None
 
-        if agent_name and self._loader is not None:
-            from agent_framework.agents.definition import discover_agent_dirs
-            for agent_dir in discover_agent_dirs(self._loader):
-                if agent_dir.name == agent_name:
-                    from agent_framework.agents.definition import AgentDefinition
-                    ad = AgentDefinition.from_directory(agent_dir)
-                    profile = ad.profile
-                    allowed_skills = ad.skills
-                    if ad.model:
-                        model = ad.model
-                    break
-            if profile is self._default_profile:
-                logger.warning("agent '%s' 未找到,回退 default profile", agent_name)
+        if agent_name:
+            if self._loader is None:
+                # LOW#4: agent_name 指定但 loader 未配置 — 与「未找到」语义区分
+                logger.warning(
+                    "agent '%s' 指定但 loader 未配置,回退 default profile", agent_name,
+                )
+            else:
+                found = False
+                from agent_framework.agents.definition import discover_agent_dirs
+                for agent_dir in discover_agent_dirs(self._loader):
+                    if agent_dir.name == agent_name:
+                        from agent_framework.agents.definition import AgentDefinition
+                        ad = AgentDefinition.from_directory(agent_dir)
+                        profile = ad.profile
+                        allowed_skills = ad.skills
+                        if ad.model:
+                            model = ad.model
+                        found = True
+                        break
+                if not found:  # LOW#3: 用 found 布尔,不依赖 is 副作用判定
+                    logger.warning(
+                        "agent '%s' 未找到,回退 default profile", agent_name,
+                    )
 
         return AgentLoop(
             adapter=self._adapter,
