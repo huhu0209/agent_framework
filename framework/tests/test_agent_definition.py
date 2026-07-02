@@ -69,3 +69,16 @@ def test_discover_agent_dirs_finds_folders_with_agent_json(tmp_path):
     dirs = discover_agent_dirs(loader)
     names = sorted(p.name for p in dirs)
     assert names == ["a", "b"]
+
+
+def test_from_directory_rejects_invalid_permission_mode(tmp_path):
+    """M2: agent.json 含非法 permission_mode → from_directory 校验失败(ValueError)。
+
+    model_copy 默认不触发 pydantic 校验,故在 from_directory 显式校验,
+    堵住 framework 独立被调用时读到被污染 agent.json 的漏洞。
+    """
+    d = _make_agent_dir(
+        tmp_path, "bad", meta={"name": "bad", "permission_mode": "bogus"},
+    )
+    with pytest.raises(ValueError, match="permission_mode"):
+        AgentDefinition.from_directory(d)

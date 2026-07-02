@@ -17,6 +17,9 @@ from agent_framework.prompts.profiles import AgentProfile
 if TYPE_CHECKING:
     from agent_framework.config.loader import ConfigLoader
 
+# AgentProfile.permission_mode 的合法值(model_copy 不校验,故在此显式约束)
+_VALID_PERMISSION_MODES = {"accept", "ask", "deny"}
+
 
 @dataclass
 class AgentDefinition:
@@ -49,9 +52,15 @@ class AgentDefinition:
 
         profile = AgentProfile.from_directory(path)  # 复用:读 4 个人格 md
         # 元数据映射到 profile 权限字段(不可变:model_copy)
+        # model_copy 默认不触发 pydantic 校验,故先显式校验 permission_mode(M2 review)
+        permission_mode = meta.get("permission_mode", "ask")
+        if permission_mode not in _VALID_PERMISSION_MODES:
+            raise ValueError(
+                f"非法 permission_mode: {permission_mode!r},合法值: {sorted(_VALID_PERMISSION_MODES)}"
+            )
         profile = profile.model_copy(update={
             "allowed_tools": meta.get("tools"),
-            "permission_mode": meta.get("permission_mode", "ask"),
+            "permission_mode": permission_mode,
         })
 
         return cls(

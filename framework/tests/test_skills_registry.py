@@ -199,6 +199,24 @@ class TestDescribeAvailable:
         # 对照:None 仍返回全部
         assert "Alpha" in registry.describe_available(None)
 
+    def test_names_preserves_given_order(self, tmp_path):
+        """LOW#6: names 给定时按列表顺序输出(去重保序),不丢 agent 配置里 skills 的声明顺序。"""
+        skills_dir = tmp_path / "skills"
+        skills_dir.mkdir()
+        create_skill(skills_dir, "a", "Alpha")
+        create_skill(skills_dir, "b", "Beta")
+
+        registry = SkillRegistry([skills_dir])
+        # 传 ["b", "a"] → 输出 b 在 a 前(非 sorted 的 a, b)
+        catalog = registry.describe_available(["b", "a"])
+        lines = [ln for ln in catalog.split("\n") if ln.startswith("- ")]
+        assert lines[0] == "- b: Beta"
+        assert lines[1] == "- a: Alpha"
+        # 去重:重复名只出现一次
+        deduped = registry.describe_available(["a", "a", "b"])
+        assert deduped.count("- a: Alpha") == 1
+        assert deduped.count("- b: Beta") == 1
+
 
 class TestLoadFullText:
     def test_existing_skill_returns_wrapped_body(self, tmp_path):
