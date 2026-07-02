@@ -690,6 +690,31 @@ describe('agent management', () => {
     await useChatStore.getState().loadSkills()
     expect(useChatStore.getState().skills).toEqual([{ name: 'web-search', description: '联网搜索' }])
   })
+
+  it('deleteAgent 删除后调 loadAgents 刷新(LOW#7)', async () => {
+    useChatStore.setState({ agents: [{ name: 'a', description: '' }], activeAgentName: 'a' })
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 204, json: () => Promise.resolve(null) })
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve([]) })
+    await useChatStore.getState().deleteAgent('a')
+    expect(mockFetch).toHaveBeenNthCalledWith(1,
+      expect.stringContaining('/api/v1/agents/a'),
+      expect.objectContaining({ method: 'DELETE' }),
+    )
+    expect(mockFetch).toHaveBeenCalledTimes(2)  // DELETE + loadAgents 刷新(非本地乐观 filter)
+    expect(useChatStore.getState().activeAgentName).toBeNull()
+  })
+
+  it('loadAgents 并发调用去重(LOW#8)', async () => {
+    type FetchResp = { ok: boolean; status: number; json: () => Promise<unknown> }
+    let resolveFetch!: (v: FetchResp) => void
+    mockFetch.mockImplementationOnce(() => new Promise<FetchResp>((res) => { resolveFetch = res }))
+    // 并发两次 loadAgents — 第二次应复用 inflight,不二次 fetch
+    const p1 = useChatStore.getState().loadAgents()
+    const p2 = useChatStore.getState().loadAgents()
+    resolveFetch({ ok: true, status: 200, json: () => Promise.resolve([]) })
+    await Promise.all([p1, p2])
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('chat agent 绑定', () => {

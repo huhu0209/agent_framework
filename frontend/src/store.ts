@@ -80,6 +80,9 @@ async function fetchMessages(id: string, bucket: string): Promise<{ messages: Ch
   }
 }
 
+/** LOW#8: loadAgents 并发去重 — ChatHeader + AgentPanel 同时挂载只发一次 GET /agents */
+let _inflightAgents: Promise<void> | null = null
+
 function vizEventToBlock(event: VizEvent): AgentBlockInit | null {
   switch (event.type) {
     case 'thinking': {
@@ -181,7 +184,7 @@ interface ChatStore {
   activeAgentName: string | null
   currentChatAgent: string | null
   skills: SkillOption[]
-  loadAgents: () => Promise<void>
+  loadAgents: (force?: boolean) => Promise<void>
   loadSkills: () => Promise<void>
   getAgent: (name: string) => Promise<AgentDetail | null>
   createAgent: (detail: AgentDetail) => Promise<void>
@@ -582,16 +585,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   },
 
   // --- agent 管理 ---
-  loadAgents: async () => {
-    try {
-      const res = await fetch(`${API_BASE}/api/v1/agents`, { headers: authHeaders() })
-      if (res.ok) {
-        set({ agents: await res.json() })
-      } else {
-        get().setError(`加载 agent 列表失败: HTTP ${res.status}`)
+  loadAgents: async (force = false) => {
+    // LOW#8: 并发去重 — inflight 期间复用同一 promise(ChatHeader + AgentPanel 同时挂载只发一次)
+    if (!force && _inflightAgents) return _inflightAgents
+    const p = (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/agents`, { headers: authHeaders() })
+        if (res.ok) {
+          set({ agents: await res.json() })
+        } else {
+          get().setError(`加载 agent 列表失败: HTTP ${res.status}`)
+        }
+      } catch {
+        get().setError('加载 agent 列表失败')
       }
-    } catch {
-      get().setError('加载 agent 列表失败')
+    })()
+    _inflightAgents = p
+    try {
+      await p
+    } finally {
+      _inflightAgents = null
     }
   },
 
@@ -628,7 +641,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         get().setError(msg)
         return
       }
-      await get().loadAgents()
+      await get().loadAgents(true)
     } catch {
       get().setError('创建 agent 失败')
     }
@@ -645,7 +658,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         get().setError(`保存失败: HTTP ${res.status}`)
         return
       }
-      await get().loadAgents()
+      await get().loadAgents(true)
     } catch {
       get().setError('保存 agent 失败')
     }
@@ -661,10 +674,12 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         get().setError(`删除失败: HTTP ${res.status}`)
         return
       }
+      // LOW#7: 与 create/update 一致 — 删除后用 loadAgents 刷新(force 绕过 inflight),
+      // 而非本地乐观 filter,保证列表与后端一致
       set((s) => ({
-        agents: s.agents.filter((a) => a.name !== name),
         activeAgentName: s.activeAgentName === name ? null : s.activeAgentName,
       }))
+      await get().loadAgents(true)
     } catch {
       get().setError('删除 agent 失败')
     }
