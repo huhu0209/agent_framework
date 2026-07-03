@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { useChatStore, resetIdCounter } from './store'
+import { useChatStore, resetIdCounter, resetInflightAgents } from './store'
 
 vi.mock('./lib/cache', () => ({
   persistCacheEntry: vi.fn().mockResolvedValue(undefined),
@@ -45,6 +45,7 @@ function createMockSseResponse(
 
 beforeEach(() => {
   resetIdCounter()
+  resetInflightAgents()
   mockFetch.mockReset()
   useChatStore.setState({
     messages: [],
@@ -702,6 +703,15 @@ describe('agent management', () => {
     )
     expect(mockFetch).toHaveBeenCalledTimes(2)  // DELETE + loadAgents 刷新(非本地乐观 filter)
     expect(useChatStore.getState().activeAgentName).toBeNull()
+  })
+
+  it('deleteAgent 失败返回 false 且不清 activeAgentName(HIGH-1)', async () => {
+    useChatStore.setState({ agents: [{ name: 'a', description: '' }], activeAgentName: 'a' })
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 500 })
+    const ok = await useChatStore.getState().deleteAgent('a')
+    expect(ok).toBe(false)
+    expect(useChatStore.getState().activeAgentName).toBe('a')  // 失败不清空
+    expect(mockFetch).toHaveBeenCalledTimes(1)  // 失败不触发 loadAgents 刷新
   })
 
   it('loadAgents 并发调用去重(LOW#8)', async () => {

@@ -8,6 +8,8 @@ from typing import Literal
 from pydantic import BaseModel, Field, field_validator
 
 SESSION_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+# 与 agents.py 的 _AGENT_NAME_RE 一致 — 在 API 边界统一校验,闭合输入验证缺口
+AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
 # ChatRequest.message 长度上限（与 Settings.max_message_length 对齐，防超长消息 DoS）
 MAX_MESSAGE_LENGTH = 8000
@@ -18,6 +20,14 @@ class ChatRequest(BaseModel):
     session_id: str | None = None
     project_path: str | None = None
     agent_name: str | None = None  # 选用哪个具名 agent;None=默认
+
+    @field_validator("agent_name")
+    @classmethod
+    def validate_agent_name(cls, v: str | None) -> str | None:
+        """校验 agent_name 格式(与 /agents/{name} 路径参数一致,闭合输入验证缺口)。"""
+        if v is not None and not AGENT_NAME_RE.match(v):
+            raise ValueError("invalid agent_name format")
+        return v
 
     @field_validator("session_id")
     @classmethod

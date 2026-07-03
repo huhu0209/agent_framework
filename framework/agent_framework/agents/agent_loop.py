@@ -125,6 +125,10 @@ class AgentLoop(Agent):
             spec = create_load_skill_spec()
             self.router.registry.register(spec)
             self.ctx.extra["skill_registry"] = self._skill_registry
+            # HIGH-1: allowed_skills 注入 ctx.extra,供 load_skill 做访问控制
+            # (仅 describe_available 过滤不足以阻止 LLM 调 load_skill 绕过白名单)。
+            if self._allowed_skills is not None:
+                self.ctx.extra["allowed_skills"] = set(self._allowed_skills)
 
         # Integration hook: flush episodic memory before context compaction.
         self._flush_extractor = (
@@ -195,6 +199,7 @@ class AgentLoop(Agent):
             return []
         return self._assembler.assemble(
             self._config_loader or ConfigLoader(), self.profile,
+            allowed_skills=self._allowed_skills,
         )
 
     def load_messages(self, messages: list[Message]) -> None:

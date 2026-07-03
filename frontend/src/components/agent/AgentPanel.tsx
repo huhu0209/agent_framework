@@ -42,7 +42,8 @@ export function AgentPanel() {
     // LOW#5: 请求版本号 guard — 快切 agent 时,旧 promise 后 resolve 不覆盖新 draft
     const myId = ++reqIdRef.current
     getAgent(activeAgentName).then((d) => {
-      if (myId === reqIdRef.current && d) setDraft(d)
+      // HIGH-2: d 为 null(404/失败)也更新 — 清空残留,避免标题显示新 agent 却留着旧内容
+      if (myId === reqIdRef.current) setDraft(d)
     })
   }, [activeAgentName, isNew, getAgent])
 
@@ -159,7 +160,13 @@ export function AgentPanel() {
                 confirmDelete ? (
                   <div className="flex items-center gap-1 text-[13px]">
                     <span style={{ color: 'var(--text-3)' }}>确认?</span>
-                    <button onClick={() => { deleteAgent(activeAgentName); setDraft(null); setConfirmDelete(false) }}
+                    <button onClick={async () => {
+                      // HIGH-1: await 删除结果 — 失败则保留 draft(toast 已提示),不切空状态
+                      const ok = await deleteAgent(activeAgentName)
+                      if (!ok) return
+                      setDraft(null)
+                      setConfirmDelete(false)
+                    }}
                       className="flex items-center gap-1 px-3 py-1.5 rounded-md"
                       style={{ border: '1px solid var(--border)', color: 'var(--danger)' }}
                       aria-label="确认删除">

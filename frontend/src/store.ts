@@ -83,6 +83,11 @@ async function fetchMessages(id: string, bucket: string): Promise<{ messages: Ch
 /** LOW#8: loadAgents 并发去重 — ChatHeader + AgentPanel 同时挂载只发一次 GET /agents */
 let _inflightAgents: Promise<void> | null = null
 
+/** HIGH#3: 供测试 beforeEach 重置模块级 inflight,避免跨用例泄漏(与 resetIdCounter 同模式) */
+export function resetInflightAgents() {
+  _inflightAgents = null
+}
+
 function vizEventToBlock(event: VizEvent): AgentBlockInit | null {
   switch (event.type) {
     case 'thinking': {
@@ -189,7 +194,7 @@ interface ChatStore {
   getAgent: (name: string) => Promise<AgentDetail | null>
   createAgent: (detail: AgentDetail) => Promise<void>
   updateAgent: (name: string, detail: AgentDetail) => Promise<void>
-  deleteAgent: (name: string) => Promise<void>
+  deleteAgent: (name: string) => Promise<boolean>
   setActiveAgentName: (name: string | null) => void
   setCurrentChatAgent: (name: string | null) => void
 }
@@ -672,7 +677,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       })
       if (!res.ok) {
         get().setError(`删除失败: HTTP ${res.status}`)
-        return
+        return false
       }
       // LOW#7: 与 create/update 一致 — 删除后用 loadAgents 刷新(force 绕过 inflight),
       // 而非本地乐观 filter,保证列表与后端一致
@@ -680,8 +685,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         activeAgentName: s.activeAgentName === name ? null : s.activeAgentName,
       }))
       await get().loadAgents(true)
+      return true
     } catch {
       get().setError('删除 agent 失败')
+      return false
     }
   },
 

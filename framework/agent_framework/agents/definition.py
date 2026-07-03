@@ -50,24 +50,47 @@ class AgentDefinition:
                 f"agent.json name '{name}' 与文件夹名 '{path.name}' 不一致"
             )
 
+        # HIGH-2: symlink 防护 — agent 目录内的 json/md 不得是 symlink 或经 ../ 逃逸,
+        # 防 soul.md -> /etc/passwd 被全文读入 system prompt(复用 skills G3 模式)。
+        resolved_root = path.resolve()
+        for fname in ("agent.json", "soul.md", "identity.md", "agents.md", "tool_guidance.md"):
+            f = path / fname
+            if not f.exists():
+                continue
+            try:
+                if f.is_symlink() or not f.resolve().is_relative_to(resolved_root):
+                    raise ValueError(f"{fname} 是 symlink 或逃逸 agent 目录,拒绝加载: {f}")
+            except OSError as exc:
+                raise ValueError(f"无法解析 {fname}: {f}") from exc
+
         profile = AgentProfile.from_directory(path)  # 复用:读 4 个人格 md
-        # 元数据映射到 profile 权限字段(不可变:model_copy)
-        # model_copy 默认不触发 pydantic 校验,故先显式校验 permission_mode(M2 review)
+        # 元数据映射到 profile 权限字段(不可变:model_copy)。model_copy 默认不触发 pydantic 校验,
+        # 故先显式校验类型:M2 review(permission_mode); CRITICAL-1 review(tools 若为字符串,
+        # PermissionPipeline.check 的 `tool in allowed_tools` 会退化为子串匹配,'e' in 'read'=True)。
         permission_mode = meta.get("permission_mode", "ask")
         if permission_mode not in _VALID_PERMISSION_MODES:
             raise ValueError(
                 f"非法 permission_mode: {permission_mode!r},合法值: {sorted(_VALID_PERMISSION_MODES)}"
             )
+        tools = meta.get("tools")
+        if tools is not None and (not isinstance(tools, list) or not all(isinstance(t, str) for t in tools)):
+            raise ValueError(f"非法 tools: {tools!r},应为 list[str]")
+        skills = meta.get("skills")
+        if skills is not None and (not isinstance(skills, list) or not all(isinstance(s, str) for s in skills)):
+            raise ValueError(f"非法 skills: {skills!r},应为 list[str]")
+        model = meta.get("model")
+        if model is not None and not isinstance(model, str):
+            raise ValueError(f"非法 model: {model!r},应为 str")
         profile = profile.model_copy(update={
-            "allowed_tools": meta.get("tools"),
+            "allowed_tools": tools,
             "permission_mode": permission_mode,
         })
 
         return cls(
             name=name,
             description=meta.get("description", ""),
-            model=meta.get("model"),
-            skills=meta.get("skills"),
+            model=model,
+            skills=skills,
             profile=profile,
         )
 

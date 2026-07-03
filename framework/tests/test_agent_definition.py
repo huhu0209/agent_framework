@@ -82,3 +82,26 @@ def test_from_directory_rejects_invalid_permission_mode(tmp_path):
     )
     with pytest.raises(ValueError, match="permission_mode"):
         AgentDefinition.from_directory(d)
+
+
+def test_from_directory_rejects_tools_not_list(tmp_path):
+    """CRITICAL-1: agent.json 的 tools 写成字符串 → 拒绝(防权限检查子串匹配绕过)。
+
+    model_copy 不触发 pydantic 校验,若放行字符串 'read',PermissionPipeline.check 的
+    `tool in allowed_tools` 会退化为子串匹配('e' in 'read'=True),放行任意含 e 的工具。
+    """
+    d = _make_agent_dir(tmp_path, "bad", meta={"name": "bad", "tools": "read"})
+    with pytest.raises(ValueError, match="非法 tools"):
+        AgentDefinition.from_directory(d)
+
+
+def test_from_directory_rejects_symlink_persona(tmp_path):
+    """HIGH-2: soul.md 是 symlink 指向目录外 → 拒绝(防 /etc/passwd 读入 prompt)。"""
+    d = tmp_path / "evil"
+    d.mkdir()
+    (d / "agent.json").write_text(json.dumps({"name": "evil"}), encoding="utf-8")
+    target = tmp_path / "secret.txt"
+    target.write_text("TOPSECRET", encoding="utf-8")
+    (d / "soul.md").symlink_to(target)
+    with pytest.raises(ValueError, match="symlink"):
+        AgentDefinition.from_directory(d)

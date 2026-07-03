@@ -920,3 +920,18 @@ def test_chat_resume_uses_disk_agent_after_eviction(client: TestClient, tmp_path
     res2 = client.post("/api/v1/chat", json={"message": "second", "session_id": sid})
     assert res2.status_code == 200
     assert factory.last_agent_name == "reviewer"
+
+
+def test_post_chat_invalid_agent_name_format(client: TestClient) -> None:
+    """HIGH-1: agent_name 非法格式 → 422(与 session_id 同等校验,闭合输入缺口)。"""
+    res = client.post("/api/v1/chat", json={"message": "hello", "agent_name": "../evil"})
+    assert res.status_code == 422
+
+
+def test_chat_request_rejects_invalid_agent_name() -> None:
+    """HIGH-1: ChatRequest 模型层拒绝非法 agent_name,合法格式通过。"""
+    from app.models import ChatRequest
+    with pytest.raises(Exception):
+        ChatRequest(message="hi", agent_name="../evil")
+    req = ChatRequest(message="hi", agent_name="code-reviewer_01")
+    assert req.agent_name == "code-reviewer_01"
