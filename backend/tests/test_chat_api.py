@@ -755,6 +755,15 @@ def test_list_buckets(client, tmp_path):
     assert "default_chat" in names
 
 
+def test_list_buckets_includes_default_without_dir(client, tmp_path):
+    """default_chat 不依赖目录存在——未发任何消息(目录未建)时也必在列表首位。"""
+    from app.services.session import SessionManager
+
+    client.app.state.session_manager = SessionManager(storage_dir=tmp_path)
+    res = client.get("/api/v1/sessions/buckets").json()
+    assert res and res[0]["bucket"] == "default_chat"
+
+
 def test_get_history_scoped_by_bucket(client, tmp_path):
     """GET /chat/{sid} 按 bucket 定位历史；错桶应 404。"""
     from app.services.session import SessionManager, _bucket_for

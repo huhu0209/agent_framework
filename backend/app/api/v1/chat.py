@@ -269,18 +269,19 @@ async def get_history(
 
 @router.get("/sessions/buckets")
 async def list_buckets(request: Request) -> list[dict]:
-    """扫描 sessions/ 子目录,返回桶列表(default_chat 在前)。"""
+    """扫描 sessions/ 子目录,返回桶列表。
+
+    default_chat 是逻辑默认桶,无论目录是否已创建都置顶返回——惰性建桶前
+    也要让前端能切回默认聊天空间。
+    """
     sm = request.app.state.session_manager
     storage = getattr(sm, "_storage_dir", None)
-    if storage is None or not storage.exists():
-        return [{"bucket": "default_chat", "display_name": "default_chat"}]
-    buckets: list[dict] = []
-    if (storage / "default_chat").exists():
-        buckets.append({"bucket": "default_chat", "display_name": "default_chat"})
-    for d in sorted(storage.iterdir()):
-        if d.is_dir() and d.name != "default_chat":
-            display = d.name.rsplit("_", 1)[0] if "_" in d.name else d.name
-            buckets.append({"bucket": d.name, "display_name": display})
+    buckets: list[dict] = [{"bucket": "default_chat", "display_name": "default_chat"}]
+    if storage is not None and storage.exists():
+        for d in sorted(storage.iterdir()):
+            if d.is_dir() and d.name != "default_chat":
+                display = d.name.rsplit("_", 1)[0] if "_" in d.name else d.name
+                buckets.append({"bucket": d.name, "display_name": display})
     return buckets
 
 

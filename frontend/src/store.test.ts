@@ -238,6 +238,23 @@ describe('useChatStore', () => {
     expect(useChatStore.getState().sessions).toEqual(sessions)
   })
 
+  it('loadBuckets keeps current bucket in list when backend omits it', async () => {
+    useChatStore.setState({ currentBucket: 'myproject_abcd1234' })
+    // 后端扫不到未建目录的桶,只返回 default_chat
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve([{ bucket: 'default_chat', display_name: 'default_chat' }]),
+    })
+    await useChatStore.getState().loadBuckets()
+
+    const names = useChatStore.getState().buckets.map((b) => b.bucket)
+    expect(names).toContain('myproject_abcd1234')
+    expect(names).toContain('default_chat')
+    const cur = useChatStore.getState().buckets.find((b) => b.bucket === 'myproject_abcd1234')
+    expect(cur?.display_name).toBe('myproject')
+  })
+
   it('newSession clears messages and sessionId', () => {
     useChatStore.setState({
       messages: [{ id: '1', role: 'user', timestamp: 0, content: 'hi' }],

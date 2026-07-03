@@ -10,7 +10,7 @@ export function BucketSwitcher() {
   useEffect(() => { void loadBuckets() }, [loadBuckets])
 
   return (
-    <div className="px-3 pb-2">
+    <div className="px-3 pt-2.5 pb-2.5">
       <select
         value={currentBucket}
         onChange={(e) => setCurrentBucket(e.target.value, null)}

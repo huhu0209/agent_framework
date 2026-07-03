@@ -1,7 +1,17 @@
 import { useEffect, useState } from 'react'
+import { ArrowUp } from '@phosphor-icons/react'
 import { API_BASE, authHeaders } from '../../store'
 
 type Dir = { name: string; path: string }
+
+// 返回父目录路径;home 起点(~)或根目录(/)无父级,返回 null
+function parentDir(p: string): string | null {
+  if (!p || p === '~' || p === '/') return null
+  const idx = p.lastIndexOf('/')
+  if (idx === 0) return '/'
+  if (idx < 0) return null
+  return p.slice(0, idx)
+}
 
 export function ProjectPicker({
   rootPath,
@@ -26,6 +36,8 @@ export function ProjectPicker({
     return () => { cancelled = true }
   }, [cwd])
 
+  const parent = parentDir(cwd)
+
   return (
     <div className="fixed inset-0 z-50 grid place-items-center" style={{ background: 'rgba(0,0,0,0.3)' }}>
       <div
@@ -33,7 +45,19 @@ export function ProjectPicker({
         style={{ background: 'var(--surface)', border: '1px solid var(--border-warm)' }}
       >
         <div className="flex items-center justify-between mb-3">
-          <span className="text-sm" style={{ color: 'var(--sb-muted)' }}>{cwd}</span>
+          <div className="flex items-center gap-2 min-w-0">
+            <button
+              onClick={() => parent && setCwd(parent)}
+              disabled={!parent}
+              className="inline-flex items-center justify-center w-7 h-7 rounded-md transition-colors hover:bg-[var(--sand)] disabled:opacity-30"
+              style={{ color: 'var(--sb-muted)' }}
+              aria-label="返回上一级"
+              title="返回上一级"
+            >
+              <ArrowUp size={16} />
+            </button>
+            <span className="text-sm truncate" style={{ color: 'var(--sb-muted)' }}>{cwd}</span>
+          </div>
           <button onClick={onClose} className="text-xs" style={{ color: 'var(--brand)' }}>取消</button>
         </div>
         <div className="space-y-0.5">

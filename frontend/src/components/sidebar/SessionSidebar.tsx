@@ -136,7 +136,7 @@ export function SessionSidebar() {
 
       {picking && (
         <ProjectPicker
-          rootPath={navigator.platform.toLowerCase().includes('win') ? 'C:\\' : '/'}
+          rootPath={navigator.platform.toLowerCase().includes('win') ? 'C:\\' : '~'}
           onPick={(abs) => { setPicking(false); void ensureBucketFor(abs) }}
           onClose={() => setPicking(false)}
         />

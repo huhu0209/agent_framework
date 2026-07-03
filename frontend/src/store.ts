@@ -390,7 +390,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   loadBuckets: async () => {
     try {
       const res = await fetch(`${API_BASE}/api/v1/sessions/buckets`, { headers: authHeaders() })
-      if (res.ok) set({ buckets: await res.json() })
+      if (!res.ok) return
+      const list = (await res.json()) as BucketInfo[]
+      const cb = get().currentBucket
+      // 新选的项目桶目录惰性创建(首次发消息才 mkdir),后端可能扫不到;
+      // 保证当前桶始终在下拉里,避免 select value 不匹配而回退显示 default_chat
+      if (cb && !list.some((b) => b.bucket === cb)) {
+        const display = cb === 'default_chat' ? 'default_chat' : cb.slice(0, cb.lastIndexOf('_'))
+        list.unshift({ bucket: cb, display_name: display })
+      }
+      set({ buckets: list })
     } catch { /* 静默 */ }
   },
 
