@@ -727,3 +727,85 @@ def test_effective_context_window_uses_provider_info():
     adapter = MockAdapter("回答")
     loop = _make_loop(adapter)
     assert loop.effective_context_window() == 100_000
+
+
+# === allowed_skills 过滤测试（Task 3）===
+
+
+def test_agent_loop_allowed_skills_filters_catalog(tmp_path):
+    """构造带 allowed_skills 的 loop,system_prompt 只含被允许的 skill。"""
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "SKILL.md").write_text(
+        "---\nname: a\ndescription: Alpha skill\n---\n", encoding="utf-8"
+    )
+    (tmp_path / "b").mkdir()
+    (tmp_path / "b" / "SKILL.md").write_text(
+        "---\nname: b\ndescription: Beta skill\n---\n", encoding="utf-8"
+    )
+    adapter = _make_mock_adapter()
+    loop = _make_loop(adapter, skill_dirs=[tmp_path], allowed_skills=["a"])
+    assert "Alpha skill" in loop.system_prompt_text
+    assert "Beta skill" not in loop.system_prompt_text
+
+
+def test_agent_loop_allowed_skills_none_keeps_all(tmp_path):
+    """allowed_skills=None 时保留全部 skill(同原行为)。"""
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "SKILL.md").write_text(
+        "---\nname: a\ndescription: Alpha skill\n---\n", encoding="utf-8"
+    )
+    adapter = _make_mock_adapter()
+    loop = _make_loop(adapter, skill_dirs=[tmp_path])
+    assert "Alpha skill" in loop.system_prompt_text
+
+
+@pytest.mark.asyncio
+async def test_load_skill_respects_allowed_skills(tmp_path):
+    """HIGH-1: allowed_skills 作为访问控制边界 — load_skill 拒绝白名单外的 skill 全文。"""
+    from agent_framework.tools.types import ToolCall
+
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "SKILL.md").write_text(
+        "---\nname: a\ndescription: Alpha\n---\nbody-a", encoding="utf-8"
+    )
+    (tmp_path / "b").mkdir()
+    (tmp_path / "b" / "SKILL.md").write_text(
+        "---\nname: b\ndescription: Beta\n---\nbody-b", encoding="utf-8"
+    )
+    adapter = _make_mock_adapter()
+    loop = _make_loop(adapter, skill_dirs=[tmp_path], allowed_skills=["a"])
+
+    # 白名单外的 b 被拒
+    result_b = await loop.router.dispatch(
+        ToolCall(id="tc1", name="load_skill", arguments={"name": "b"}), loop.ctx,
+    )
+    assert result_b.is_error
+    assert "允许列表" in result_b.content
+    # 白名单内的 a 正常加载
+    result_a = await loop.router.dispatch(
+        ToolCall(id="tc2", name="load_skill", arguments={"name": "a"}), loop.ctx,
+    )
+    assert not result_a.is_error
+    assert "body-a" in result_a.content
+
+
+def test_system_prompt_blocks_respects_allowed_skills(tmp_path):
+    """HIGH-3: system_prompt_blocks 也按 allowed_skills 过滤(与 system_prompt_text 一致)。"""
+    from agent_framework.prompts.profiles import AgentProfile
+
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "SKILL.md").write_text(
+        "---\nname: a\ndescription: Alpha skill\n---\n", encoding="utf-8"
+    )
+    (tmp_path / "b").mkdir()
+    (tmp_path / "b" / "SKILL.md").write_text(
+        "---\nname: b\ndescription: Beta skill\n---\n", encoding="utf-8"
+    )
+    profile = AgentProfile(name="t", description="t", soul="x")
+    adapter = _make_mock_adapter()
+    loop = _make_loop(adapter, profile=profile, skill_dirs=[tmp_path], allowed_skills=["a"])
+
+    skills_block = next((b for b in loop.system_prompt_blocks if b.name == "SKILLS"), None)
+    assert skills_block is not None
+    assert "Alpha skill" in skills_block.content
+    assert "Beta skill" not in skills_block.content

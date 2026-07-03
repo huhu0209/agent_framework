@@ -88,13 +88,13 @@ class _FakeFactory:
         self._events = events or _make_done_events()
         self.last_working_dir: str | None = None
 
-    def create_loop(self, working_dir: str | None = None) -> _FakeAgentLoop:
+    def create_loop(self, working_dir: str | None = None, agent_name: str | None = None) -> _FakeAgentLoop:
         self.last_working_dir = working_dir
         return _FakeAgentLoop(self._events)
 
 
 class _FailingFactory:
-    def create_loop(self, working_dir: str | None = None) -> _FailingAgentLoop:
+    def create_loop(self, working_dir: str | None = None, agent_name: str | None = None) -> _FailingAgentLoop:
         return _FailingAgentLoop()
 
 
@@ -827,3 +827,120 @@ def test_bucket_for_missing_path_400(client):
 def test_bucket_for_no_path_400(client):
     res = client.get("/api/v1/sessions/bucket-for")
     assert res.status_code == 400
+
+
+def test_chat_request_accepts_agent_name(client: TestClient) -> None:
+    """Task6: ChatRequest 接受 agent_name 字段,不报 422。
+
+    本 task 只铺路(模型/Session/stub factory 签名兼容);
+    透传到 factory.create_loop 的断言留到 Task 7 chat.py 接线后。
+    """
+    res = client.post("/api/v1/chat", json={"message": "hi", "agent_name": "reviewer"})
+    assert res.status_code == 200
+
+
+def test_chat_request_model_has_agent_name_field() -> None:
+    """Task6: ChatRequest 模型直接构造时 agent_name 可传入且默认 None。"""
+    from app.models import ChatRequest
+    req = ChatRequest(message="hi", agent_name="reviewer")
+    assert req.agent_name == "reviewer"
+    req2 = ChatRequest(message="hi")  # 默认 None
+    assert req2.agent_name is None
+
+
+# --- Task 7: agent_name 透传到 factory.create_loop ---
+
+
+class _CapturingFactory:
+    """记录 create_loop 收到的 agent_name(关键字调用,兼容多种参数顺序)。"""
+
+    def __init__(self, events: list[LoopEvent] | None = None) -> None:
+        self._events = events or _make_done_events()
+        self.last_agent_name = "UNSET"
+
+    def create_loop(self, working_dir: str | None = None, agent_name: str | None = None) -> _FakeAgentLoop:
+        self.last_agent_name = agent_name
+        return _FakeAgentLoop(self._events)
+
+
+def test_chat_new_session_passes_agent_name(client: TestClient) -> None:
+    """新建会话时,agent_name 透传给 factory.create_loop。"""
+    from main import app
+    factory = _CapturingFactory()
+    app.state.agent_factory = factory
+
+    res = client.post("/api/v1/chat", json={"message": "hi", "agent_name": "reviewer"})
+    assert res.status_code == 200
+    assert factory.last_agent_name == "reviewer"
+
+
+def test_chat_resume_passes_agent_name(client: TestClient) -> None:
+    """resume 已有 session 时,agent_name 也透传给 factory.create_loop。"""
+    from main import app
+    factory = _CapturingFactory()
+    app.state.agent_factory = factory
+
+    res1 = client.post("/api/v1/chat", json={"message": "first"})
+    sid = res1.headers["X-Session-Id"]
+    res2 = client.post("/api/v1/chat", json={
+        "message": "second", "session_id": sid, "agent_name": "reviewer",
+    })
+    assert res2.status_code == 200
+    assert factory.last_agent_name == "reviewer"
+
+
+def test_chat_resume_uses_session_agent_when_request_omits(client: TestClient) -> None:
+    """resume 时若请求没带 agent_name,回退到内存 session 绑定的 agent(session 级绑定)。
+
+    场景:前端页面刷新后 currentChatAgent 内存丢失、resume 不带 agent_name,
+    应使用该 session 绑定的 agent,而非静默回退 default(spec §6.2)。
+    """
+    from main import app
+    factory = _CapturingFactory()
+    app.state.agent_factory = factory
+
+    # 先建一个带 agent_name 的 session(进内存)
+    res1 = client.post("/api/v1/chat", json={"message": "first", "agent_name": "reviewer"})
+    sid = res1.headers["X-Session-Id"]
+    # resume 不带 agent_name
+    res2 = client.post("/api/v1/chat", json={"message": "second", "session_id": sid})
+    assert res2.status_code == 200
+    assert factory.last_agent_name == "reviewer"  # 用 session 绑定的 agent
+
+
+def test_chat_resume_uses_disk_agent_after_eviction(client: TestClient, tmp_path: Path) -> None:
+    """M1: 冷恢复 — session 内存淘汰(重启/TTL)后,resume 不带 agent_name,
+    应从磁盘 history 恢复 session 绑定的 agent,而非静默回退 default(spec §6.2)。"""
+    from main import app
+    from app.services.session import SessionManager
+
+    factory = _CapturingFactory()
+    app.state.agent_factory = factory
+    app.state.session_manager = SessionManager(storage_dir=tmp_path)
+
+    # 建一个绑定 reviewer 的 session(写磁盘 history + transcript)
+    res1 = client.post("/api/v1/chat", json={"message": "first", "agent_name": "reviewer"})
+    sid = res1.headers["X-Session-Id"]
+    # 模拟重启/TTL 淘汰:清空内存,磁盘数据保留
+    app.state.session_manager.remove(sid)
+    assert sid not in app.state.session_manager._sessions
+
+    # resume 不带 agent_name → 应从磁盘 history 恢复 "reviewer"
+    res2 = client.post("/api/v1/chat", json={"message": "second", "session_id": sid})
+    assert res2.status_code == 200
+    assert factory.last_agent_name == "reviewer"
+
+
+def test_post_chat_invalid_agent_name_format(client: TestClient) -> None:
+    """HIGH-1: agent_name 非法格式 → 422(与 session_id 同等校验,闭合输入缺口)。"""
+    res = client.post("/api/v1/chat", json={"message": "hello", "agent_name": "../evil"})
+    assert res.status_code == 422
+
+
+def test_chat_request_rejects_invalid_agent_name() -> None:
+    """HIGH-1: ChatRequest 模型层拒绝非法 agent_name,合法格式通过。"""
+    from app.models import ChatRequest
+    with pytest.raises(Exception):
+        ChatRequest(message="hi", agent_name="../evil")
+    req = ChatRequest(message="hi", agent_name="code-reviewer_01")
+    assert req.agent_name == "code-reviewer_01"

@@ -87,11 +87,16 @@ class AgentFactory:
 
         return factory
 
-    def create_loop(self, working_dir: str | None = None) -> AgentLoop:
-        """创建 AgentLoop 实例，传递 from_configloader() 加载的所有组件。
+    def create_loop(
+        self,
+        agent_name: str | None = None,
+        working_dir: str | None = None,
+    ) -> AgentLoop:
+        """创建 AgentLoop 实例。
 
-        working_dir 显式指定时优先使用；否则回退到 storage_dir/shared_workspace；
-        两者都无时保持 ToolUseContext 默认（.）。
+        agent_name 非空 → 加载该 agent 定义(~/.agent-framework/agents/<名>/),
+        用其 AgentProfile + model + skills 名单;为空 → 回退 _default_profile(现状不变)。
+        working_dir 显式指定时优先;否则回退 storage_dir/shared_workspace。
         """
         ctx = ToolUseContext()
         if working_dir is not None:
@@ -99,17 +104,46 @@ class AgentFactory:
         elif self._storage_dir is not None:
             ctx.working_dir = str(self._storage_dir / "shared_workspace")
 
-        # 从 loader 获取 skill_dirs，让 AgentLoop 创建自己的 SkillRegistry
         skill_dirs = None
         if self._loader is not None:
             skill_dirs = self._loader.discover("skills")
 
+        # --- agent 选择:具名 agent 优先,否则回退 default profile ---
+        profile = self._default_profile
+        model = self._model
+        allowed_skills: list[str] | None = None
+
+        if agent_name:
+            if self._loader is None:
+                # LOW#4: agent_name 指定但 loader 未配置 — 与「未找到」语义区分
+                logger.warning(
+                    "agent '%s' 指定但 loader 未配置,回退 default profile", agent_name,
+                )
+            else:
+                found = False
+                from agent_framework.agents.definition import discover_agent_dirs
+                for agent_dir in discover_agent_dirs(self._loader):
+                    if agent_dir.name == agent_name:
+                        from agent_framework.agents.definition import AgentDefinition
+                        ad = AgentDefinition.from_directory(agent_dir)
+                        profile = ad.profile
+                        allowed_skills = ad.skills
+                        if ad.model:
+                            model = ad.model
+                        found = True
+                        break
+                if not found:  # LOW#3: 用 found 布尔,不依赖 is 副作用判定
+                    logger.warning(
+                        "agent '%s' 未找到,回退 default profile", agent_name,
+                    )
+
         return AgentLoop(
             adapter=self._adapter,
-            model=self._model,
+            model=model,
             router=self._router,
             ctx=ctx,
-            profile=self._default_profile,
+            profile=profile,
+            allowed_skills=allowed_skills,
             hook_manager=self._hook_manager,
             skill_dirs=skill_dirs,
             config_loader=self._loader,

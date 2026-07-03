@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { useChatStore, resetIdCounter } from './store'
+import { useChatStore, resetIdCounter, resetInflightAgents } from './store'
 
 vi.mock('./lib/cache', () => ({
   persistCacheEntry: vi.fn().mockResolvedValue(undefined),
@@ -45,6 +45,7 @@ function createMockSseResponse(
 
 beforeEach(() => {
   resetIdCounter()
+  resetInflightAgents()
   mockFetch.mockReset()
   useChatStore.setState({
     messages: [],
@@ -93,7 +94,9 @@ describe('useChatStore', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1)
     const [url, options] = mockFetch.mock.calls[0]
     expect(url).toContain('/api/v1/chat')
-    expect(JSON.parse(options.body)).toEqual({ message: 'hello', session_id: undefined })
+    // toEqual 把 {a: undefined} 和缺失 key 视作相等；但新增 project_path/agent_name 字段后会脆裂，
+    // 故只断言 message 字段（其余字段由专门测试覆盖）。
+    expect(JSON.parse(options.body)).toEqual(expect.objectContaining({ message: 'hello' }))
 
     const { messages } = useChatStore.getState()
     expect(messages).toHaveLength(2)
@@ -663,5 +666,113 @@ describe('store bucket state', () => {
     expect(url).toContain('/api/v1/chat/s1')
     expect(url).toContain('bucket=projA_abcd1234')
     expect((options.headers as Record<string, string>)['X-API-Key']).toBeDefined()
+  })
+})
+
+describe('agent management', () => {
+  beforeEach(() => {
+    useChatStore.setState({ agents: [], activeAgentName: null, skills: [] })
+  })
+
+  it('loadAgents 拉取并写入 agents', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true, status: 200,
+      json: () => Promise.resolve([{ name: 'reviewer', description: '审查员' }]),
+    })
+    await useChatStore.getState().loadAgents()
+    expect(useChatStore.getState().agents).toEqual([{ name: 'reviewer', description: '审查员' }])
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining('/api/v1/agents'),
+      expect.objectContaining({ headers: expect.any(Object) }),
+    )
+  })
+
+  it('createAgent POST 后刷新列表', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 201, json: () => Promise.resolve({ name: 'a' }) })
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve([]) })
+    await useChatStore.getState().createAgent({
+      name: 'a', description: '', model: null, skills: null, tools: null,
+      permission_mode: 'ask', soul: '', identity: '', agents_rules: '', tool_guidance: '',
+    })
+    expect(mockFetch).toHaveBeenNthCalledWith(1,
+      expect.stringContaining('/api/v1/agents'),
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
+  it('loadSkills 写入 skills', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true, status: 200,
+      json: () => Promise.resolve([{ name: 'web-search', description: '联网搜索' }]),
+    })
+    await useChatStore.getState().loadSkills()
+    expect(useChatStore.getState().skills).toEqual([{ name: 'web-search', description: '联网搜索' }])
+  })
+
+  it('deleteAgent 删除后调 loadAgents 刷新(LOW#7)', async () => {
+    useChatStore.setState({ agents: [{ name: 'a', description: '' }], activeAgentName: 'a' })
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 204, json: () => Promise.resolve(null) })
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve([]) })
+    await useChatStore.getState().deleteAgent('a')
+    expect(mockFetch).toHaveBeenNthCalledWith(1,
+      expect.stringContaining('/api/v1/agents/a'),
+      expect.objectContaining({ method: 'DELETE' }),
+    )
+    expect(mockFetch).toHaveBeenCalledTimes(2)  // DELETE + loadAgents 刷新(非本地乐观 filter)
+    expect(useChatStore.getState().activeAgentName).toBeNull()
+  })
+
+  it('deleteAgent 失败返回 false 且不清 activeAgentName(HIGH-1)', async () => {
+    useChatStore.setState({ agents: [{ name: 'a', description: '' }], activeAgentName: 'a' })
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 500 })
+    const ok = await useChatStore.getState().deleteAgent('a')
+    expect(ok).toBe(false)
+    expect(useChatStore.getState().activeAgentName).toBe('a')  // 失败不清空
+    expect(mockFetch).toHaveBeenCalledTimes(1)  // 失败不触发 loadAgents 刷新
+  })
+
+  it('loadAgents 并发调用去重(LOW#8)', async () => {
+    type FetchResp = { ok: boolean; status: number; json: () => Promise<unknown> }
+    let resolveFetch!: (v: FetchResp) => void
+    mockFetch.mockImplementationOnce(() => new Promise<FetchResp>((res) => { resolveFetch = res }))
+    // 并发两次 loadAgents — 第二次应复用 inflight,不二次 fetch
+    const p1 = useChatStore.getState().loadAgents()
+    const p2 = useChatStore.getState().loadAgents()
+    resolveFetch({ ok: true, status: 200, json: () => Promise.resolve([]) })
+    await Promise.all([p1, p2])
+    expect(mockFetch).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('chat agent 绑定', () => {
+  beforeEach(() => {
+    useChatStore.setState({
+      agents: [{ name: 'reviewer', description: '' }],
+      currentChatAgent: null,
+      sessionId: null,
+      isStreaming: false,
+    })
+  })
+
+  it('setCurrentChatAgent 切换当前 agent', () => {
+    useChatStore.getState().setCurrentChatAgent('reviewer')
+    expect(useChatStore.getState().currentChatAgent).toBe('reviewer')
+  })
+
+  it('sendMessage 请求体带 currentChatAgent 作为 agent_name', async () => {
+    useChatStore.setState({ currentChatAgent: 'reviewer' })
+    mockFetch.mockResolvedValueOnce(createMockSseResponse([]))
+    await useChatStore.getState().sendMessage('hi')
+    const call = mockFetch.mock.calls[0]
+    const body = JSON.parse(call[1].body)
+    expect(body.agent_name).toBe('reviewer')
+  })
+
+  it('currentChatAgent 为 null 时 agent_name 为 undefined', async () => {
+    mockFetch.mockResolvedValueOnce(createMockSseResponse([]))
+    await useChatStore.getState().sendMessage('hi')
+    const call = mockFetch.mock.calls[0]
+    const body = JSON.parse(call[1].body)
+    expect(body.agent_name).toBeUndefined()
   })
 })

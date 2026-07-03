@@ -367,3 +367,37 @@ class TestContextPathForwarding:
         rules_block = next(b for b in blocks if b.name == "RULES")
         assert "Python 规则" not in rules_block.content
         assert "全局规则" in rules_block.content
+
+
+class TestAllowedSkillsForwarding:
+    """allowed_skills 透传到 SkillRegistry.describe_available 的测试。"""
+
+    def test_assemble_passes_allowed_skills_to_registry(self, tmp_path: Path) -> None:
+        """assemble() 把 allowed_skills 透传给 describe_available。"""
+        registry = MagicMock()
+        registry.describe_available.return_value = "catalog"
+        assembler = PromptAssembler(skill_registry=registry)
+        loader = _make_loader(tmp_path)
+        profile = _make_profile()
+        assembler.assemble(loader, profile, allowed_skills=["a", "b"])
+        registry.describe_available.assert_called_once_with(["a", "b"])
+
+    def test_render_passes_allowed_skills_through_assemble(self, tmp_path: Path) -> None:
+        """render() 把 allowed_skills 经 assemble 透传给 describe_available。"""
+        registry = MagicMock()
+        registry.describe_available.return_value = "catalog"
+        assembler = PromptAssembler(skill_registry=registry)
+        loader = _make_loader(tmp_path)
+        profile = _make_profile()
+        assembler.render(loader, profile, allowed_skills=["only"])
+        registry.describe_available.assert_called_once_with(["only"])
+
+    def test_assemble_default_allowed_skills_is_none(self, tmp_path: Path) -> None:
+        """不传 allowed_skills 时,describe_available 收到 None(=全部)。"""
+        registry = MagicMock()
+        registry.describe_available.return_value = "catalog"
+        assembler = PromptAssembler(skill_registry=registry)
+        loader = _make_loader(tmp_path)
+        profile = _make_profile()
+        assembler.assemble(loader, profile)
+        registry.describe_available.assert_called_once_with(None)

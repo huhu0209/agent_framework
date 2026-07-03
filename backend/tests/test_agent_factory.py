@@ -112,3 +112,67 @@ def test_create_loop_no_working_dir_no_storage_defaults(monkeypatch: pytest.Monk
     loop = factory.create_loop()
 
     assert loop.ctx.working_dir == "."
+
+
+# --- create_loop(agent_name=...) — agent 切换 (T5) ---
+
+
+def test_create_loop_with_agent_name_loads_definition(monkeypatch, tmp_path):
+    """传 agent_name 时,加载该 agent 的人格/model/skills 并用于 loop。"""
+    import json
+    from agent_framework.config.loader import ConfigLoader
+
+    # agent 建在 ConfigLoader 实际扫描路径:global_dir/.agent-framework/agents/
+    agents_dir = tmp_path / ".agent-framework" / "agents" / "reviewer"
+    agents_dir.mkdir(parents=True)
+    (agents_dir / "agent.json").write_text(json.dumps({
+        "name": "reviewer", "description": "审查员",
+        "model": "reviewer-model", "skills": ["web-search"], "tools": ["read"],
+    }), encoding="utf-8")
+    (agents_dir / "soul.md").write_text("你是审查员", encoding="utf-8")
+
+    factory = _make_factory(monkeypatch)
+    factory._loader = ConfigLoader(global_dir=tmp_path, project_dir=tmp_path / "proj-empty")
+
+    loop = factory.create_loop(agent_name="reviewer")
+
+    assert loop.model == "reviewer-model"
+    assert loop.profile is not None
+    assert "你是审查员" in loop.system_prompt_text
+    assert loop._allowed_skills == ["web-search"]
+
+
+def test_create_loop_without_agent_name_falls_back_default(monkeypatch):
+    """不传 agent_name 时,行为不变(profile=None,因 _make_factory 不设 default profile)。"""
+    factory = _make_factory(monkeypatch)
+    loop = factory.create_loop()
+    assert loop.profile is None
+
+
+def test_create_loop_agent_not_found_warns(monkeypatch, tmp_path, caplog):
+    """LOW#3: agent_name 指定但未在 loader 发现 → 警告 + 回退 default(用 found 布尔判定)。"""
+    import logging
+    from agent_framework.config.loader import ConfigLoader
+
+    factory = _make_factory(monkeypatch)
+    factory._loader = ConfigLoader(global_dir=tmp_path, project_dir=tmp_path / "proj-empty")
+
+    with caplog.at_level(logging.WARNING, logger="app.services.agent_factory"):
+        loop = factory.create_loop(agent_name="nonexistent")
+
+    assert loop.profile is None  # _make_factory 未设 default profile
+    assert any("nonexistent" in r.message and "未找到" in r.message for r in caplog.records)
+
+
+def test_create_loop_agent_name_without_loader_warns(monkeypatch, caplog):
+    """LOW#4: agent_name 指定但 loader 未配置 → 警告(语义区别于「未找到」)。"""
+    import logging
+
+    factory = _make_factory(monkeypatch)  # _loader 保持 None
+
+    with caplog.at_level(logging.WARNING, logger="app.services.agent_factory"):
+        loop = factory.create_loop(agent_name="reviewer")
+
+    assert loop.profile is None
+    msgs = [r.message for r in caplog.records]
+    assert any("loader" in m and "reviewer" in m for m in msgs)

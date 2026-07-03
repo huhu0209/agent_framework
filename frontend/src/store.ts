@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { z } from 'zod'
-import type { AgentBlock, AgentBlockInit, BucketInfo, CacheEntry, ChatMessage, ConfigPayload, InspectorState, MessageRole, SessionInfo, SystemPromptPayload, ToolCallEntry, UsageState, VizEvent } from './types'
+import type { AgentBlock, AgentBlockInit, AgentDetail, AgentSummary, BucketInfo, CacheEntry, ChatMessage, ConfigPayload, InspectorState, MessageRole, SessionInfo, SkillOption, SystemPromptPayload, ToolCallEntry, UsageState, VizEvent } from './types'
 import { persistCacheEntry } from './lib/cache'
 import { vizWs, type WsStatus } from './lib/wsClient'
 
@@ -78,6 +78,14 @@ async function fetchMessages(id: string, bucket: string): Promise<{ messages: Ch
   } finally {
     inflightRequests.delete(id)
   }
+}
+
+/** LOW#8: loadAgents 并发去重 — ChatHeader + AgentPanel 同时挂载只发一次 GET /agents */
+let _inflightAgents: Promise<void> | null = null
+
+/** HIGH#3: 供测试 beforeEach 重置模块级 inflight,避免跨用例泄漏(与 resetIdCounter 同模式) */
+export function resetInflightAgents() {
+  _inflightAgents = null
 }
 
 function vizEventToBlock(event: VizEvent): AgentBlockInit | null {
@@ -175,6 +183,20 @@ interface ChatStore {
   connectInspector: (sid: string) => void
   disconnectInspector: () => void
   applyVizEvent: (ev: { type: string; payload: Record<string, unknown>; session_id?: string }) => void
+
+  // --- agent 管理 ---
+  agents: AgentSummary[]
+  activeAgentName: string | null
+  currentChatAgent: string | null
+  skills: SkillOption[]
+  loadAgents: (force?: boolean) => Promise<void>
+  loadSkills: () => Promise<void>
+  getAgent: (name: string) => Promise<AgentDetail | null>
+  createAgent: (detail: AgentDetail) => Promise<void>
+  updateAgent: (name: string, detail: AgentDetail) => Promise<void>
+  deleteAgent: (name: string) => Promise<boolean>
+  setActiveAgentName: (name: string | null) => void
+  setCurrentChatAgent: (name: string | null) => void
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -202,6 +224,10 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   inspectorOpen: false,
   wsStatus: 'disconnected' as WsStatus,
   inspector: { config: null, systemPrompt: null, toolCalls: [], usage: null },
+  agents: [],
+  activeAgentName: null,
+  currentChatAgent: null,
+  skills: [],
 
   setError: (msg: string) => {
     set({ errorToast: msg })
@@ -571,6 +597,112 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       set({ loadingOlder: false })
     }
   },
+
+  // --- agent 管理 ---
+  loadAgents: async (force = false) => {
+    // LOW#8: 并发去重 — inflight 期间复用同一 promise(ChatHeader + AgentPanel 同时挂载只发一次)
+    if (!force && _inflightAgents) return _inflightAgents
+    const p = (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/agents`, { headers: authHeaders() })
+        if (res.ok) {
+          set({ agents: await res.json() })
+        } else {
+          get().setError(`加载 agent 列表失败: HTTP ${res.status}`)
+        }
+      } catch {
+        get().setError('加载 agent 列表失败')
+      }
+    })()
+    _inflightAgents = p
+    try {
+      await p
+    } finally {
+      _inflightAgents = null
+    }
+  },
+
+  loadSkills: async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/skills`, { headers: authHeaders() })
+      if (res.ok) {
+        set({ skills: await res.json() })
+      }
+    } catch {
+      /* 静默:skills 可选 */
+    }
+  },
+
+  getAgent: async (name) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/agents/${encodeURIComponent(name)}`, { headers: authHeaders() })
+      if (res.ok) return (await res.json()) as AgentDetail
+      return null
+    } catch {
+      return null
+    }
+  },
+
+  createAgent: async (detail) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/agents`, {
+        method: 'POST',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(detail),
+      })
+      if (!res.ok) {
+        const msg = res.status === 409 ? 'agent 已存在' : `创建失败: HTTP ${res.status}`
+        get().setError(msg)
+        return
+      }
+      await get().loadAgents(true)
+    } catch {
+      get().setError('创建 agent 失败')
+    }
+  },
+
+  updateAgent: async (name, detail) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/agents/${encodeURIComponent(name)}`, {
+        method: 'PUT',
+        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        body: JSON.stringify(detail),
+      })
+      if (!res.ok) {
+        get().setError(`保存失败: HTTP ${res.status}`)
+        return
+      }
+      await get().loadAgents(true)
+    } catch {
+      get().setError('保存 agent 失败')
+    }
+  },
+
+  deleteAgent: async (name) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/agents/${encodeURIComponent(name)}`, {
+        method: 'DELETE',
+        headers: authHeaders(),
+      })
+      if (!res.ok) {
+        get().setError(`删除失败: HTTP ${res.status}`)
+        return false
+      }
+      // LOW#7: 与 create/update 一致 — 删除后用 loadAgents 刷新(force 绕过 inflight),
+      // 而非本地乐观 filter,保证列表与后端一致
+      set((s) => ({
+        activeAgentName: s.activeAgentName === name ? null : s.activeAgentName,
+      }))
+      await get().loadAgents(true)
+      return true
+    } catch {
+      get().setError('删除 agent 失败')
+      return false
+    }
+  },
+
+  setActiveAgentName: (name) => set({ activeAgentName: name }),
+  setCurrentChatAgent: (name) => set({ currentChatAgent: name }),
 }))
 
 async function sendViaSse(
@@ -587,6 +719,7 @@ async function sendViaSse(
       message: text,
       session_id: currentSessionId ?? undefined,
       project_path: get().projectPath ?? undefined,
+      agent_name: get().currentChatAgent ?? undefined,
     }),
   })
 

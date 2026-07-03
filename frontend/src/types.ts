@@ -97,3 +97,25 @@ export interface InspectorState {
   toolCalls: ToolCallEntry[]
   usage: UsageState | null
 }
+
+// --- Agent 管理 ---
+export interface AgentSummary {
+  name: string
+  description: string
+}
+
+export interface AgentDetail extends AgentSummary {
+  model: string | null
+  skills: string[] | null
+  tools: string[] | null
+  permission_mode: string
+  soul: string
+  identity: string
+  agents_rules: string
+  tool_guidance: string
+}
+
+export interface SkillOption {
+  name: string
+  description: string
+}

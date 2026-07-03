@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from app.services.session import ChatSession, DEFAULT_BUCKET, SessionManager
@@ -92,3 +93,60 @@ def test_get_messages_reads_from_bucket(tmp_path: Path):
     msgs = asyncio.run(sm.get_messages(a.session_id, bucket="projA_aaaaaaaa"))
     assert msgs is not None
     assert msgs[0][0]["content"] == "hi"
+
+
+def test_create_persists_agent_name_to_history(tmp_path: Path):
+    """M1: create 时 agent_name 持久化到 history.jsonl,供冷恢复读取。"""
+    import asyncio
+
+    sm = SessionManager(storage_dir=tmp_path)
+    s = asyncio.run(_mk(sm, agent_name="reviewer"))
+    history = (tmp_path / DEFAULT_BUCKET / "history.jsonl").read_text(encoding="utf-8")
+    entry = json.loads(history.strip().split("\n")[-1])
+    assert entry["agent_name"] == "reviewer"
+    assert entry["session_id"] == s.session_id
+
+
+def test_get_or_restore_reads_agent_name_from_disk(tmp_path: Path):
+    """M1: 冷恢复(内存淘汰)后,get_or_restore 从 history.jsonl 回填 agent_name,而非静默回退 default。"""
+    import asyncio
+
+    sm = SessionManager(storage_dir=tmp_path)
+    s = asyncio.run(_mk(sm, agent_name="reviewer"))
+    sid = s.session_id
+    sm.remove(sid)  # 模拟重启/TTL 淘汰:清内存,磁盘保留
+    assert sid not in sm._sessions
+
+    restored = asyncio.run(sm.get_or_restore(sid, _StubLoop(), bucket=DEFAULT_BUCKET))
+    assert restored is not None
+    assert restored.agent_name == "reviewer"
+
+
+def test_get_session_agent_name_falls_back_to_disk(tmp_path: Path):
+    """M1: get_session_agent_name 内存命中直接返回,内存未命中回退磁盘 history。"""
+    import asyncio
+
+    sm = SessionManager(storage_dir=tmp_path)
+    s = asyncio.run(_mk(sm, agent_name="reviewer"))
+    sid = s.session_id
+    # 内存命中
+    assert asyncio.run(sm.get_session_agent_name(sid, bucket=DEFAULT_BUCKET)) == "reviewer"
+    sm.remove(sid)
+    # 内存未命中 → 磁盘 history
+    assert asyncio.run(sm.get_session_agent_name(sid, bucket=DEFAULT_BUCKET)) == "reviewer"
+
+
+def test_get_session_agent_name_legacy_entry_returns_none(tmp_path: Path):
+    """M1 向后兼容:旧 history entry 无 agent_name 字段 → 返回 None(=default)。"""
+    import asyncio
+
+    bucket_dir = tmp_path / DEFAULT_BUCKET
+    bucket_dir.mkdir(parents=True)
+    legacy_sid = "a" * 32
+    (bucket_dir / "history.jsonl").write_text(
+        json.dumps({"session_id": legacy_sid, "bucket": DEFAULT_BUCKET, "title": "old"}) + "\n",
+        encoding="utf-8",
+    )
+    sm = SessionManager(storage_dir=tmp_path)
+    name = asyncio.run(sm.get_session_agent_name(legacy_sid, bucket=DEFAULT_BUCKET))
+    assert name is None

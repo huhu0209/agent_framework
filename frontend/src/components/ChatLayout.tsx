@@ -4,6 +4,7 @@ import { ChatInput } from './composer/ChatInput'
 import { SessionSidebar } from './sidebar/SessionSidebar'
 import { InspectorPanel } from './inspector/InspectorPanel'
 import { ComingSoon } from './ComingSoon'
+import { AgentPanel } from './agent/AgentPanel'
 import { useChatStore } from '../store'
 
 export function ChatLayout() {
@@ -21,6 +22,8 @@ export function ChatLayout() {
             <MessageList />
             <ChatInput />
           </>
+        ) : activeView === 'agent' ? (
+          <AgentPanel />
         ) : (
           <ComingSoon name={activeView} />
         )}

@@ -33,10 +33,13 @@ class PromptAssembler:
         loader: ConfigLoader,
         profile: AgentProfile,
         context_path: str | None = None,
+        allowed_skills: list[str] | None = None,
     ) -> list[PromptBlock]:
         """组装 profile 为 PromptBlock 列表。
 
         块顺序: USER_PROVIDED -> RULES -> SOUL -> AGENTS_RULES -> IDENTITY -> SKILLS -> TOOL_GUIDANCE
+
+        allowed_skills: 传给 SkillRegistry.describe_available 做名单过滤(None=全部)。
         """
         blocks: list[PromptBlock] = []
 
@@ -94,7 +97,7 @@ class PromptAssembler:
 
         # 6. SKILLS
         if self._skill_registry is not None:
-            catalog = self._skill_registry.describe_available()
+            catalog = self._skill_registry.describe_available(allowed_skills)
             blocks.append(PromptBlock(
                 name="SKILLS",
                 content=f"可用 Skills（按需调用 load_skill 加载完整指令）：\n{catalog}",
@@ -120,9 +123,10 @@ class PromptAssembler:
         loader: ConfigLoader,
         profile: AgentProfile,
         context_path: str | None = None,
+        allowed_skills: list[str] | None = None,
     ) -> str:
         """将 profile 渲染为完整的 system prompt 字符串。"""
-        blocks = self.assemble(loader, profile, context_path)
+        blocks = self.assemble(loader, profile, context_path, allowed_skills=allowed_skills)
         parts = []
         for b in blocks:
             if not b.content:

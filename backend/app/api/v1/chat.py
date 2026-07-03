@@ -154,15 +154,22 @@ async def create_chat(req: ChatRequest, request: Request):
 
     is_resume = False
     if req.session_id:
-        agent_loop = factory.create_loop(working_dir=working_dir)
+        # resume: agent_name 优先请求带的;若没带,回退到 session 绑定的 agent
+        # (spec §6.2 session 级绑定 — 冷恢复也不应静默回退 default)
+        # 内存命中读 ChatSession.agent_name;内存未命中(重启/TTL 淘汰)读磁盘 history
+        effective_agent_name = req.agent_name
+        if effective_agent_name is None:
+            effective_agent_name = await sm.get_session_agent_name(req.session_id, bucket=bucket)
+        agent_loop = factory.create_loop(agent_name=effective_agent_name, working_dir=working_dir)
         session = await sm.get_or_restore(req.session_id, agent_loop, bucket=bucket)
         if session is None:
             raise HTTPException(404, "session not found")
         is_resume = True
     else:
-        agent_loop = factory.create_loop(working_dir=working_dir)
+        agent_loop = factory.create_loop(agent_name=req.agent_name, working_dir=working_dir)
         session = await sm.create(
             agent_loop, bucket=bucket, project_path=req.project_path,
+            agent_name=req.agent_name,
         )
 
     # viz 事件层：构造 runner（bus 不可用时跳过，退回纯 SSE）

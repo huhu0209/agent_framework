@@ -16,6 +16,12 @@ async def _handle_load_skill(args: dict, ctx: ToolUseContext) -> ToolResult:
     if not name:
         return ToolResult(content="请指定 skill 名称", is_error=True)
 
+    # HIGH-1: allowed_skills 是访问控制边界(非仅 prompt 可见性) —
+    # 白名单外的 skill 拒绝加载全文,防 LLM 绕过 describe_available 过滤直接 load_skill。
+    allowed = ctx.extra.get("allowed_skills")
+    if allowed is not None and name not in allowed:
+        return ToolResult(content=f"skill '{name}' 不在当前 agent 的允许列表内", is_error=True)
+
     result = registry.load_full_text(name)
     if result.is_error:
         return ToolResult(content=result.content, is_error=True)

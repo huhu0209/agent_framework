@@ -70,6 +70,7 @@ class ChatSession:
     session_id: str
     bucket: str = DEFAULT_BUCKET
     project_path: str | None = None
+    agent_name: str | None = None  # 该会话绑定的 agent(None=默认)
     messages: list[dict] = field(default_factory=list)
     agent_loop: AgentLoop | None = None
     task: asyncio.Task | None = None  # type: ignore[type-arg]
@@ -134,6 +135,7 @@ class SessionManager:
         bucket: str = DEFAULT_BUCKET,
         project_path: str | None = None,
         title: str = "",
+        agent_name: str | None = None,
     ) -> ChatSession:
         sid = uuid.uuid4().hex
         writer = None
@@ -141,11 +143,12 @@ class SessionManager:
             bucket_dir = self._bucket_dir(bucket)
             transcript_path = bucket_dir / f"{sid}.jsonl"
             writer = TranscriptWriter(transcript_path)
-            await self._append_history(sid, bucket, title or "新会话")
+            await self._append_history(sid, bucket, title or "新会话", agent_name=agent_name)
         session = ChatSession(
             session_id=sid,
             bucket=bucket,
             project_path=project_path,
+            agent_name=agent_name,
             agent_loop=agent_loop,
             transcript_writer=writer,
         )
@@ -263,7 +266,9 @@ class SessionManager:
             session.task.cancel()
         session.task = new_task
 
-    async def _append_history(self, session_id: str, bucket: str, title: str) -> None:
+    async def _append_history(
+        self, session_id: str, bucket: str, title: str, agent_name: str | None = None,
+    ) -> None:
         if not self._storage_dir:
             return
         history_path = self._bucket_dir(bucket) / "history.jsonl"
@@ -271,12 +276,51 @@ class SessionManager:
             "session_id": session_id,
             "bucket": bucket,
             "title": title,
+            "agent_name": agent_name,
             "created_at": time.time(),
         }, ensure_ascii=False)
         async with self._history_lock:  # H-A6: 防并发 append 交错
             history_path.parent.mkdir(parents=True, exist_ok=True)
             async with aiofiles.open(history_path, "a", encoding="utf-8") as f:
                 await f.write(entry + "\n")
+
+    async def _read_history_entry(
+        self, session_id: str, *, bucket: str = DEFAULT_BUCKET,
+    ) -> dict | None:
+        """从 history.jsonl 读取指定 session 的 entry(倒序返首条匹配)。
+
+        供冷恢复读取 session 绑定的 agent_name 等元数据。
+        """
+        if not self._storage_dir:
+            return None
+        history_path = self._bucket_dir(bucket) / "history.jsonl"
+        if not history_path.exists():
+            return None
+        async with aiofiles.open(history_path, "r", encoding="utf-8") as f:
+            content = await f.read()
+        for line in reversed(content.strip().split("\n")):
+            if not line.strip():
+                continue
+            entry = _safe_json_loads(line, source=str(history_path))
+            if entry is None:
+                continue
+            if entry.get("session_id") == session_id:
+                return entry
+        return None
+
+    async def get_session_agent_name(
+        self, session_id: str, *, bucket: str = DEFAULT_BUCKET,
+    ) -> str | None:
+        """返回 session 绑定的 agent_name:内存优先,内存未命中回退磁盘 history。
+
+        resume 时确定 agent 的依据。冷恢复(后端重启/TTL 淘汰,内存已无 session)
+        时从 history.jsonl 读回绑定。旧 entry 无 agent_name → None(=default),向后兼容。
+        """
+        session = self._sessions.get(session_id)
+        if session is not None:
+            return session.agent_name
+        entry = await self._read_history_entry(session_id, bucket=bucket)
+        return entry.get("agent_name") if entry else None
 
     async def update_title(
         self, session_id: str, title: str, *, bucket: str = DEFAULT_BUCKET
@@ -512,10 +556,14 @@ class SessionManager:
         agent_loop.load_messages(messages)
         # 创建新的 writer（追加模式）
         writer = TranscriptWriter(transcript_path)
+        # 冷恢复 session 级绑定:从 history 回填 agent_name(spec §6.2)
+        history_entry = await self._read_history_entry(session_id, bucket=bucket)
+        restored_agent_name = history_entry.get("agent_name") if history_entry else None
         session = ChatSession(
             session_id=session_id,
             bucket=bucket,
             agent_loop=agent_loop,
+            agent_name=restored_agent_name,
             transcript_writer=writer,
         )
         self._sessions[session_id] = session
