@@ -57,6 +57,11 @@ class SkillRegistry:
         self._maybe_refresh()
         active = {n: d for n, d in self._documents.items() if d.active}
         if names is not None:
+            # M-1: 名单中不可用(未注册/inactive)的 skill 静默丢弃会让 agent 作者困惑,
+            # 记 warning 暴露拼写错误 / skill 被 disable 等问题。
+            missing = [n for n in names if n not in active]
+            if missing:
+                logger.warning("allowed_skills 中以下 skill 不可用/inactive,已忽略: %s", missing)
             ordered = list(dict.fromkeys(n for n in names if n in active))
         else:
             ordered = sorted(active)

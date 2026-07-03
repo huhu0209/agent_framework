@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { Check, Plus, Trash, X } from '@phosphor-icons/react'
 import { useChatStore } from '../../store'
 import type { AgentDetail } from '../../types'
 
+// 新建 agent 的空 draft。permission_mode 暂不暴露 UI 控件,固定 'ask'(后端 AgentWrite 默认值);
+// 编辑现有 agent 时 draft 来自 getAgent,permission_mode 为后端原值,不会被此默认覆盖(M-2)。
 const EMPTY: AgentDetail = {
   name: '', description: '', model: null, skills: null, tools: null,
   permission_mode: 'ask', soul: '', identity: '', agents_rules: '', tool_guidance: '',
@@ -63,7 +65,9 @@ export function AgentPanel() {
   async function save() {
     if (!draft || !draft.name.trim()) return
     if (isNew) {
-      await createAgent(draft)
+      // M-1: 创建失败则停留新态(toast 已提示),不切到不存在的 agent
+      const ok = await createAgent(draft)
+      if (!ok) return
       setIsNew(false)
       setActiveAgentName(draft.name)
     } else if (activeAgentName) {
@@ -89,6 +93,7 @@ export function AgentPanel() {
         </div>
         <nav className="flex-1 overflow-y-auto p-2">
           {agents.length === 0 && <div className="text-xs px-2 py-4" style={{ color: 'var(--text-3)' }}>暂无 agent</div>}
+          {/* L-3: 用 name 做 key 依赖"agent 名字不可变"不变量(name input 编辑时 disabled) */}
           {agents.map((a) => (
             <button key={a.name} onClick={() => selectAgent(a.name)}
               className="w-full text-left px-3 py-2 rounded-md text-[13px]"
@@ -198,7 +203,8 @@ export function AgentPanel() {
 function LabeledInput({ label, value, onChange, placeholder, disabled }: {
   label: string; value: string; onChange: (v: string) => void; placeholder?: string; disabled?: boolean
 }) {
-  const id = label.replace(/\s+/g, '-')
+  // L-1: useId 生成稳定唯一 id,避免中文/括号 label 或多实例时 htmlFor 冲突
+  const id = useId()
   return (
     <div>
       <label htmlFor={id} className="block text-[12px] mb-1" style={{ color: 'var(--text-3)' }}>{label}</label>

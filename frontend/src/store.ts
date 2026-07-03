@@ -192,8 +192,8 @@ interface ChatStore {
   loadAgents: (force?: boolean) => Promise<void>
   loadSkills: () => Promise<void>
   getAgent: (name: string) => Promise<AgentDetail | null>
-  createAgent: (detail: AgentDetail) => Promise<void>
-  updateAgent: (name: string, detail: AgentDetail) => Promise<void>
+  createAgent: (detail: AgentDetail) => Promise<boolean>
+  updateAgent: (name: string, detail: AgentDetail) => Promise<boolean>
   deleteAgent: (name: string) => Promise<boolean>
   setActiveAgentName: (name: string | null) => void
   setCurrentChatAgent: (name: string | null) => void
@@ -597,7 +597,11 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       try {
         const res = await fetch(`${API_BASE}/api/v1/agents`, { headers: authHeaders() })
         if (res.ok) {
-          set({ agents: await res.json() })
+          const list = (await res.json()) as AgentSummary[]
+          set({ agents: list })
+          // M-4: 当前选用的 agent 若已不在列表(被删/改名),置空避免带过期 agent_name 发请求
+          const cb = get().currentChatAgent
+          if (cb && !list.some((a) => a.name === cb)) set({ currentChatAgent: null })
         } else {
           get().setError(`加载 agent 列表失败: HTTP ${res.status}`)
         }
@@ -644,11 +648,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       if (!res.ok) {
         const msg = res.status === 409 ? 'agent 已存在' : `创建失败: HTTP ${res.status}`
         get().setError(msg)
-        return
+        return false
       }
       await get().loadAgents(true)
+      return true
     } catch {
       get().setError('创建 agent 失败')
+      return false
     }
   },
 
@@ -660,12 +666,20 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         body: JSON.stringify(detail),
       })
       if (!res.ok) {
-        get().setError(`保存失败: HTTP ${res.status}`)
-        return
+        // M-3: 404 单独提示(agent 已被删,常见于多端/刷新滞后),并刷新列表同步状态
+        if (res.status === 404) {
+          get().setError('agent 已不存在,请刷新列表')
+          await get().loadAgents(true)
+        } else {
+          get().setError(`保存失败: HTTP ${res.status}`)
+        }
+        return false
       }
       await get().loadAgents(true)
+      return true
     } catch {
       get().setError('保存 agent 失败')
+      return false
     }
   },
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import shutil
@@ -15,6 +16,7 @@ from pydantic import BaseModel
 
 from app.api.v1.chat import verify_api_key
 
+logger = logging.getLogger(__name__)
 router = APIRouter(dependencies=[Depends(verify_api_key)])
 
 _AGENT_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
@@ -39,6 +41,8 @@ def _read_meta(meta_path: Path) -> dict:
     try:
         return json.loads(meta_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
+        # M-4: 容错返回 {}(向后兼容),但记日志供运维发现损坏的 agent.json
+        logger.warning("agent.json 读取/解析失败,降级为空 meta: %s", meta_path, exc_info=True)
         return {}
 
 
@@ -126,10 +130,13 @@ def _write_agent(agent_dir: Path, body: AgentCreate) -> None:
             if backup_dir is not None:
                 os.rename(backup_dir, agent_dir)
             raise
-        # 成功 → 清理 backup
+        # 成功 → 清理 backup。ignore_errors=True 下的失败(权限/NFS)会留下 .<name>.old.* 残留,
+        # 记日志便于运维清理(M-1);不影响本次写入正确性。
         if backup_dir is not None:
             shutil.rmtree(backup_dir, ignore_errors=True)
     except BaseException:
+        # M-2: 任何失败(tmp 写失败 / rename agent_dir→backup 失败 / replace 失败)都清 tmp_dir;
+        # 原始 agent_dir 在这些分支下均保持完整(rename 原子,未发生即原样)。
         shutil.rmtree(tmp_dir, ignore_errors=True)
         raise
 
@@ -200,7 +207,20 @@ async def delete_agent(request: Request, name: str) -> None:
     agent_dir = _agents_dir(request) / name
     if not agent_dir.exists():
         raise HTTPException(status_code=404, detail="agent not found")
-    shutil.rmtree(agent_dir)
+    # M-3: 与 _write_agent 同款原子语义 — 先 rename 到 backup 再 rmtree,
+    # 杜绝中途中断留下半删目录被后续 get_agent 读到不一致状态。
+    parent = agent_dir.parent
+    backup_dir = Path(tempfile.mkdtemp(dir=parent, prefix=f".{name}.del."))
+    backup_dir.rmdir()  # mkdtemp 建空目录,删掉作 rename 目标名
+    try:
+        os.rename(agent_dir, backup_dir)
+    except OSError:
+        # 并发删除/移动等:目录可能已不在,按已删处理(幂等)
+        shutil.rmtree(backup_dir, ignore_errors=True)
+        if not agent_dir.exists():
+            return
+        raise
+    shutil.rmtree(backup_dir, ignore_errors=True)
 
 
 @router.get("/skills")

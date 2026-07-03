@@ -714,6 +714,47 @@ describe('agent management', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1)  // 失败不触发 loadAgents 刷新
   })
 
+  it('createAgent 失败返回 false 不触发刷新(M-1)', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 500 })
+    const ok = await useChatStore.getState().createAgent({
+      name: 'a', description: '', model: null, skills: null, tools: null,
+      permission_mode: 'ask', soul: '', identity: '', agents_rules: '', tool_guidance: '',
+    })
+    expect(ok).toBe(false)
+    expect(mockFetch).toHaveBeenCalledTimes(1)  // 失败不触发 loadAgents
+  })
+
+  it('createAgent 409 返回 false 并提示已存在(M-1)', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 409 })
+    const ok = await useChatStore.getState().createAgent({
+      name: 'a', description: '', model: null, skills: null, tools: null,
+      permission_mode: 'ask', soul: '', identity: '', agents_rules: '', tool_guidance: '',
+    })
+    expect(ok).toBe(false)
+    expect(useChatStore.getState().errorToast).toContain('已存在')
+  })
+
+  it('updateAgent 404 返回 false 并刷新列表(M-3)', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 404 })
+    mockFetch.mockResolvedValueOnce({ ok: true, status: 200, json: () => Promise.resolve([]) })
+    const ok = await useChatStore.getState().updateAgent('a', {
+      name: 'a', description: '', model: null, skills: null, tools: null,
+      permission_mode: 'ask', soul: '', identity: '', agents_rules: '', tool_guidance: '',
+    })
+    expect(ok).toBe(false)
+    expect(mockFetch).toHaveBeenCalledTimes(2)  // PUT + loadAgents 同步
+  })
+
+  it('loadAgents 清空失效的 currentChatAgent(M-4)', async () => {
+    useChatStore.setState({ currentChatAgent: 'ghost' })
+    mockFetch.mockResolvedValueOnce({
+      ok: true, status: 200,
+      json: () => Promise.resolve([{ name: 'reviewer', description: '' }]),
+    })
+    await useChatStore.getState().loadAgents()
+    expect(useChatStore.getState().currentChatAgent).toBeNull()
+  })
+
   it('loadAgents 并发调用去重(LOW#8)', async () => {
     type FetchResp = { ok: boolean; status: number; json: () => Promise<unknown> }
     let resolveFetch!: (v: FetchResp) => void

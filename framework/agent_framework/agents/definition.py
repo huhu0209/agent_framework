@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import json
+import typing
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -17,8 +18,11 @@ from agent_framework.prompts.profiles import AgentProfile
 if TYPE_CHECKING:
     from agent_framework.config.loader import ConfigLoader
 
-# AgentProfile.permission_mode 的合法值(model_copy 不校验,故在此显式约束)
-_VALID_PERMISSION_MODES = {"accept", "ask", "deny"}
+# AgentProfile.permission_mode 的合法值(model_copy 不校验,故在此显式约束)。
+# L-2: 从 AgentProfile.permission_mode 的 Literal 派生,单一来源防两处定义漂移。
+_VALID_PERMISSION_MODES = set(
+    typing.get_args(AgentProfile.model_fields["permission_mode"].annotation)
+)
 
 
 @dataclass
